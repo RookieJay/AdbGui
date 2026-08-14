@@ -3,12 +3,17 @@ package com.adbgui.desktop.ui.i18n
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 
 object Strings {
     var current: Locale by mutableStateOf(Locale.ZH)
         private set
 
-    fun set(locale: Locale) { current = locale }
+    // Safe to call from any thread (e.g. the background startup coroutine / ViewModel scopes):
+    // wrap the write in a snapshot so the mutation is applied and readable cross-thread.
+    fun set(locale: Locale) {
+        Snapshot.withMutableSnapshot { current = locale }
+    }
 
     private val zh: Map<String, String> = mapOf(
         // App title
