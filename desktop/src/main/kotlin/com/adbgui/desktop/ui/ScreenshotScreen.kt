@@ -18,6 +18,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -30,12 +31,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import org.jetbrains.skia.Image
+import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
+import java.io.File
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * Screenshot screen: Capture triggers [ScreenshotViewModel.capture]; the PNG is rendered via
- * `Image(bitmap = bytes.toImageBitmap())`. Save opens a [FileDialog] and writes the bytes.
+ * `Image(bitmap = bytes.toImageBitmap())`. Save opens a [FileDialog] with a timestamped default
+ * name, writes the bytes, and shows clickable links to open the image and its folder.
  */
 @Composable
 fun ScreenshotScreen(
@@ -45,6 +51,8 @@ fun ScreenshotScreen(
     val image by vm.image.collectAsState()
     val error by vm.error.collectAsState()
     var busy by remember { mutableStateOf(false) }
+    var savedFile by remember { mutableStateOf<File?>(null) }
+    var saveError by remember { mutableStateOf<String?>(null) }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
         Column(
@@ -58,6 +66,8 @@ fun ScreenshotScreen(
                     enabled = !busy,
                     onClick = {
                         busy = true
+                        savedFile = null
+                        saveError = null
                         vm.capture().invokeOnCompletion { busy = false }
                     },
                 ) { Text("Capture") }
@@ -67,12 +77,15 @@ fun ScreenshotScreen(
                     onClick = {
                         image?.let { bytes ->
                             val dialog = FileDialog(Frame(), "Save screenshot", FileDialog.SAVE)
-                            dialog.file = "screenshot.png"
+                            val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                            dialog.file = "screenshot_$stamp.png"
                             dialog.isVisible = true
                             val sel = dialog.file
                             if (sel != null) {
-                                val target = java.io.File(dialog.directory, sel)
-                                target.writeBytes(bytes)
+                                val target = File(dialog.directory, sel)
+                                runCatching { target.writeBytes(bytes) }
+                                    .onSuccess { savedFile = target; saveError = null }
+                                    .onFailure { saveError = "Save failed: ${it.message}" }
                             }
                         }
                     },
@@ -83,14 +96,37 @@ fun ScreenshotScreen(
                 }
             }
 
-            error?.let { msg ->
+            // Post-save links: open the image and its folder.
+            savedFile?.let { f ->
+                Surface(
+                    color = MaterialTheme.colors.background,
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text(
+                            "Saved: ${f.absolutePath}",
+                            style = MaterialTheme.typography.caption,
+                        )
+                        Row {
+                            TextButton(onClick = { openFile(f) }) { Text("Open image") }
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { revealFile(f) }) { Text("Open folder") }
+                        }
+                    }
+                }
+            }
+
+            // Inline errors (capture or save).
+            val msg = error ?: saveError
+            msg?.let {
                 Surface(
                     color = Color(0xFFFFCDD2),
                     shape = RoundedCornerShape(4.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        msg,
+                        it,
                         style = MaterialTheme.typography.caption,
                         modifier = Modifier.padding(8.dp),
                     )
@@ -122,4 +158,32 @@ fun ScreenshotScreen(
             }
         }
     }
+}
+
+/** Opens [file] in the OS default application (image viewer for a PNG). No-op if unsupported. */
+private fun openFile(file: File) {
+    if (!Desktop.isDesktopSupported()) return
+    val desktop = Desktop.getDesktop()
+    if (!desktop.isSupported(Desktop.Action.OPEN)) return
+    runCatching { desktop.open(file) }
+}
+
+/**
+ * Reveals [file] in the OS file manager, selecting it where possible.
+ * Windows: `explorer.exe /select,<path>`; others: open the parent directory.
+ */
+private fun revealFile(file: File) {
+    val isWindows = System.getProperty("os.name").startsWith("Windows")
+    if (isWindows) {
+        runCatching {
+            ProcessBuilder(listOf("explorer.exe", "/select,${file.absolutePath}"))
+                .redirectErrorStream(true)
+                .start()
+        }
+        return
+    }
+    if (!Desktop.isDesktopSupported()) return
+    val desktop = Desktop.getDesktop()
+    if (!desktop.isSupported(Desktop.Action.OPEN)) return
+    runCatching { desktop.open(file.parentFile ?: file) }
 }
