@@ -6,6 +6,8 @@ plugins {
 dependencies {
     implementation(project(":core"))
     implementation(compose.desktop.currentOs)
+    testImplementation(kotlin("test"))
+    testImplementation(libs.coroutines.test)
 }
 kotlin { jvmToolchain(21) }
 compose.desktop.application.mainClass = "com.adbgui.desktop.main.MainKt"
