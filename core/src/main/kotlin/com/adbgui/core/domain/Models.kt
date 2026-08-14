@@ -1,5 +1,8 @@
 package com.adbgui.core.domain
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class DeviceType { USB, WIRELESS }
 enum class DeviceStatus { ONLINE, OFFLINE, UNAUTHORIZED, UNKNOWN }
 enum class AdbSource { OVERRIDE, BUNDLED, PATH }
