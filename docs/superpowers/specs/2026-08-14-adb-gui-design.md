@@ -83,6 +83,8 @@ adb-gui/
 - 自愈：进程退出 / adb server 重启 → 指数退避重启，期间发 `Reconnecting` 状态事件
 - v1 不解析 `track-devices -l` 扩展字段；设备详情用 `adb -s <serial> getprop` 按需懒加载
 
+> **实现备注（v1 已偏离此处）**：实测 `adb track-devices`（CLI）输出的是 adb 线协议帧（`0017` = 4 位十六进制长度前缀 + 负载，无分隔符），不是纯文本行——直接解析会把 `0017<serial>` 当成 serial。v1 实际改用**每 2s 轮询 `adb devices`**（干净文本，`DevicesListParser` 解析），代价是设备变化 ≤2s 延迟（spec §12 本就列了这条降级路径）。`AdbProcessRunner.startStream` 接口仍保留但已无调用方。详见 `CHANGELOG.md`。
+
 ### 5.4 `DeviceHistoryStore`（持久化"连过的设备"）
 - JSON 文件存用户配置目录，字段：`serial`, `alias?`, `type(USB/wireless)`, `wirelessIp?`, `wirelessPort?`, `lastConnectedAt`
 - 点击无线历史设备 → 用存的 IP:Port 调 `adb connect`
