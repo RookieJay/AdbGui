@@ -37,6 +37,20 @@ class AppManagerViewModel(
         finally { _busy.value = false }
     }
 
-    fun uninstall(pkg: String) = scope.launch { selectedSerial.value?.let { repo.uninstall(it, pkg) }; load() }
-    fun clearData(pkg: String) = scope.launch { selectedSerial.value?.let { repo.clearData(it, pkg) }; load() }
+    fun uninstall(pkg: String) = scope.launch {
+        val serial = selectedSerial.value
+        _busy.value = true; _error.value = null
+        try { if (serial != null) repo.uninstall(serial, pkg) }
+        catch (e: AdbCommandException) { _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}" }
+        finally { _busy.value = false }
+        load()
+    }
+    fun clearData(pkg: String) = scope.launch {
+        val serial = selectedSerial.value
+        _busy.value = true; _error.value = null
+        try { if (serial != null) repo.clearData(serial, pkg) }
+        catch (e: AdbCommandException) { _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}" }
+        finally { _busy.value = false }
+        load()
+    }
 }

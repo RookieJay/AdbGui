@@ -1,6 +1,7 @@
 package com.adbgui.core.adb
 
 import com.adbgui.core.domain.AdbBinary
+import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.AdbSource
 import com.adbgui.core.log.NoopLogger
 import kotlinx.coroutines.test.runTest
@@ -48,5 +49,14 @@ class CommandRunnerTest {
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val data = cr.screenshot("abc")
         assertTrue(data.contentEquals(png))
+    }
+
+    @Test
+    fun screenshot_empty_bytes_throws_adb_command_exception() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setBinaryResponse(ByteArray(0))  // empty → device offline/unauthorized
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val ex = assertFailsWith<AdbCommandException> { cr.screenshot("abc") }
+        assert(ex.stderr.contains("no image data"))
     }
 }

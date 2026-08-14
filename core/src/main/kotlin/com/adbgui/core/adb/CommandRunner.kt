@@ -68,6 +68,9 @@ class CommandRunner(
     suspend fun screenshot(serial: String): ByteArray {
         server.ensureStarted()
         val bytes = runner.runBinary(adb(), listOf("-s", serial, "exec-out", "screencap", "-p"))
+        if (bytes.isEmpty()) {
+            throw AdbCommandException(command = "adb -s $serial exec-out screencap -p", exitCode = -1, stderr = "no image data (device offline/unauthorized?)")
+        }
         logger.debug("adb screenshot ${bytes.size} bytes for $serial")
         return bytes
     }

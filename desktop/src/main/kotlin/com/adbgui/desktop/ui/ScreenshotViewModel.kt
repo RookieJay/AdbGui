@@ -16,6 +16,7 @@ class ScreenshotViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
     fun capture() = scope.launch {
+        _error.value = null
         val serial = selectedSerial.value ?: return@launch
         try { _image.value = repo.screenshot(serial) } catch (e: Exception) { _error.value = e.message }
     }

@@ -18,6 +18,7 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
 
     fun connect(ip: String, port: Int, onResult: (ConnectResult) -> Unit = {}) {
         scope.launch {
+            _error.value = null
             _busy.value = true
             try {
                 val r = repo.connectWireless(ip, port)

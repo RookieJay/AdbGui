@@ -18,6 +18,7 @@ class DeviceInfoViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
     fun load() = scope.launch {
+        _error.value = null
         val serial = selectedSerial.value ?: return@launch
         try { _props.value = repo.deviceProps(serial) } catch (e: AdbCommandException) { _error.value = e.stderr }
     }
