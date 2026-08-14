@@ -6,3 +6,4 @@ build/
 .vscode/
 *.iml
 .DS_Store
+/desktop/screenshot.png

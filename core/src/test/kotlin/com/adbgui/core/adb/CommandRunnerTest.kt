@@ -44,11 +44,11 @@ class CommandRunnerTest {
     @Test
     fun screenshot_returns_png_bytes() = runTest {
         val runner = FakeAdbProcessRunner()
-        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)
-        runner.setBinaryResponse(png)
+        val pngSig = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        runner.setBinaryResponse(pngSig)
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val data = cr.screenshot("abc")
-        assertTrue(data.contentEquals(png))
+        assertTrue(data.contentEquals(pngSig))
     }
 
     @Test
@@ -57,6 +57,19 @@ class CommandRunnerTest {
         runner.setBinaryResponse(ByteArray(0))  // empty → device offline/unauthorized
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val ex = assertFailsWith<AdbCommandException> { cr.screenshot("abc") }
-        assert(ex.stderr.contains("no image data"))
+        assert(ex.stderr.contains("no PNG signature"))
+    }
+
+    @Test
+    fun screenshot_strips_leading_device_shell_banner() = runTest {
+        val runner = FakeAdbProcessRunner()
+        val banner = "Init wrapper sys mutex successful. Pid:17556\n".toByteArray()
+        val pngSig = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        val pngBody = ByteArray(100) { 0x01 }
+        runner.setBinaryResponse(banner + pngSig + pngBody)
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val data = cr.screenshot("abc")
+        assertTrue(data.copyOfRange(0, 8).contentEquals(pngSig))   // banner stripped
+        assertTrue(data.size == pngSig.size + pngBody.size)          // only png remains
     }
 }

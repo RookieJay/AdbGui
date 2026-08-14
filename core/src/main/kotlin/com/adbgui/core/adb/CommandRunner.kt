@@ -67,12 +67,30 @@ class CommandRunner(
 
     suspend fun screenshot(serial: String): ByteArray {
         server.ensureStarted()
-        val bytes = runner.runBinary(adb(), listOf("-s", serial, "exec-out", "screencap", "-p"))
-        if (bytes.isEmpty()) {
-            throw AdbCommandException(command = "adb -s $serial exec-out screencap -p", exitCode = -1, stderr = "no image data (device offline/unauthorized?)")
+        val raw = runner.runBinary(adb(), listOf("-s", serial, "exec-out", "screencap", "-p"))
+        val png = extractPng(raw) ?: throw AdbCommandException(
+            command = "adb -s $serial exec-out screencap -p",
+            exitCode = -1,
+            stderr = "no PNG signature in ${raw.size} bytes (prefix: ${raw.copyOfRange(0, minOf(80, raw.size)).decodeToString().replace("\n", "\\n")})",
+        )
+        logger.debug("adb screenshot ${png.size} bytes for $serial (stripped ${raw.size - png.size} banner bytes)")
+        return png
+    }
+
+    private fun extractPng(bytes: ByteArray): ByteArray? {
+        val sig = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        val start = indexOf(bytes, sig) ?: return null
+        return if (start == 0) bytes else bytes.copyOfRange(start, bytes.size)
+    }
+
+    private fun indexOf(haystack: ByteArray, needle: ByteArray): Int? {
+        if (haystack.size < needle.size) return null
+        outer@ for (i in 0..haystack.size - needle.size) {
+            var j = 0
+            while (j < needle.size) { if (haystack[i + j] != needle[j]) continue@outer; j++ }
+            return i
         }
-        logger.debug("adb screenshot ${bytes.size} bytes for $serial")
-        return bytes
+        return null
     }
 
     private suspend fun runCmd(serial: String, args: List<String>): AdbProcessResult {
