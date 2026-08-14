@@ -82,6 +82,7 @@ class DeviceRepository(
     suspend fun uninstall(serial: String, pkg: String): Boolean = commands.uninstall(serial, pkg)
     suspend fun clearData(serial: String, pkg: String): Boolean = commands.clearData(serial, pkg)
     suspend fun deviceProps(serial: String): DeviceProps = commands.deviceProps(serial)
+    suspend fun deviceDetailReport(serial: String): String = commands.deviceDetailReport(serial)
     suspend fun screenshot(serial: String): ByteArray = commands.screenshot(serial)
 
     suspend fun setAlias(serial: String, alias: String?) {

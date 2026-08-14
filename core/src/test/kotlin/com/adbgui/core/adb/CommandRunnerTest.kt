@@ -72,4 +72,21 @@ class CommandRunnerTest {
         assertTrue(data.copyOfRange(0, 8).contentEquals(pngSig))   // banner stripped
         assertTrue(data.size == pngSig.size + pngBody.size)          // only png remains
     }
+
+    @Test
+    fun deviceDetailReport_concatenates_sections_and_is_resilient() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("getprop"), AdbProcessResult(0, "[ro.product.model]: [Pixel]", ""))
+        runner.whenArgsContains(listOf("wm", "size"), AdbProcessResult(0, "Physical size: 1080x1920", ""))
+        runner.whenArgsContains(listOf("meminfo"), AdbProcessResult(0, "MemTotal: 4096", ""))
+        runner.whenArgsContains(listOf("battery"), AdbProcessResult(1, "", "dumpsys not found"))  // failing section
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val report = cr.deviceDetailReport("abc")
+        assert(report.contains("Serial: abc"))
+        assert(report.contains("===== getprop ====="))
+        assert(report.contains("Pixel"))
+        assert(report.contains("Physical size: 1080x1920"))
+        assert(report.contains("[exit 1]"))  // battery failed but report continues
+        assert(!report.contains("pm list packages"))  // app list excluded
+    }
 }

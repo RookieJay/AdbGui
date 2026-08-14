@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.AlertDialog
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
@@ -124,6 +125,7 @@ private fun DeviceRow(
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var aliasDraft by remember { mutableStateOf(device.alias ?: "") }
+    var showForgetConfirm by remember { mutableStateOf(false) }
     val isSelected = device.serial == selected
     val rowBg = if (isSelected) MaterialTheme.colors.primary.copy(alpha = 0.14f) else Color.Transparent
 
@@ -198,12 +200,22 @@ private fun DeviceRow(
                     }) { Text("Disconnect") }
                     DropdownMenuItem(onClick = {
                         menuOpen = false
-                        onForget()
+                        showForgetConfirm = true
                     }) { Text("Forget") }
                 }
             }
         }
         Divider()
+    }
+
+    if (showForgetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showForgetConfirm = false },
+            title = { Text("Forget device?") },
+            text = { Text("Remove \"${device.alias ?: device.serial}\" from history? The device itself is unaffected.") },
+            confirmButton = { TextButton(onClick = { showForgetConfirm = false; onForget() }) { Text("Forget") } },
+            dismissButton = { TextButton(onClick = { showForgetConfirm = false }) { Text("Cancel") } },
+        )
     }
 }
 

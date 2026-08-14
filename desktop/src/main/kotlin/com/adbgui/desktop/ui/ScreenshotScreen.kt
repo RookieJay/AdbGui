@@ -31,7 +31,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import org.jetbrains.skia.Image
-import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
@@ -158,32 +157,4 @@ fun ScreenshotScreen(
             }
         }
     }
-}
-
-/** Opens [file] in the OS default application (image viewer for a PNG). No-op if unsupported. */
-private fun openFile(file: File) {
-    if (!Desktop.isDesktopSupported()) return
-    val desktop = Desktop.getDesktop()
-    if (!desktop.isSupported(Desktop.Action.OPEN)) return
-    runCatching { desktop.open(file) }
-}
-
-/**
- * Reveals [file] in the OS file manager, selecting it where possible.
- * Windows: `explorer.exe /select,<path>`; others: open the parent directory.
- */
-private fun revealFile(file: File) {
-    val isWindows = System.getProperty("os.name").startsWith("Windows")
-    if (isWindows) {
-        runCatching {
-            ProcessBuilder(listOf("explorer.exe", "/select,${file.absolutePath}"))
-                .redirectErrorStream(true)
-                .start()
-        }
-        return
-    }
-    if (!Desktop.isDesktopSupported()) return
-    val desktop = Desktop.getDesktop()
-    if (!desktop.isSupported(Desktop.Action.OPEN)) return
-    runCatching { desktop.open(file.parentFile ?: file) }
 }

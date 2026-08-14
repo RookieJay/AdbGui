@@ -77,6 +77,38 @@ class CommandRunner(
         return png
     }
 
+    suspend fun deviceDetailReport(serial: String): String {
+        server.ensureStarted()
+        val sections = listOf(
+            "getprop" to listOf("getprop"),
+            "wm size" to listOf("wm", "size"),
+            "wm density" to listOf("wm", "density"),
+            "meminfo" to listOf("cat", "/proc/meminfo"),
+            "cpuinfo" to listOf("cat", "/proc/cpuinfo"),
+            "battery" to listOf("dumpsys", "battery"),
+            "disk (/data)" to listOf("df", "/data"),
+        )
+        val sb = StringBuilder()
+        sb.appendLine("Serial: $serial")
+        for ((label, shellArgs) in sections) {
+            sb.appendLine()
+            sb.appendLine("===== $label =====")
+            val full = listOf("-s", serial, "shell") + shellArgs
+            try {
+                val r = runner.run(adb(), full)
+                if (r.exitCode == 0) {
+                    sb.appendLine(r.stdout.trimEnd())
+                } else {
+                    sb.appendLine("[exit ${r.exitCode}] ${r.stderr.trim()}")
+                }
+            } catch (e: Exception) {
+                sb.appendLine("[error] ${e.message}")
+            }
+            logger.debug("deviceDetailReport section '$label' (exit ok)")
+        }
+        return sb.toString()
+    }
+
     private fun extractPng(bytes: ByteArray): ByteArray? {
         val sig = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
         val start = indexOf(bytes, sig) ?: return null
