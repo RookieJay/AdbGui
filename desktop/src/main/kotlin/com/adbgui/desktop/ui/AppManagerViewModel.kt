@@ -22,10 +22,11 @@ class AppManagerViewModel(
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     fun load() = scope.launch {
-        val serial = selectedSerial.value ?: return@launch
+        val serial = selectedSerial.value
+        if (serial == null) { _packages.value = emptyList(); _busy.value = false; return@launch }  // clear stale when no valid device
         _busy.value = true; _error.value = null
         try { _packages.value = repo.listPackages(serial) }
-        catch (e: AdbCommandException) { _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}" }
+        catch (e: AdbCommandException) { _packages.value = emptyList(); _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}" }  // clear stale on failure
         finally { _busy.value = false }
     }
 

@@ -19,8 +19,10 @@ class DeviceInfoViewModel(
     val error = _error.asStateFlow()
     fun load() = scope.launch {
         _error.value = null
-        val serial = selectedSerial.value ?: return@launch
-        try { _props.value = repo.deviceProps(serial) } catch (e: AdbCommandException) { _error.value = e.stderr }
+        val serial = selectedSerial.value
+        if (serial == null) { _props.value = null; return@launch }  // clear stale data when no valid device
+        try { _props.value = repo.deviceProps(serial) }
+        catch (e: AdbCommandException) { _props.value = null; _error.value = e.stderr }  // clear stale on failure
     }
 
     init {

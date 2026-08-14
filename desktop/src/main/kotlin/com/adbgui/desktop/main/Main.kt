@@ -11,6 +11,7 @@ import com.adbgui.desktop.ui.DeviceInfoViewModel
 import com.adbgui.desktop.ui.DeviceListViewModel
 import com.adbgui.desktop.ui.SettingsViewModel
 import com.adbgui.desktop.ui.ScreenshotViewModel
+import com.adbgui.core.domain.DeviceStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 
 fun main() = application {
@@ -22,14 +23,16 @@ fun main() = application {
     val appManagerVm = AppManagerViewModel(root.repository, selectedSerial, root.scope)
     val deviceInfoVm = DeviceInfoViewModel(root.repository, selectedSerial, root.scope)
     val screenshotVm = ScreenshotViewModel(root.repository, selectedSerial, root.scope)
-    // Auto-select the first connected device when nothing is validly selected.
-    // Never steals an active selection: if the current serial is still in the list, leave it.
+    // Auto-select the first ONLINE device when nothing is validly selected.
+    // Never steals an active selection: if the current serial is still online, leave it.
+    // (A device going offline counts as an invalid selection → cleared/re-picked, so stale
+    //  data for an offline device doesn't linger in the feature pages.)
     LaunchedEffect(Unit) {
         root.repository.devices.collect { list ->
             val current = selectedSerial.value
-            val stillPresent = current != null && list.any { it.serial == current }
-            if (!stillPresent) {
-                selectedSerial.value = list.firstOrNull()?.serial
+            val stillValid = current != null && list.any { it.serial == current && it.status == DeviceStatus.ONLINE }
+            if (!stillValid) {
+                selectedSerial.value = list.firstOrNull { it.status == DeviceStatus.ONLINE }?.serial
             }
         }
     }
