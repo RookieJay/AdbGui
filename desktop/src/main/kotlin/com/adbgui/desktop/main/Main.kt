@@ -1,6 +1,7 @@
 package com.adbgui.desktop.main
 
 import androidx.compose.material.MaterialTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -21,6 +22,17 @@ fun main() = application {
     val appManagerVm = AppManagerViewModel(root.repository, selectedSerial, root.scope)
     val deviceInfoVm = DeviceInfoViewModel(root.repository, selectedSerial, root.scope)
     val screenshotVm = ScreenshotViewModel(root.repository, selectedSerial, root.scope)
+    // Auto-select the first connected device when nothing is validly selected.
+    // Never steals an active selection: if the current serial is still in the list, leave it.
+    LaunchedEffect(Unit) {
+        root.repository.devices.collect { list ->
+            val current = selectedSerial.value
+            val stillPresent = current != null && list.any { it.serial == current }
+            if (!stillPresent) {
+                selectedSerial.value = list.firstOrNull()?.serial
+            }
+        }
+    }
     Window(onCloseRequest = ::exitApplication, title = "ADB GUI") {
         MaterialTheme {
             AppShell(
