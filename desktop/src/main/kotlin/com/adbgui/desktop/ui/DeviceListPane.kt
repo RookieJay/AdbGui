@@ -41,6 +41,7 @@ import com.adbgui.core.domain.DeviceView
 fun DeviceListPane(
     vm: DeviceListViewModel,
     modifier: Modifier = Modifier,
+    selected: String? = null,
     onSelect: (DeviceView) -> Unit = {},
 ) {
     var showConnect by remember { mutableStateOf(false) }
@@ -71,6 +72,7 @@ fun DeviceListPane(
                 items(devices, key = { it.serial }) { device ->
                     DeviceRow(
                         device = device,
+                        selected = selected,
                         onRename = { newAlias ->
                             // simple inline rename prompt: for now, set alias directly to serial-as-alias placeholder
                             // (real rename dialog deferred to a later task)
@@ -105,6 +107,7 @@ fun DeviceListPane(
 @Composable
 private fun DeviceRow(
     device: DeviceView,
+    selected: String? = null,
     onRename: (String?) -> Unit,
     onForget: () -> Unit,
     onDisconnect: () -> Unit,
@@ -113,8 +116,10 @@ private fun DeviceRow(
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var aliasDraft by remember { mutableStateOf(device.alias ?: "") }
+    val isSelected = device.serial == selected
+    val rowBg = if (isSelected) MaterialTheme.colors.primary.copy(alpha = 0.14f) else Color.Transparent
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().background(rowBg)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

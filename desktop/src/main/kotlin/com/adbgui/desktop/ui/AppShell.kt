@@ -54,6 +54,7 @@ fun AppShell(
                 DeviceListPane(
                     vm = vm,
                     modifier = Modifier.fillMaxWidth().weight(1f),
+                    selected = selected,
                     onSelect = { device -> selectedSerial?.value = device.serial },
                 )
                 if (deviceInfoVm != null) {

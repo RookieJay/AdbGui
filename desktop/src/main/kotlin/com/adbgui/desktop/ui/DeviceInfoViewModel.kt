@@ -22,4 +22,9 @@ class DeviceInfoViewModel(
         val serial = selectedSerial.value ?: return@launch
         try { _props.value = repo.deviceProps(serial) } catch (e: AdbCommandException) { _error.value = e.stderr }
     }
+
+    init {
+        // Auto-refresh when the selected device changes (incl. the first auto-select).
+        scope.launch { selectedSerial.collect { load() } }
+    }
 }

@@ -53,4 +53,9 @@ class AppManagerViewModel(
         finally { _busy.value = false }
         load()
     }
+
+    init {
+        // Auto-refresh when the selected device changes (incl. the first auto-select).
+        scope.launch { selectedSerial.collect { load() } }
+    }
 }
