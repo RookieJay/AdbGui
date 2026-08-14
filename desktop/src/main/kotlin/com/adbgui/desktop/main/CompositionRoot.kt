@@ -20,9 +20,9 @@ import kotlinx.coroutines.launch
 
 class CompositionRoot {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val configDir = WindowsConfigDirProvider().configDir()
+    val configDir = WindowsConfigDirProvider().configDir()
     val logger: Logger = FileLogger(configDir.resolve("logs"), clock = { System.currentTimeMillis() })
-    private val settings = SettingsStore(configDir)
+    val settings = SettingsStore(configDir)
     private val runner = JvmAdbProcessRunner()
     private val locator = AdbLocator(settings, ResourceBundledAdbProvider(), SystemPathProbe())
     val server = AdbServerController({ locator.locate() }, runner, logger)

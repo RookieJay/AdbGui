@@ -1,0 +1,46 @@
+package com.adbgui.desktop.ui
+
+import com.adbgui.core.log.LogLevel
+import com.adbgui.core.settings.SettingsStore
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
+import java.nio.file.Files
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+class SettingsViewModelTest {
+    private suspend fun TestScope.awaitStore(store: SettingsStore, expected: LogLevel? = null, expectedPath: String? = null) {
+        // bounded poll: real Dispatchers.IO needs wall time under runTest
+        val deadline = 5000
+        var waited = 0
+        while (waited < deadline) {
+            advanceUntilIdle()
+            val s = store.load()
+            if ((expected == null || s.logLevel == expected) && (expectedPath == null || s.adbPathOverride == expectedPath)) return
+            delay(50); waited += 50
+        }
+        error("timed out waiting for settings persist")
+    }
+
+    @Test
+    fun setAdbPath_persists_override() = runTest {
+        val dir = Files.createTempDirectory("set")
+        val store = SettingsStore(dir)
+        val vm = SettingsViewModel(store, this)
+        vm.setAdbPath("/x/adb")
+        awaitStore(store, expectedPath = "/x/adb")
+        assertEquals("/x/adb", store.load().adbPathOverride)
+    }
+
+    @Test
+    fun setLogLevel_persists() = runTest {
+        val dir = Files.createTempDirectory("set2")
+        val store = SettingsStore(dir)
+        val vm = SettingsViewModel(store, this)
+        vm.setLogLevel(LogLevel.DEBUG)
+        awaitStore(store, expected = LogLevel.DEBUG)
+        assertEquals(LogLevel.DEBUG, store.load().logLevel)
+    }
+}
