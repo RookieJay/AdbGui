@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.nio.file.Path
 
@@ -63,19 +64,19 @@ fun AppShell(
                     TextButton(
                         modifier = Modifier.fillMaxWidth().height(40.dp),
                         onClick = { showSettings = false; page = NavPage.DEVICE_INFO },
-                    ) { Text(if (page == NavPage.DEVICE_INFO && !showSettings) "Device Info *" else "Device Info") }
+                    ) { Text(if (page == NavPage.DEVICE_INFO && !showSettings) "${Strings.t("nav_device_info")} *" else Strings.t("nav_device_info")) }
                 }
                 if (screenshotVm != null) {
                     TextButton(
                         modifier = Modifier.fillMaxWidth().height(40.dp),
                         onClick = { showSettings = false; page = NavPage.SCREENSHOT },
-                    ) { Text(if (page == NavPage.SCREENSHOT && !showSettings) "Screenshot *" else "Screenshot") }
+                    ) { Text(if (page == NavPage.SCREENSHOT && !showSettings) "${Strings.t("nav_screenshot")} *" else Strings.t("nav_screenshot")) }
                 }
                 if (appManagerVm != null) {
                     TextButton(
                         modifier = Modifier.fillMaxWidth().height(40.dp),
                         onClick = { showSettings = false; page = NavPage.APP_MANAGER },
-                    ) { Text(if (page == NavPage.APP_MANAGER && !showSettings) "App Manager *" else "App Manager") }
+                    ) { Text(if (page == NavPage.APP_MANAGER && !showSettings) "${Strings.t("nav_app_manager")} *" else Strings.t("nav_app_manager")) }
                 }
                 if (settingsVm != null && configDir != null) {
                     Divider()
@@ -83,7 +84,7 @@ fun AppShell(
                         modifier = Modifier.fillMaxWidth().height(40.dp),
                         onClick = { showSettings = !showSettings },
                     ) {
-                        Text(if (showSettings) "Back to devices" else "Settings")
+                        Text(if (showSettings) Strings.t("nav_back_to_devices") else Strings.t("nav_settings"))
                     }
                 }
             }
@@ -113,5 +114,5 @@ private enum class NavPage { DEVICE_INFO, SCREENSHOT, APP_MANAGER }
 
 @Composable
 private fun DefaultRightPane() {
-    Text("No device selected")
+    Text(Strings.t("no_device_selected"))
 }

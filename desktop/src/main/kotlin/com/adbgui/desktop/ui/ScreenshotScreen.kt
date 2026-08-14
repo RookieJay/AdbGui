@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
+import com.adbgui.desktop.ui.i18n.Strings
 import org.jetbrains.skia.Image
 import java.awt.FileDialog
 import java.awt.Frame
@@ -59,7 +60,7 @@ fun ScreenshotScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Screenshot", style = MaterialTheme.typography.h6)
+                Text(Strings.t("screenshot"), style = MaterialTheme.typography.h6)
                 Spacer(Modifier.width(12.dp))
                 Button(
                     enabled = !busy,
@@ -69,13 +70,13 @@ fun ScreenshotScreen(
                         saveError = null
                         vm.capture().invokeOnCompletion { busy = false }
                     },
-                ) { Text("Capture") }
+                ) { Text(Strings.t("capture")) }
                 Spacer(Modifier.width(8.dp))
                 OutlinedButton(
                     enabled = image != null,
                     onClick = {
                         image?.let { bytes ->
-                            val dialog = FileDialog(Frame(), "Save screenshot", FileDialog.SAVE)
+                            val dialog = FileDialog(Frame(), Strings.t("save_screenshot_title"), FileDialog.SAVE)
                             val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                             dialog.file = "screenshot_$stamp.png"
                             dialog.isVisible = true
@@ -84,11 +85,11 @@ fun ScreenshotScreen(
                                 val target = File(dialog.directory, sel)
                                 runCatching { target.writeBytes(bytes) }
                                     .onSuccess { savedFile = target; saveError = null }
-                                    .onFailure { saveError = "Save failed: ${it.message}" }
+                                    .onFailure { saveError = Strings.t("status_save_failed").format(it.message) }
                             }
                         }
                     },
-                ) { Text("Save") }
+                ) { Text(Strings.t("save")) }
                 if (busy) {
                     Spacer(Modifier.width(8.dp))
                     CircularProgressIndicator(modifier = Modifier.width(18.dp))
@@ -104,13 +105,13 @@ fun ScreenshotScreen(
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text(
-                            "Saved: ${f.absolutePath}",
+                            Strings.t("saved_path").format(f.absolutePath),
                             style = MaterialTheme.typography.caption,
                         )
                         Row {
-                            TextButton(onClick = { openFile(f) }) { Text("Open image") }
+                            TextButton(onClick = { openFile(f) }) { Text(Strings.t("open_image")) }
                             Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = { revealFile(f) }) { Text("Open folder") }
+                            TextButton(onClick = { revealFile(f) }) { Text(Strings.t("open_folder")) }
                         }
                     }
                 }
@@ -137,7 +138,7 @@ fun ScreenshotScreen(
             val bytes = image
             if (bytes == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No screenshot yet. Press Capture.", style = MaterialTheme.typography.body2)
+                    Text(Strings.t("no_screenshot"), style = MaterialTheme.typography.body2)
                 }
             } else {
                 val bitmap = remember(bytes) {
@@ -146,12 +147,12 @@ fun ScreenshotScreen(
                 if (bitmap != null) {
                     Image(
                         bitmap = bitmap,
-                        contentDescription = "Device screenshot",
+                        contentDescription = Strings.t("content_screenshot"),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Failed to decode image (${bytes.size} bytes)", style = MaterialTheme.typography.body2)
+                        Text(Strings.t("decode_failed").format(bytes.size), style = MaterialTheme.typography.body2)
                     }
                 }
             }

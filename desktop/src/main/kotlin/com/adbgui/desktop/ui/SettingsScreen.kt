@@ -28,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.log.LogLevel
+import com.adbgui.desktop.ui.i18n.Locale
+import com.adbgui.desktop.ui.i18n.Strings
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
@@ -60,23 +62,39 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Settings", style = MaterialTheme.typography.h6)
+            Text(Strings.t("settings"), style = MaterialTheme.typography.h6)
+
+            // --- Language ---
+            Text(Strings.t("language"), style = MaterialTheme.typography.subtitle1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Locale.entries.forEach { locale ->
+                    TextButton(onClick = { vm.setLocale(locale) }) {
+                        Text(
+                            text = locale.display,
+                            color = if (settings.locale == locale.code) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface,
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
+            }
+
+            Divider()
 
             // --- ADB path ---
-            Text("ADB binary path", style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("adb_binary_path"), style = MaterialTheme.typography.subtitle1)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = adbDraft,
                     onValueChange = { adbDraft = it },
-                    label = { Text("adb path override") },
-                    placeholder = { Text("(use bundled / system PATH)") },
+                    label = { Text(Strings.t("adb_path_override_label")) },
+                    placeholder = { Text(Strings.t("adb_path_placeholder")) },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = {
                     val parent = Frame()
-                    val dialog = FileDialog(parent, "Select adb binary", FileDialog.LOAD)
+                    val dialog = FileDialog(parent, Strings.t("select_adb_binary"), FileDialog.LOAD)
                     dialog.isMultipleMode = false
                     dialog.isVisible = true
                     val sel = dialog.file
@@ -85,36 +103,36 @@ fun SettingsScreen(
                         val chosen = File(dir, sel).absolutePath
                         adbDraft = chosen
                         vm.setAdbPath(chosen)
-                        status = "adb path set: $chosen"
+                        status = Strings.t("status_adb_path_set").format(chosen)
                     }
-                }) { Text("Browse") }
+                }) { Text(Strings.t("browse")) }
                 Spacer(Modifier.width(4.dp))
                 Button(onClick = {
                     val path = adbDraft.trim().ifBlank { null }
                     vm.setAdbPath(path)
-                    status = if (path == null) "adb override cleared" else "adb path set: $path"
-                }) { Text("Apply") }
+                    status = if (path == null) Strings.t("status_adb_cleared") else Strings.t("status_adb_path_set").format(path)
+                }) { Text(Strings.t("apply")) }
                 Spacer(Modifier.width(4.dp))
                 TextButton(onClick = {
                     adbDraft = ""
                     vm.setAdbPath(null)
-                    status = "adb override cleared"
-                }) { Text("Clear") }
+                    status = Strings.t("status_adb_cleared")
+                }) { Text(Strings.t("clear")) }
             }
 
             Divider()
 
             // --- Log level ---
-            Text("Log level", style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("log_level"), style = MaterialTheme.typography.subtitle1)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Current: ${settings.logLevel.name}", modifier = Modifier.padding(end = 12.dp))
-                TextButton(onClick = { levelMenu = true }) { Text("Change") }
+                Text(Strings.t("current").format(settings.logLevel.name), modifier = Modifier.padding(end = 12.dp))
+                TextButton(onClick = { levelMenu = true }) { Text(Strings.t("change")) }
                 DropdownMenu(expanded = levelMenu, onDismissRequest = { levelMenu = false }) {
                     LogLevel.entries.forEach { lvl ->
                         DropdownMenuItem(onClick = {
                             levelMenu = false
                             vm.setLogLevel(lvl)
-                            status = "log level set: ${lvl.name}"
+                            status = Strings.t("status_log_level_set").format(lvl.name)
                         }) { Text(lvl.name) }
                     }
                 }
@@ -123,34 +141,34 @@ fun SettingsScreen(
             Divider()
 
             // --- Logs ---
-            Text("Logs", style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("logs"), style = MaterialTheme.typography.subtitle1)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = {
                     val logDir = configDir.resolve("logs").toFile()
                     runCatching {
                         if (!logDir.exists()) logDir.mkdirs()
                         Desktop.getDesktop().open(logDir)
-                    }.onFailure { status = "open failed: ${it.message}" }
-                }) { Text("Open logs folder") }
+                    }.onFailure { status = Strings.t("status_open_failed").format(it.message) }
+                }) { Text(Strings.t("open_logs_folder")) }
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = {
                     val logDir = configDir.resolve("logs").toFile()
                     if (!logDir.exists() || logDir.listFiles()?.isNotEmpty() == false) {
-                        status = "no logs to export"
+                        status = Strings.t("status_no_logs")
                         return@Button
                     }
                     val parent = Frame()
-                    val dialog = FileDialog(parent, "Save logs zip", FileDialog.SAVE)
+                    val dialog = FileDialog(parent, Strings.t("save_logs_zip"), FileDialog.SAVE)
                     dialog.file = "adbgui-logs.zip"
                     dialog.isVisible = true
                     val sel = dialog.file
                     if (sel != null) {
                         val target = File(dialog.directory, sel)
                         runCatching { zipDirectory(logDir, target) }
-                            .onSuccess { status = "exported to ${target.absolutePath}" }
-                            .onFailure { status = "export failed: ${it.message}" }
+                            .onSuccess { status = Strings.t("status_exported_to").format(target.absolutePath) }
+                            .onFailure { status = Strings.t("status_export_failed").format(it.message) }
                     }
-                }) { Text("Export logs") }
+                }) { Text(Strings.t("export_logs")) }
             }
 
             status?.let {

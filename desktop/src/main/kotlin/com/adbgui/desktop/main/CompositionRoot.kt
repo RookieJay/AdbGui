@@ -12,6 +12,8 @@ import com.adbgui.desktop.platform.FileLogger
 import com.adbgui.desktop.platform.JvmAdbProcessRunner
 import com.adbgui.desktop.platform.ResourceBundledAdbProvider
 import com.adbgui.desktop.platform.SystemPathProbe
+import com.adbgui.desktop.ui.i18n.Locale
+import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.platform.WindowsConfigDirProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +34,11 @@ class CompositionRoot {
     val repository = DeviceRepository(tracker, history, commands, logger, scope, clock = { System.currentTimeMillis() })
 
     fun start() {
-        scope.launch { logger.info("ADB GUI starting"); tracker.start() }
+        scope.launch {
+            val s = settings.load()
+            Strings.set(Locale.fromCode(s.locale))
+            logger.info("ADB GUI starting")
+            tracker.start()
+        }
     }
 }

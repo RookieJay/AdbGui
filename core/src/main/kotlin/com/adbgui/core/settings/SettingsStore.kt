@@ -17,6 +17,7 @@ data class Settings(
     val adbPathOverride: String? = null,
     val logLevel: LogLevel = LogLevel.INFO,
     val theme: String = "system",
+    val locale: String = "zh",
     val windowBounds: WindowBounds? = null,
 )
 

@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.adbgui.desktop.ui.i18n.Strings
 
 class DeviceInfoViewModel(
     private val repo: DeviceRepository,
@@ -42,18 +43,18 @@ class DeviceInfoViewModel(
             // Prepend the page's curated summary (the same DeviceProps shown on screen).
             val summary = _props.value?.let { p ->
                 buildString {
-                    appendLine("===== Summary =====")
-                    appendLine("Model: ${p.model}")
-                    appendLine("Android version: ${p.androidVersion}")
-                    appendLine("SDK: ${p.sdkInt}")
-                    appendLine("Serial: ${p.serial}")
-                    appendLine("Resolution: ${p.resolution}")
-                    appendLine("ABI: ${p.abi}")
+                    appendLine(Strings.t("report_summary_header"))
+                    appendLine("${Strings.t("prop_model")}: ${p.model}")
+                    appendLine("${Strings.t("prop_android_version")}: ${p.androidVersion}")
+                    appendLine("${Strings.t("prop_sdk")}: ${p.sdkInt}")
+                    appendLine("${Strings.t("prop_serial")}: ${p.serial}")
+                    appendLine("${Strings.t("prop_resolution")}: ${p.resolution}")
+                    appendLine("${Strings.t("prop_abi")}: ${p.abi}")
                     appendLine()
                 }
             } ?: ""
-            _report.value = "Device Info Export\nSerial: $serial\nGenerated: $stamp\n\n$summary$body"
-        } catch (e: Exception) { _error.value = "Export failed: ${e.message}"; _report.value = null }
+            _report.value = "${Strings.t("report_export_header")}\n${Strings.t("prop_serial")}: $serial\n${Strings.t("report_generated").format(stamp)}\n\n$summary$body"
+        } catch (e: Exception) { _error.value = Strings.t("status_export_failed").format(e.message); _report.value = null }
         finally { _exportBusy.value = false }
     }
 

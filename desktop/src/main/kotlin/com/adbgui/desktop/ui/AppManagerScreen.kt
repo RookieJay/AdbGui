@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.PackageInfo
+import com.adbgui.desktop.ui.i18n.Strings
 import java.awt.FileDialog
 import java.awt.Frame
 
@@ -58,17 +59,17 @@ fun AppManagerScreen(
         ) {
             // --- Toolbar ---
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("App Manager", style = MaterialTheme.typography.h6)
+                Text(Strings.t("app_manager"), style = MaterialTheme.typography.h6)
                 Spacer(Modifier.width(12.dp))
                 Button(
                     enabled = !busy,
                     onClick = { vm.load() },
-                ) { Text("Refresh") }
+                ) { Text(Strings.t("refresh")) }
                 Spacer(Modifier.width(8.dp))
                 Button(
                     enabled = !busy,
                     onClick = {
-                        val dialog = FileDialog(Frame(), "Select APK", FileDialog.LOAD)
+                        val dialog = FileDialog(Frame(), Strings.t("select_apk"), FileDialog.LOAD)
                         dialog.isMultipleMode = false
                         dialog.setFile("*.apk")
                         dialog.isVisible = true
@@ -78,7 +79,7 @@ fun AppManagerScreen(
                             vm.install(chosen)
                         }
                     },
-                ) { Text("Select APK") }
+                ) { Text(Strings.t("select_apk")) }
                 Spacer(Modifier.width(8.dp))
                 if (busy) CircularProgressIndicator(modifier = Modifier.heightIn(max = 18.dp))
             }
@@ -92,10 +93,10 @@ fun AppManagerScreen(
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("adb error", style = MaterialTheme.typography.subtitle2)
+                            Text(Strings.t("adb_error"), style = MaterialTheme.typography.subtitle2)
                             Spacer(Modifier.weight(1f))
                             TextButton(onClick = { errorExpanded = !errorExpanded }) {
-                                Text(if (errorExpanded) "Collapse" else "Expand")
+                                Text(if (errorExpanded) Strings.t("collapse") else Strings.t("expand"))
                             }
                         }
                         if (errorExpanded) {
@@ -110,7 +111,7 @@ fun AppManagerScreen(
             // --- Package list ---
             if (packages.isEmpty() && !busy) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No packages. Press Refresh.", style = MaterialTheme.typography.body2)
+                    Text(Strings.t("no_packages"), style = MaterialTheme.typography.body2)
                 }
             } else {
                 LazyColumn(
@@ -146,11 +147,11 @@ private fun PackageRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(pkg.name, style = MaterialTheme.typography.body1)
             if (pkg.isSystem) {
-                Text("system", style = MaterialTheme.typography.caption)
+                Text(Strings.t("system"), style = MaterialTheme.typography.caption)
             }
         }
-        OutlinedButton(enabled = !busy, onClick = onClear) { Text("Clear") }
+        OutlinedButton(enabled = !busy, onClick = onClear) { Text(Strings.t("clear")) }
         Spacer(Modifier.width(8.dp))
-        OutlinedButton(enabled = !busy, onClick = onUninstall) { Text("Uninstall") }
+        OutlinedButton(enabled = !busy, onClick = onUninstall) { Text(Strings.t("uninstall")) }
     }
 }

@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
+import com.adbgui.desktop.ui.i18n.Strings
 
 @Composable
 fun ConnectDialog(
@@ -38,13 +39,13 @@ fun ConnectDialog(
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        title = { Text("Connect to device") },
+        title = { Text(Strings.t("connect_title")) },
         text = {
             Column {
                 OutlinedTextField(
                     value = ip,
                     onValueChange = { ip = it },
-                    label = { Text("IP address") },
+                    label = { Text(Strings.t("ip_address")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
@@ -53,7 +54,7 @@ fun ConnectDialog(
                 OutlinedTextField(
                     value = port,
                     onValueChange = { port = it.filter { c -> c.isDigit() }.take(5) },
-                    label = { Text("Port") },
+                    label = { Text(Strings.t("port")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -77,7 +78,7 @@ fun ConnectDialog(
                 if (busy) {
                     CircularProgressIndicator(modifier = Modifier.width(20.dp).padding(end = 8.dp))
                 }
-                TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") }
+                TextButton(onClick = onDismiss, enabled = !busy) { Text(Strings.t("cancel")) }
                 Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = {
@@ -87,7 +88,7 @@ fun ConnectDialog(
                         }
                     },
                     enabled = !busy,
-                ) { Text("Connect") }
+                ) { Text(Strings.t("connect")) }
             }
         },
     )

@@ -41,6 +41,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.DeviceView
+import com.adbgui.desktop.ui.i18n.Strings
 
 @Composable
 fun DeviceListPane(
@@ -62,7 +63,7 @@ fun DeviceListPane(
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Devices", style = MaterialTheme.typography.subtitle1)
+                Text(Strings.t("devices"), style = MaterialTheme.typography.subtitle1)
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = { showConnect = true }) {
                     Text("+", style = MaterialTheme.typography.h6)
@@ -163,8 +164,8 @@ private fun DeviceRow(
                         TextButton(onClick = {
                             onRename(aliasDraft.ifBlank { null })
                             renaming = false
-                        }) { Text("OK") }
-                        TextButton(onClick = { renaming = false }) { Text("Cancel") }
+                        }) { Text(Strings.t("ok")) }
+                        TextButton(onClick = { renaming = false }) { Text(Strings.t("cancel")) }
                     }
                 } else {
                     Text(
@@ -187,21 +188,21 @@ private fun DeviceRow(
                         DropdownMenuItem(onClick = {
                             menuOpen = false
                             onReconnect(device.wirelessIp!!, device.wirelessPort!!)
-                        }) { Text("Reconnect") }
+                        }) { Text(Strings.t("reconnect")) }
                     }
                     DropdownMenuItem(onClick = {
                         menuOpen = false
                         aliasDraft = device.alias ?: ""
                         renaming = true
-                    }) { Text("Rename") }
+                    }) { Text(Strings.t("rename")) }
                     DropdownMenuItem(onClick = {
                         menuOpen = false
                         onDisconnect()
-                    }) { Text("Disconnect") }
+                    }) { Text(Strings.t("disconnect")) }
                     DropdownMenuItem(onClick = {
                         menuOpen = false
                         showForgetConfirm = true
-                    }) { Text("Forget") }
+                    }) { Text(Strings.t("forget")) }
                 }
             }
         }
@@ -211,10 +212,10 @@ private fun DeviceRow(
     if (showForgetConfirm) {
         AlertDialog(
             onDismissRequest = { showForgetConfirm = false },
-            title = { Text("Forget device?") },
-            text = { Text("Remove \"${device.alias ?: device.serial}\" from history? The device itself is unaffected.") },
-            confirmButton = { TextButton(onClick = { showForgetConfirm = false; onForget() }) { Text("Forget") } },
-            dismissButton = { TextButton(onClick = { showForgetConfirm = false }) { Text("Cancel") } },
+            title = { Text(Strings.t("forget_confirm_title")) },
+            text = { Text(Strings.t("forget_confirm_body").format(device.alias ?: device.serial)) },
+            confirmButton = { TextButton(onClick = { showForgetConfirm = false; onForget() }) { Text(Strings.t("forget")) } },
+            dismissButton = { TextButton(onClick = { showForgetConfirm = false }) { Text(Strings.t("cancel")) } },
         )
     }
 }

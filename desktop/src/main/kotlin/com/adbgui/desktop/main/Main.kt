@@ -11,6 +11,7 @@ import com.adbgui.desktop.ui.DeviceInfoViewModel
 import com.adbgui.desktop.ui.DeviceListViewModel
 import com.adbgui.desktop.ui.SettingsViewModel
 import com.adbgui.desktop.ui.ScreenshotViewModel
+import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.core.domain.DeviceStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -36,7 +37,7 @@ fun main() = application {
             }
         }
     }
-    Window(onCloseRequest = ::exitApplication, title = "ADB GUI") {
+    Window(onCloseRequest = ::exitApplication, title = Strings.t("app_title")) {
         MaterialTheme {
             AppShell(
                 vm = vm,

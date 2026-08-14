@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.adbgui.desktop.ui.i18n.Strings
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
@@ -58,7 +59,7 @@ fun DeviceInfoScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Device Info", style = MaterialTheme.typography.h6)
+                Text(Strings.t("device_info"), style = MaterialTheme.typography.h6)
                 Spacer(Modifier.width(12.dp))
                 Button(
                     enabled = !busy,
@@ -66,12 +67,12 @@ fun DeviceInfoScreen(
                         busy = true
                         vm.load().invokeOnCompletion { busy = false }
                     },
-                ) { Text("Refresh") }
+                ) { Text(Strings.t("refresh")) }
                 Spacer(Modifier.width(8.dp))
                 OutlinedButton(
                     enabled = props != null && !exportBusy,
                     onClick = { vm.export() },
-                ) { Text("Export") }
+                ) { Text(Strings.t("export")) }
                 if (exportBusy) {
                     Spacer(Modifier.width(8.dp))
                     CircularProgressIndicator(modifier = Modifier.width(18.dp))
@@ -86,12 +87,12 @@ fun DeviceInfoScreen(
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text(
-                            "Report ready (${reportText.length} chars)",
+                            Strings.t("report_ready").format(reportText.length),
                             style = MaterialTheme.typography.caption,
                         )
                         Row {
                             OutlinedButton(onClick = {
-                                val dialog = FileDialog(Frame(), "Export device info", FileDialog.SAVE)
+                                val dialog = FileDialog(Frame(), Strings.t("export_device_info_title"), FileDialog.SAVE)
                                 val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                                 dialog.file = "deviceinfo_$stamp.txt"
                                 dialog.isVisible = true
@@ -100,17 +101,17 @@ fun DeviceInfoScreen(
                                     val target = File(dialog.directory, sel)
                                     runCatching { target.writeText(reportText) }
                                         .onSuccess { savedFile = target; saveError = null }
-                                        .onFailure { saveError = "Save failed: ${it.message}" }
+                                        .onFailure { saveError = Strings.t("status_save_failed").format(it.message) }
                                 }
-                            }) { Text("Save") }
+                            }) { Text(Strings.t("save")) }
                         }
                         savedFile?.let { f ->
                             Spacer(Modifier.width(8.dp))
-                            Text("Saved: ${f.absolutePath}", style = MaterialTheme.typography.caption)
+                            Text(Strings.t("saved_path").format(f.absolutePath), style = MaterialTheme.typography.caption)
                             Row {
-                                TextButton(onClick = { openFile(f) }) { Text("Open") }
+                                TextButton(onClick = { openFile(f) }) { Text(Strings.t("open")) }
                                 Spacer(Modifier.width(8.dp))
-                                TextButton(onClick = { revealFile(f) }) { Text("Open folder") }
+                                TextButton(onClick = { revealFile(f) }) { Text(Strings.t("open_folder")) }
                             }
                         }
                     }
@@ -126,10 +127,10 @@ fun DeviceInfoScreen(
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("adb error", style = MaterialTheme.typography.subtitle2)
+                            Text(Strings.t("adb_error"), style = MaterialTheme.typography.subtitle2)
                             Spacer(Modifier.weight(1f))
                             TextButton(onClick = { errorExpanded = !errorExpanded }) {
-                                Text(if (errorExpanded) "Collapse" else "Expand")
+                                Text(if (errorExpanded) Strings.t("collapse") else Strings.t("expand"))
                             }
                         }
                         if (errorExpanded) {
@@ -144,15 +145,15 @@ fun DeviceInfoScreen(
             val p = props
             if (p == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No device selected. Press Refresh.", style = MaterialTheme.typography.body2)
+                    Text(Strings.t("no_device_selected_refresh"), style = MaterialTheme.typography.body2)
                 }
             } else {
-                PropRow("Model", p.model)
-                PropRow("Android version", p.androidVersion)
-                PropRow("SDK", p.sdkInt.toString())
-                PropRow("Serial", p.serial)
-                PropRow("Resolution", p.resolution)
-                PropRow("ABI", p.abi)
+                PropRow(Strings.t("prop_model"), p.model)
+                PropRow(Strings.t("prop_android_version"), p.androidVersion)
+                PropRow(Strings.t("prop_sdk"), p.sdkInt.toString())
+                PropRow(Strings.t("prop_serial"), p.serial)
+                PropRow(Strings.t("prop_resolution"), p.resolution)
+                PropRow(Strings.t("prop_abi"), p.abi)
             }
         }
     }
