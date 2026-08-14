@@ -25,9 +25,9 @@ class DeviceTracker(
     private val logger: Logger,
     private val scope: CoroutineScope,
     private val clock: () -> Long,
-) {
+) : IDeviceTracker {
     private val _devices = MutableStateFlow<List<DeviceSnapshot>>(emptyList())
-    val devices: StateFlow<List<DeviceSnapshot>> = _devices.asStateFlow()
+    override val devices: StateFlow<List<DeviceSnapshot>> = _devices.asStateFlow()
 
     private val _status = MutableStateFlow(TrackerStatus.IDLE)
     val status: StateFlow<TrackerStatus> = _status.asStateFlow()
