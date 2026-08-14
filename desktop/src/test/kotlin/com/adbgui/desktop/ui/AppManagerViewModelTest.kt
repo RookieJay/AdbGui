@@ -31,6 +31,7 @@ class AppManagerViewModelTest {
         vm.load()
         advanceUntilIdle()
         assertEquals(2, vm.packages.value.size)
+        vm.stop()
         repo.stop()
     }
 }

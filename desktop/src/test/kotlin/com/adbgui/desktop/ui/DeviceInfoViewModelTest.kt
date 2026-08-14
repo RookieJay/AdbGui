@@ -31,6 +31,7 @@ class DeviceInfoViewModelTest {
         vm.load()
         advanceUntilIdle()
         assertEquals("Pixel 6", vm.props.value?.model)
+        vm.stop()
         repo.stop()
     }
 }

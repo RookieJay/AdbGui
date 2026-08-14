@@ -4,6 +4,7 @@ import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.DeviceProps
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,8 +59,7 @@ class DeviceInfoViewModel(
         finally { _exportBusy.value = false }
     }
 
-    init {
-        // Auto-refresh when the selected device changes (incl. the first auto-select).
-        scope.launch { selectedSerial.collect { load() } }
-    }
+    // Auto-refresh when the selected device changes (incl. the first auto-select).
+    private val refreshJob: Job = scope.launch { selectedSerial.collect { load() } }
+    fun stop() { refreshJob.cancel() }
 }
