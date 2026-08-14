@@ -7,5 +7,6 @@ dependencies {
     implementation(libs.serialization.json)
     testImplementation(kotlin("test"))
     testImplementation(libs.coroutines.test)
+    testImplementation("app.cash.turbine:turbine:1.2.0")
 }
 kotlin { jvmToolchain(21) }
