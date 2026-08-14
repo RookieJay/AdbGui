@@ -32,8 +32,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.DeviceView
 
@@ -43,6 +47,7 @@ fun DeviceListPane(
     modifier: Modifier = Modifier,
     selected: String? = null,
     onSelect: (DeviceView) -> Unit = {},
+    onReconnect: (String, Int) -> Unit = { _, _ -> },
 ) {
     var showConnect by remember { mutableStateOf(false) }
     val devices by vm.devices.collectAsState()
@@ -81,6 +86,7 @@ fun DeviceListPane(
                         onForget = { vm.forget(device.serial) },
                         onDisconnect = { vm.disconnect(device.serial) },
                         onSelect = { onSelect(device) },
+                        onReconnect = onReconnect,
                     )
                 }
             }
@@ -104,6 +110,7 @@ fun DeviceListPane(
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun DeviceRow(
     device: DeviceView,
@@ -112,6 +119,7 @@ private fun DeviceRow(
     onForget: () -> Unit,
     onDisconnect: () -> Unit,
     onSelect: () -> Unit = {},
+    onReconnect: (String, Int) -> Unit = { _, _ -> },
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
@@ -124,7 +132,19 @@ private fun DeviceRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .clickable { onSelect() },
+                .clickable { onSelect() }
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Press &&
+                                event.button == PointerButton.Secondary
+                            ) {
+                                menuOpen = true
+                            }
+                        }
+                    }
+                },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             StatusDot(isLive = device.isLive)
@@ -161,6 +181,12 @@ private fun DeviceRow(
                     Text("⋮", style = MaterialTheme.typography.h6)
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (device.wirelessIp != null && device.wirelessPort != null) {
+                        DropdownMenuItem(onClick = {
+                            menuOpen = false
+                            onReconnect(device.wirelessIp!!, device.wirelessPort!!)
+                        }) { Text("Reconnect") }
+                    }
                     DropdownMenuItem(onClick = {
                         menuOpen = false
                         aliasDraft = device.alias ?: ""

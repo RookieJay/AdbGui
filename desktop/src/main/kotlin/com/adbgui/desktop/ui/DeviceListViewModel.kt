@@ -29,6 +29,17 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
     }
 
     fun disconnect(target: String) { scope.launch { repo.disconnect(target) } }
+
+    fun reconnect(ip: String, port: Int) {
+        scope.launch {
+            _busy.value = true
+            try {
+                val r = repo.connectWireless(ip, port)
+                if (!r.success) _error.value = r.message
+            } finally { _busy.value = false }
+        }
+    }
+
     fun setAlias(serial: String, alias: String?) { scope.launch { repo.setAlias(serial, alias) } }
     fun forget(serial: String) { scope.launch { repo.forgetDevice(serial) } }
 }

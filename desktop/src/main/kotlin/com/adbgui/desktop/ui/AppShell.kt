@@ -56,6 +56,7 @@ fun AppShell(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     selected = selected,
                     onSelect = { device -> selectedSerial?.value = device.serial },
+                    onReconnect = { ip, port -> vm.reconnect(ip, port) },
                 )
                 if (deviceInfoVm != null) {
                     Divider()
