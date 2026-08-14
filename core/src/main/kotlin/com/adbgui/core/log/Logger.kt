@@ -1,5 +1,8 @@
 package com.adbgui.core.log
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class LogLevel { DEBUG, INFO, WARN, ERROR }
 
 data class LogEntry(
