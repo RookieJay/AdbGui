@@ -167,7 +167,18 @@ DeviceTracker 的 track-devices 流随后自动捕获到该设备 → DeviceRepo
 - `DeviceHistoryStore`：同目录 `devices.json`
 - 启动时序：`AdbServerController.ensureStarted()` → `DeviceTracker.start()` → 加载历史 → 合并首帧状态
 
-## 9. 测试策略
+## 9. 日志
+
+排查 adb 包装类工具的问题，日志几乎必备（adb 原始输出、track-devices 事件、server 重启、命令成败都是事后排障关键）。
+
+- **记什么**：adb 命令调用（含 `-s serial` 与参数、退出码、stdout/stderr 摘要）、`track-devices` 事件、`AdbServerController` 生命周期、自愈重连、未捕获异常、应用启动/退出。
+- **分级**：DEBUG（adb 原始 I/O）／INFO（生命周期）／WARN（重连、降级轮询）／ERROR（失败）。默认 INFO；设置中可切 DEBUG（用户排障时按指引打开）。
+- **位置**：滚动文件存用户配置目录（Windows: `%APPDATA%/AdbGui/logs/`），按大小轮转（如 5 文件 × 2MB）；开发期额外输出控制台。
+- **抽象**：`:core` 放轻量 `Logger` 接口，`:desktop` 提供文件轮转 actual 实现——保持 `:core` 可测（测试用假/内存 Logger）。
+- **可用性**：设置页"打开日志文件夹"与"导出日志（打包最近 N 个文件）"按钮，便于用户回传日志。
+- **敏感性**：不记敏感数据；apk 内容/路径仅在 DEBUG 以外不落盘，DEBUG 级记录路径不含二进制内容。
+
+## 10. 测试策略
 
 `:core` 可测性是分层的核心回报。覆盖优先级：**Parser > Repository > Tracker > CommandRunner > UI**。
 
@@ -178,7 +189,7 @@ DeviceTracker 的 track-devices 流随后自动捕获到该设备 → DeviceRepo
 5. **UI**：v1 以 ViewModel 单测为主（断言 StateFlow 状态机）；Compose 快照测试按需，不强制。
 6. **adb 集成测试**（可选）：真起 adb + 模拟器，放 `:integration-test` 源集，CI 可跳过。
 
-## 10. 待后续阶段明确（非 v1）
+## 11. 待后续阶段明确（非 v1）
 
 - Shell 终端页（交互式 `adb shell` 子进程 + ANSI 处理）
 - Logcat 实时流（`streamLogcat(): Flow<LogLine>` + 过滤/搜索/缓冲策略）
@@ -186,7 +197,7 @@ DeviceTracker 的 track-devices 流随后自动捕获到该设备 → DeviceRepo
 - 投屏（scrcpy 集成 vs `adb exec-out screencap` 轮询）
 - 调试/系统操作（端口转发、`adb pair`、reboot/recovery/sideload、root/remount、monkey 压测）
 
-## 11. 风险与缓解
+## 12. 风险与缓解
 
 | 风险 | 缓解 |
 |---|---|
