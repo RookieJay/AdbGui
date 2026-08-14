@@ -28,7 +28,8 @@ import java.nio.file.Path
  * Two-pane app shell: left = device list sidebar (+ Settings nav entry), right = content slot.
  * Right pane defaults to "No device selected"; a Settings entry swaps it to [SettingsScreen]
  * when `settingsVm` and `configDir` are supplied; selecting a device swaps it to
- * [AppManagerScreen] when `appManagerVm` is supplied.
+ * [AppManagerScreen] when `appManagerVm` is supplied, [DeviceInfoScreen] when `deviceInfoVm`
+ * is supplied, or [ScreenshotScreen] when `screenshotVm` is supplied (nav buttons toggle pages).
  */
 @Composable
 fun AppShell(
@@ -37,10 +38,13 @@ fun AppShell(
     settingsVm: SettingsViewModel? = null,
     configDir: Path? = null,
     appManagerVm: AppManagerViewModel? = null,
+    deviceInfoVm: DeviceInfoViewModel? = null,
+    screenshotVm: ScreenshotViewModel? = null,
     selectedSerial: MutableStateFlow<String?>? = null,
     rightContent: @Composable () -> Unit = { DefaultRightPane() },
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var page by remember { mutableStateOf(NavPage.DEVICE_INFO) }
     val serialFlow = selectedSerial ?: remember { MutableStateFlow<String?>(null) }
     val selected by serialFlow.collectAsState()
 
@@ -52,6 +56,25 @@ fun AppShell(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     onSelect = { device -> selectedSerial?.value = device.serial },
                 )
+                if (deviceInfoVm != null) {
+                    Divider()
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        onClick = { showSettings = false; page = NavPage.DEVICE_INFO },
+                    ) { Text(if (page == NavPage.DEVICE_INFO && !showSettings) "Device Info *" else "Device Info") }
+                }
+                if (screenshotVm != null) {
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        onClick = { showSettings = false; page = NavPage.SCREENSHOT },
+                    ) { Text(if (page == NavPage.SCREENSHOT && !showSettings) "Screenshot *" else "Screenshot") }
+                }
+                if (appManagerVm != null) {
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        onClick = { showSettings = false; page = NavPage.APP_MANAGER },
+                    ) { Text(if (page == NavPage.APP_MANAGER && !showSettings) "App Manager *" else "App Manager") }
+                }
                 if (settingsVm != null && configDir != null) {
                     Divider()
                     TextButton(
@@ -68,8 +91,14 @@ fun AppShell(
                     showSettings && settingsVm != null && configDir != null -> {
                         SettingsScreen(vm = settingsVm, configDir = configDir)
                     }
-                    selected != null && appManagerVm != null -> {
+                    selected != null && page == NavPage.APP_MANAGER && appManagerVm != null -> {
                         AppManagerScreen(vm = appManagerVm)
+                    }
+                    selected != null && page == NavPage.DEVICE_INFO && deviceInfoVm != null -> {
+                        DeviceInfoScreen(vm = deviceInfoVm)
+                    }
+                    selected != null && page == NavPage.SCREENSHOT && screenshotVm != null -> {
+                        ScreenshotScreen(vm = screenshotVm)
                     }
                     else -> rightContent()
                 }
@@ -77,6 +106,8 @@ fun AppShell(
         }
     }
 }
+
+private enum class NavPage { DEVICE_INFO, SCREENSHOT, APP_MANAGER }
 
 @Composable
 private fun DefaultRightPane() {
