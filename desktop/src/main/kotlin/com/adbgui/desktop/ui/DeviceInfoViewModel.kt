@@ -39,7 +39,20 @@ class DeviceInfoViewModel(
         try {
             val body = repo.deviceDetailReport(serial)
             val stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-            _report.value = "Device Info Export\nSerial: $serial\nGenerated: $stamp\n\n$body"
+            // Prepend the page's curated summary (the same DeviceProps shown on screen).
+            val summary = _props.value?.let { p ->
+                buildString {
+                    appendLine("===== Summary =====")
+                    appendLine("Model: ${p.model}")
+                    appendLine("Android version: ${p.androidVersion}")
+                    appendLine("SDK: ${p.sdkInt}")
+                    appendLine("Serial: ${p.serial}")
+                    appendLine("Resolution: ${p.resolution}")
+                    appendLine("ABI: ${p.abi}")
+                    appendLine()
+                }
+            } ?: ""
+            _report.value = "Device Info Export\nSerial: $serial\nGenerated: $stamp\n\n$summary$body"
         } catch (e: Exception) { _error.value = "Export failed: ${e.message}"; _report.value = null }
         finally { _exportBusy.value = false }
     }

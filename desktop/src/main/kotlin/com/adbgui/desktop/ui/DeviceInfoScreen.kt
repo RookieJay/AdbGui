@@ -93,8 +93,7 @@ fun DeviceInfoScreen(
                             OutlinedButton(onClick = {
                                 val dialog = FileDialog(Frame(), "Export device info", FileDialog.SAVE)
                                 val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-                                val serial = vm.props.value?.serial ?: "device"
-                                dialog.file = "deviceinfo_${serial}_$stamp.txt"
+                                dialog.file = "deviceinfo_$stamp.txt"
                                 dialog.isVisible = true
                                 val sel = dialog.file
                                 if (sel != null) {
