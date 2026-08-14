@@ -1,0 +1,33 @@
+package com.adbgui.desktop.ui
+
+import com.adbgui.core.device.DeviceRepository
+import com.adbgui.core.domain.ConnectResult
+import com.adbgui.core.domain.DeviceView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+class DeviceListViewModel(private val repo: DeviceRepository, private val scope: CoroutineScope) {
+    val devices: StateFlow<List<DeviceView>> = repo.devices
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+    private val _busy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    fun connect(ip: String, port: Int, onResult: (ConnectResult) -> Unit = {}) {
+        scope.launch {
+            _busy.value = true
+            try {
+                val r = repo.connectWireless(ip, port)
+                if (!r.success) _error.value = r.message
+                onResult(r)
+            } finally { _busy.value = false }
+        }
+    }
+
+    fun disconnect(target: String) { scope.launch { repo.disconnect(target) } }
+    fun setAlias(serial: String, alias: String?) { scope.launch { repo.setAlias(serial, alias) } }
+    fun forget(serial: String) { scope.launch { repo.forgetDevice(serial) } }
+}
