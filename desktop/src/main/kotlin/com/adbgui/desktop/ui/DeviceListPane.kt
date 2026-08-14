@@ -41,6 +41,7 @@ import com.adbgui.core.domain.DeviceView
 fun DeviceListPane(
     vm: DeviceListViewModel,
     modifier: Modifier = Modifier,
+    onSelect: (DeviceView) -> Unit = {},
 ) {
     var showConnect by remember { mutableStateOf(false) }
     val devices by vm.devices.collectAsState()
@@ -77,6 +78,7 @@ fun DeviceListPane(
                         },
                         onForget = { vm.forget(device.serial) },
                         onDisconnect = { vm.disconnect(device.serial) },
+                        onSelect = { onSelect(device) },
                     )
                 }
             }
@@ -106,6 +108,7 @@ private fun DeviceRow(
     onRename: (String?) -> Unit,
     onForget: () -> Unit,
     onDisconnect: () -> Unit,
+    onSelect: () -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
@@ -116,7 +119,7 @@ private fun DeviceRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .clickable { },
+                .clickable { onSelect() },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             StatusDot(isLive = device.isLive)

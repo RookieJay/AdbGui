@@ -14,18 +14,21 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.nio.file.Path
 
 /**
  * Two-pane app shell: left = device list sidebar (+ Settings nav entry), right = content slot.
  * Right pane defaults to "No device selected"; a Settings entry swaps it to [SettingsScreen]
- * when `settingsVm` and `configDir` are supplied.
+ * when `settingsVm` and `configDir` are supplied; selecting a device swaps it to
+ * [AppManagerScreen] when `appManagerVm` is supplied.
  */
 @Composable
 fun AppShell(
@@ -33,9 +36,13 @@ fun AppShell(
     modifier: Modifier = Modifier,
     settingsVm: SettingsViewModel? = null,
     configDir: Path? = null,
+    appManagerVm: AppManagerViewModel? = null,
+    selectedSerial: MutableStateFlow<String?>? = null,
     rightContent: @Composable () -> Unit = { DefaultRightPane() },
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    val serialFlow = selectedSerial ?: remember { MutableStateFlow<String?>(null) }
+    val selected by serialFlow.collectAsState()
 
     MaterialTheme {
         Row(modifier = modifier.fillMaxSize()) {
@@ -43,6 +50,7 @@ fun AppShell(
                 DeviceListPane(
                     vm = vm,
                     modifier = Modifier.fillMaxWidth().weight(1f),
+                    onSelect = { device -> selectedSerial?.value = device.serial },
                 )
                 if (settingsVm != null && configDir != null) {
                     Divider()
@@ -56,10 +64,14 @@ fun AppShell(
             }
             Divider(modifier = Modifier.fillMaxHeight().width(1.dp))
             Surface(modifier = Modifier.fillMaxSize()) {
-                if (showSettings && settingsVm != null && configDir != null) {
-                    SettingsScreen(vm = settingsVm, configDir = configDir)
-                } else {
-                    rightContent()
+                when {
+                    showSettings && settingsVm != null && configDir != null -> {
+                        SettingsScreen(vm = settingsVm, configDir = configDir)
+                    }
+                    selected != null && appManagerVm != null -> {
+                        AppManagerScreen(vm = appManagerVm)
+                    }
+                    else -> rightContent()
                 }
             }
         }
@@ -68,5 +80,5 @@ fun AppShell(
 
 @Composable
 private fun DefaultRightPane() {
-    androidx.compose.material.Text("No device selected")
+    Text("No device selected")
 }
