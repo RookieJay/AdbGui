@@ -29,7 +29,7 @@
 - **选中行高亮 + 切换设备自动刷新**（`b27bd59`）：侧栏选中行加浅色主色调背景；DeviceInfo/AppManager 的 VM 加 `selectedSerial.collect { load() }`，切设备即刷新（不用手点）。
 - **重连已断开设备 + 右键上下文菜单**（`1fa94fd`）：`DeviceListViewModel.reconnect(ip,port)` 走 `repo.connectWireless`；设备行右键（`PointerButton.Secondary`）或点 ⋮ 弹菜单：Reconnect（仅无线+已断开）/ Rename / Disconnect / Forget。
 - **导出设备详细信息 + Forget 确认弹窗**（`4ab6933`+`8d3c21a`）：DeviceInfo 加 Export 按钮，跑 getprop / wm size / wm density / meminfo / cpuinfo / dumpsys battery / df /data 拼成 .txt（每段独立、单段失败不中断），顶部带 Summary 概要段；Save 文件名 `deviceinfo_yyyyMMdd-HHmmss.txt`；存完给 Open/Open folder 链接。Forget 改为确认弹窗防误删。
-- **多语言 i18n**（`02fa1c7`+`1eeb871`）：`ui/i18n/Locale.kt`（enum ZH/EN，可扩展）+ `Strings.kt`（Compose-state-backed，`t(key)` 查表，68 个 key 的 zh/en）；默认中文；Settings 页可切换语言、存进 `Settings.locale`；启动时 CompositionRoot 设初始语言。所有 UI 文案走 `Strings.t(...)`；`:core` 不含用户文案（异常信息保留 adb 原文）。导出报告的段标题随当前语言翻译。
+- **多语言 i18n**（`02fa1c7`+`1eeb871`+`b8c5479`）：`ui/i18n/Locale.kt`（enum ZH/EN，可扩展）+ `Strings.kt`（Compose-state-backed，`t(key)` 查表，68 个 key 的 zh/en）；默认中文；Settings 页可切换语言、存进 `Settings.locale`；启动时在 UI 线程（`Main` 里 `runBlocking { settings.load() }` + `Strings.set`）设初始语言（不能在后台 scope 设——会在线程外创建 Compose state，首帧读取抛 "state created after the snapshot was taken"）；`Strings.set` 用 `Snapshot.withMutableSnapshot` 保证跨线程写安全。所有 UI 文案走 `Strings.t(...)`；`:core` 不含用户文案（异常信息保留 adb 原文）。导出报告的段标题随当前语言翻译。
 - **测试修复**（`1eeb871`）：i18n 任务跑全量 desktop 测试时暴露 3 个遗留失败——DeviceInfo/AppManager VM 的自动刷新 collector（`init` 里 `selectedSerial.collect`）在测试 scope 上永不完成 → `UncompletedCoroutinesError`（改为 tracked `refreshJob` + `stop()`，测试调 `vm.stop()`）；Screenshot 测试因 banner 剥离修复后要求 PNG 签名而喂了无签名字节 → NPE（测试改喂 `0x89...` 签名前缀）。教训：后续功能改动后**只编译不跑测试**会漏这类回归——以后 UI 改动一并跑 `:desktop:test`。
 
 ### 已知技术债（不影响 v1 使用）
