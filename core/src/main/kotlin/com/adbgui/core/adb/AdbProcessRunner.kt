@@ -14,6 +14,7 @@ interface AdbStream {
 
 interface AdbProcessRunner {
     suspend fun run(adb: AdbBinary, args: List<String>, timeoutMs: Long? = null): AdbProcessResult
+    suspend fun runBinary(adb: AdbBinary, args: List<String>, timeoutMs: Long? = null): ByteArray
     fun startStream(adb: AdbBinary, args: List<String>, scope: CoroutineScope): AdbStream
 }
 
@@ -29,10 +30,16 @@ class FakeAdbProcessRunner : AdbProcessRunner {
 
     fun setDefault(result: AdbProcessResult) { default = result }
 
+    private var binaryResponse: ByteArray = ByteArray(0)
+
+    fun setBinaryResponse(b: ByteArray) { binaryResponse = b }
+
     override suspend fun run(adb: AdbBinary, args: List<String>, timeoutMs: Long?): AdbProcessResult {
         return scripts.firstOrNull { r -> r.keywords.all { kw -> args.any { it.contains(kw) } } }?.result
             ?: default
     }
+
+    override suspend fun runBinary(adb: AdbBinary, args: List<String>, timeoutMs: Long?): ByteArray = binaryResponse
 
     override fun startStream(adb: AdbBinary, args: List<String>, scope: CoroutineScope): AdbStream {
         // Streaming is exercised via DeviceTracker tests using a FakeAdbStream; default stub.
