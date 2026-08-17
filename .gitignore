@@ -6,5 +6,5 @@ build/
 .vscode/
 *.iml
 .DS_Store
-/desktop/screenshot.png
-/desktop/deviceinfo_*.txt
+desktop/*.png
+desktop/*.txt
