@@ -69,3 +69,25 @@ Shell 终端页 / Logcat 实时流 / 文件 push-pull / 投屏（scrcpy）/ 调�
 - `Color.Black`/`Gray` 在暗色主题下 I/V/D 可读性差（v1 可接受）。
 - tag/msg/pid 分字段过滤 + package 过滤未做（见上"功能"注）。
 
+---
+
+## v2: Shell 终端页 (branch `feat/shell`, 2026-08-17)
+
+### 功能
+- **一键开系统终端**跑 `adb -s <serial> shell`——侧栏 Shell 页一个 "Open Shell" 按钮，选中设备后启用。点击 → 拉起 OS 原生终端（Windows 优先 `wt.exe`，无则 `cmd.exe /K`），直接看到 `MTK9632:/ $` 真提示符。
+- OS 终端原生处理 PTY / ANSI / 命令历史 / vim/top/less——app 不做 in-app 终端模拟。
+- adb 路径用 `AdbLocator` 解析（override > bundled > PATH），含空格加引号；进程 detached（不 `waitFor`）。
+
+### 实现要点
+- `:desktop/platform/ShellLauncher` 接口 + `WindowsShellLauncher`（`buildArgs` 纯函数可测：wt-vs-cmd + 引号；`open` detached 起进程）+ `FakeShellLauncher`（测试捕获）。
+- `ShellScreen` 无 VM（纯 UI + 回调）；`onOpenShell` 在 Main 接驳：`runBlocking { root.locator.locate() } → launcher.open`。`ShellScreen` 包 `runCatching` + 内联红条（IOException / AdbNotFoundException 不崩、spec §5 内联错误）。
+- `CompositionRoot.locator` 由 `private` 改 `val`（供 Main 调）。
+- `:core` **零行改动**——复用 v1 的 `AdbLocator`。
+
+### 已知技术债（shell）
+- 错误条硬编码 `Color(0xFFFFCDD2)`（应 `MaterialTheme.colors.error`，暗色主题可读性）。
+- SHELL nav 按钮无 `if (vm != null)` 守卫（总是渲染——安全，Main 总接驳）。
+- `runBlocking` 在 UI 线程解析 adb 路径（极小读取；可启动时缓存）。
+- adb-not-found 点击时内联报错（非 spec §5 "置灰"——需 eager locate 才能预置灰，可接受）。
+- 无 VM/Compose 测 ShellScreen（无状态；launcher 由 S1 测；真机冒烟手动）。
+
