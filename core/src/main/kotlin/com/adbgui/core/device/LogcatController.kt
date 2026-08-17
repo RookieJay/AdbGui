@@ -76,8 +76,24 @@ class LogcatController(
         scope.launch(serialDispatcher) { ring.clear(); filtered.clear(); _lines.value = emptyList() }
     }
 
-    // Task 5 adds setFilters + export; stub here so the file compiles standalone:
-    fun setFilters(f: LogcatFilters) { /* Task 5 */ }
+    // setFilters routes through serialDispatcher so deque mutations serialize with onLine
+    // (Task 4 carry-over: ArrayDeque is not thread-safe; the UI thread must not mutate
+    // filtered/ring/_lines concurrently with runLoop's onLine on serialDispatcher).
+    fun setFilters(f: LogcatFilters) {
+        scope.launch(serialDispatcher) {
+            _filters.value = f
+            recomputeFiltered()
+        }
+    }
+
+    private fun recomputeFiltered() {
+        val f = _filters.value
+        filtered.clear()
+        val it = ring.iterator()
+        while (it.hasNext()) { val l = it.next(); if (matches(l, f)) filtered.addLast(l) }
+        _lines.value = filtered.toList()
+    }
+
     fun export(): String = _lines.value.joinToString("\n") { it.raw }
 
     private suspend fun runLoop(serial: String) {

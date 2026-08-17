@@ -78,4 +78,57 @@ class LogcatControllerTest {
         c.stop()
         assertEquals(LogcatStatus.IDLE, c.status.value)
     }
+
+    @Test fun setFilters_level_filters_lines() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I Tag: info",
+            "08-17 10:23:45.200  100  201 W Tag: warn",
+        ))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(levelSet = setOf(com.adbgui.core.domain.LogcatLevel.W)))
+        advanceUntilIdle()
+        assertEquals(1, c.lines.value.size)
+        assertEquals("warn", c.lines.value[0].message)
+        c.stop()
+    }
+
+    @Test fun setFilters_tag_text_pid_combine() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I Alpha: keep this one",
+            "08-17 10:23:45.200  999  201 I Beta: drop by pid",
+            "08-17 10:23:45.300  100  202 W Alpha: wrong level",
+            "08-17 10:23:45.400  100  203 I Gamma: no text match",
+        ))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(
+            levelSet = com.adbgui.core.domain.LogcatLevel.entries.toSet(),
+            tagInclude = "Alpha",
+            text = "keep",
+            pid = 100,
+        ))
+        advanceUntilIdle()
+        assertEquals(1, c.lines.value.size)
+        assertEquals("keep this one", c.lines.value[0].message)
+        c.stop()
+    }
+
+    @Test fun export_returns_filtered_raw_lines_joined() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I Tag: one",
+            "08-17 10:23:45.200  100  201 E Tag: two",
+        ))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(levelSet = setOf(com.adbgui.core.domain.LogcatLevel.E)))
+        advanceUntilIdle()
+        val out = c.export()
+        assert(out.contains("Tag: two"))
+        assert(!out.contains("Tag: one"))
+        c.stop()
+    }
 }
