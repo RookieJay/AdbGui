@@ -2,7 +2,7 @@ package com.adbgui.desktop.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +31,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     val error by vm.error.collectAsState()
     val filters by vm.filters.collectAsState()
     var savedFile by remember { mutableStateOf<File?>(null) }
+    var exportError by remember { mutableStateOf<String?>(null) }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
         Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -81,7 +82,9 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                     val sel = dlg.file
                     if (sel != null) {
                         val t = File(dlg.directory, sel)
-                        runCatching { t.writeText(vm.export()) }.onSuccess { savedFile = t }
+                        runCatching { t.writeText(vm.export()) }
+                            .onSuccess { savedFile = t; exportError = null }
+                            .onFailure { exportError = Strings.t("status_save_failed").format(it.message) }
                     }
                 }) { Text(Strings.t("export")) }
                 OutlinedButton(onClick = {
@@ -111,16 +114,27 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 }
             }
 
+            exportError?.let { msg ->
+                Surface(color = Color(0xFFFFCDD2), shape = RoundedCornerShape(4.dp), modifier = Modifier.fillMaxWidth()) {
+                    Text(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
+                }
+            }
+
             Divider()
             // Log list with auto-scroll-to-bottom
             val listState = rememberLazyListState()
-            LaunchedEffect(lines.size) {
-                if (!listState.isScrollInProgress && lines.isNotEmpty()) {
-                    listState.animateScrollToItem(lines.size - 1)
+            val userAtBottom by remember {
+                derivedStateOf {
+                    val info = listState.layoutInfo
+                    val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+                    lines.isEmpty() || lastVisible >= lines.size - 2   // at/near bottom → auto-scroll ok
                 }
             }
+            LaunchedEffect(lines.size) {
+                if (userAtBottom && lines.isNotEmpty()) listState.animateScrollToItem(lines.size - 1)
+            }
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                items(lines, key = { it.raw.hashCode() }) { line ->
+                itemsIndexed(lines) { _, line ->
                     Text(line.raw, color = levelColor(line.level), style = MaterialTheme.typography.body2)
                 }
             }
