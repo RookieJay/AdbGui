@@ -2,7 +2,9 @@ package com.adbgui.core.adb
 
 import com.adbgui.core.domain.AdbBinary
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 
 data class AdbProcessResult(val exitCode: Int, val stdout: String, val stderr: String)
 
@@ -34,6 +36,10 @@ class FakeAdbProcessRunner : AdbProcessRunner {
 
     fun setBinaryResponse(b: ByteArray) { binaryResponse = b }
 
+    private var streamLines: List<String> = emptyList()
+
+    fun setStreamLines(lines: List<String>) { streamLines = lines }
+
     override suspend fun run(adb: AdbBinary, args: List<String>, timeoutMs: Long?): AdbProcessResult {
         return scripts.firstOrNull { r -> r.keywords.all { kw -> args.any { it.contains(kw) } } }?.result
             ?: default
@@ -42,7 +48,13 @@ class FakeAdbProcessRunner : AdbProcessRunner {
     override suspend fun runBinary(adb: AdbBinary, args: List<String>, timeoutMs: Long?): ByteArray = binaryResponse
 
     override fun startStream(adb: AdbBinary, args: List<String>, scope: CoroutineScope): AdbStream {
-        // Streaming is exercised via DeviceTracker tests using a FakeAdbStream; default stub.
-        throw UnsupportedOperationException("set startStreamStub in tracker tests")
+        val ch = Channel<String>(Channel.UNLIMITED)
+        streamLines.forEach { ch.trySend(it) }
+        // channel is left OPEN so the flow stays alive until kill() — basic collect tests don't trigger reconnect
+        return object : AdbStream {
+            override val lines: Flow<String> = ch.receiveAsFlow()
+            override fun kill() { ch.close() }
+            override val isAlive: Boolean = !ch.isClosedForSend
+        }
     }
 }
