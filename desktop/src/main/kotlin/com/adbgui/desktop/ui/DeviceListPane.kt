@@ -116,7 +116,7 @@ fun DeviceListPane(
     if (showPair) {
         PairDialog(
             vm = vm,
-            onDismiss = { showPair = false },
+            onDismiss = { showPair = false; vm.clearError() },
         )
     }
 }

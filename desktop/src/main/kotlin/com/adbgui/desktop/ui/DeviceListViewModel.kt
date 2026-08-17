@@ -43,6 +43,7 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
 
     fun setAlias(serial: String, alias: String?) { scope.launch { repo.setAlias(serial, alias) } }
     fun forget(serial: String) { scope.launch { repo.forgetDevice(serial) } }
+    fun clearError() { _error.value = null }
 
     fun pair(ip: String, port: Int, code: String, onResult: (PairResult) -> Unit = {}) {
         scope.launch {
