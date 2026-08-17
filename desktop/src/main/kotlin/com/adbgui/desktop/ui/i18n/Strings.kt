@@ -136,6 +136,7 @@ object Strings {
         "pair_title" to "无线配对",
         "pairing_code" to "配对码",
         "pair_hint" to "在设备的「无线调试」中获取 IP:端口 和配对码",
+        "pairing" to "配对中…",
         // Shell
         "shell" to "Shell",
         "nav_shell" to "Shell",
@@ -263,6 +264,7 @@ object Strings {
         "pair_title" to "Wireless Pairing",
         "pairing_code" to "Pairing code",
         "pair_hint" to "Get the IP:port and pairing code from the device's \"Wireless debugging\" screen",
+        "pairing" to "Pairing…",
         // Shell
         "shell" to "Shell",
         "nav_shell" to "Shell",

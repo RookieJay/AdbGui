@@ -49,9 +49,18 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
             _error.value = null
             _busy.value = true
             try {
-                val r = repo.pair(ip, port, code)
-                if (!r.success) _error.value = r.message
-                onResult(r)
+                val pr = repo.pair(ip, port, code)
+                if (pr.success) {
+                    // adb pair only registers the key — connect to actually add the device.
+                    val cr = repo.connectWireless(ip, port)
+                    if (cr.success) {
+                        onResult(pr)  // dialog closes; device appears via tracker poll
+                    } else {
+                        _error.value = "配对成功但连接失败：${cr.message}"
+                    }
+                } else {
+                    _error.value = pr.message
+                }
             } finally { _busy.value = false }
         }
     }
