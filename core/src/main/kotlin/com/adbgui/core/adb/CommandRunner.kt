@@ -109,6 +109,11 @@ class CommandRunner(
         return sb.toString()
     }
 
+    suspend fun streamLogcat(serial: String): AdbStream {
+        server.ensureStarted()
+        return runner.startStream(adb(), listOf("-s", serial, "logcat", "-v", "threadtime"), scope)
+    }
+
     private fun extractPng(bytes: ByteArray): ByteArray? {
         val sig = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
         val start = indexOf(bytes, sig) ?: return null

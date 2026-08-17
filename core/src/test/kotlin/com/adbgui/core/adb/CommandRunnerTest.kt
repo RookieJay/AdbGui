@@ -4,6 +4,7 @@ import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.AdbSource
 import com.adbgui.core.log.NoopLogger
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -88,5 +89,18 @@ class CommandRunnerTest {
         assert(report.contains("Physical size: 1080x1920"))
         assert(report.contains("[exit 1]"))  // battery failed but report continues
         assert(!report.contains("pm list packages"))  // app list excluded
+    }
+
+    @Test
+    fun streamLogcat_passes_threadtime_args_and_ensures_server() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf("08-17 10:23:45.123  1  2 I Tag: hi"))
+        var serverCalled = false
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter { serverCalled = true })
+        val stream = cr.streamLogcat("abc")
+        assertTrue(serverCalled)
+        // the stream emits the scripted line
+        val first = stream.lines.first()
+        assert(first.contains("Tag: hi"))
     }
 }
