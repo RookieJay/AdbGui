@@ -103,4 +103,38 @@ class CommandRunnerTest {
         val first = stream.lines.first()
         assert(first.contains("Tag: hi"))
     }
+
+    @Test
+    fun reboot_normal_sends_reboot_no_mode() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("reboot"), AdbProcessResult(0, "rebooting", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.reboot("abc", com.adbgui.core.domain.RebootMode.NORMAL)
+        // success: no throw; args verified via whenArgsContains("reboot") match
+    }
+
+    @Test
+    fun reboot_recovery_appends_recovery_arg() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("reboot", "recovery"), AdbProcessResult(0, "rebooting", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.reboot("abc", com.adbgui.core.domain.RebootMode.RECOVERY)
+    }
+
+    @Test
+    fun root_failure_throws_adb_command_exception() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("root"), AdbProcessResult(1, "", "adbd cannot run as root in production builds"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val ex = assertFailsWith<RuntimeException> { cr.root("abc") }
+        assert(ex is AdbCommandException)
+    }
+
+    @Test
+    fun remount_success() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("remount"), AdbProcessResult(0, "remount succeeded", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.remount("abc")
+    }
 }

@@ -6,6 +6,7 @@ import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceProps
 import com.adbgui.core.domain.InstallResult
 import com.adbgui.core.domain.PackageInfo
+import com.adbgui.core.domain.RebootMode
 import com.adbgui.core.log.Logger
 import kotlinx.coroutines.CoroutineScope
 
@@ -112,6 +113,19 @@ class CommandRunner(
     suspend fun streamLogcat(serial: String): AdbStream {
         server.ensureStarted()
         return runner.startStream(adb(), listOf("-s", serial, "logcat", "-v", "threadtime"), scope)
+    }
+
+    suspend fun reboot(serial: String, mode: RebootMode) {
+        val args = buildList { add("reboot"); if (mode.arg != null) add(mode.arg) }
+        runCmd(serial, args)   // throws AdbCommandException on nonzero (e.g. device offline)
+    }
+
+    suspend fun root(serial: String) {
+        runCmd(serial, listOf("root"))   // production builds: "adbd cannot run as root in production builds"
+    }
+
+    suspend fun remount(serial: String) {
+        runCmd(serial, listOf("remount"))
     }
 
     private fun extractPng(bytes: ByteArray): ByteArray? {

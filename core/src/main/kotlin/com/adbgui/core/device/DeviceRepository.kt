@@ -94,4 +94,8 @@ class DeviceRepository(
         history.remove(serial)
         recompute(tracker.devices.value)
     }
+
+    suspend fun reboot(serial: String, mode: com.adbgui.core.domain.RebootMode) = commands.reboot(serial, mode)
+    suspend fun root(serial: String) = commands.root(serial)
+    suspend fun remount(serial: String) = commands.remount(serial)
 }
