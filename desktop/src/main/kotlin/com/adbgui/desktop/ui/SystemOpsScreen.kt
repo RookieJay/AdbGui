@@ -34,6 +34,7 @@ fun SystemOpsScreen(
     modifier: Modifier = Modifier,
 ) {
     val error by vm.error.collectAsState()
+    val message by vm.message.collectAsState()
     val busy by vm.busy.collectAsState()
     var pendingReboot by remember { mutableStateOf<RebootMode?>(null) }
 
@@ -69,6 +70,12 @@ fun SystemOpsScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(enabled = !busy, onClick = { vm.root() }) { Text(Strings.t("root_op")) }
                 OutlinedButton(enabled = !busy, onClick = { vm.remount() }) { Text(Strings.t("remount_op")) }
+            }
+
+            message?.let { msg ->
+                Surface(color = Color(0xFFC8E6C9), modifier = Modifier.fillMaxWidth()) {
+                    Text(msg.trim(), style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
+                }
             }
 
             error?.let { msg ->

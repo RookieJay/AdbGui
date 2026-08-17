@@ -115,17 +115,17 @@ class CommandRunner(
         return runner.startStream(adb(), listOf("-s", serial, "logcat", "-v", "threadtime"), scope)
     }
 
-    suspend fun reboot(serial: String, mode: RebootMode) {
+    suspend fun reboot(serial: String, mode: RebootMode): String {
         val args = buildList { add("reboot"); if (mode.arg != null) add(mode.arg) }
-        runCmd(serial, args)   // throws AdbCommandException on nonzero (e.g. device offline)
+        return runCmd(serial, args).stdout   // throws AdbCommandException on nonzero (e.g. device offline)
     }
 
-    suspend fun root(serial: String) {
-        runCmd(serial, listOf("root"))   // production builds: "adbd cannot run as root in production builds"
+    suspend fun root(serial: String): String {
+        return runCmd(serial, listOf("root")).stdout   // production: "adbd cannot run as root in production builds"
     }
 
-    suspend fun remount(serial: String) {
-        runCmd(serial, listOf("remount"))
+    suspend fun remount(serial: String): String {
+        return runCmd(serial, listOf("remount")).stdout
     }
 
     private fun extractPng(bytes: ByteArray): ByteArray? {

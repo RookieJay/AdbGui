@@ -95,7 +95,7 @@ class DeviceRepository(
         recompute(tracker.devices.value)
     }
 
-    suspend fun reboot(serial: String, mode: com.adbgui.core.domain.RebootMode) = commands.reboot(serial, mode)
-    suspend fun root(serial: String) = commands.root(serial)
-    suspend fun remount(serial: String) = commands.remount(serial)
+    suspend fun reboot(serial: String, mode: com.adbgui.core.domain.RebootMode): String = commands.reboot(serial, mode)
+    suspend fun root(serial: String): String = commands.root(serial)
+    suspend fun remount(serial: String): String = commands.remount(serial)
 }
