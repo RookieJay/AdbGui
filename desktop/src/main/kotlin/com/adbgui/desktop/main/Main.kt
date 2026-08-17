@@ -9,6 +9,7 @@ import com.adbgui.desktop.ui.AppShell
 import com.adbgui.desktop.ui.AppManagerViewModel
 import com.adbgui.desktop.ui.DeviceInfoViewModel
 import com.adbgui.desktop.ui.DeviceListViewModel
+import com.adbgui.desktop.ui.LogcatViewModel
 import com.adbgui.desktop.ui.SettingsViewModel
 import com.adbgui.desktop.ui.ScreenshotViewModel
 import com.adbgui.desktop.ui.i18n.Locale
@@ -30,6 +31,8 @@ fun main() = application {
     val appManagerVm = AppManagerViewModel(root.repository, selectedSerial, root.scope)
     val deviceInfoVm = DeviceInfoViewModel(root.repository, selectedSerial, root.scope)
     val screenshotVm = ScreenshotViewModel(root.repository, selectedSerial, root.scope)
+    val logcatController = com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope)
+    val logcatVm = LogcatViewModel(logcatController, selectedSerial, root.scope)
     // Auto-select the first ONLINE device when nothing is validly selected.
     // Never steals an active selection: if the current serial is still online, leave it.
     // (A device going offline counts as an invalid selection → cleared/re-picked, so stale
@@ -52,6 +55,7 @@ fun main() = application {
                 appManagerVm = appManagerVm,
                 deviceInfoVm = deviceInfoVm,
                 screenshotVm = screenshotVm,
+                logcatVm = logcatVm,
                 selectedSerial = selectedSerial,
             )
         }

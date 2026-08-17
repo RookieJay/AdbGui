@@ -104,6 +104,20 @@ object Strings {
         "report_summary_header" to "===== 摘要 =====",
         "report_export_header" to "设备信息导出",
         "report_generated" to "生成时间：%s",
+        // Logcat
+        "logcat" to "Logcat",
+        "nav_logcat" to "日志",
+        "level" to "级别",
+        "tag_include" to "Tag 包含",
+        "tag_exclude" to "Tag 排除",
+        "text_search" to "文本搜索",
+        "pid" to "PID",
+        "pause" to "暂停",
+        "resume" to "恢复",
+        "copy" to "复制",
+        "reconnecting_logcat" to "正在重连 logcat…",
+        "no_device_selected_logcat" to "未选择设备",
+        "save_logcat_title" to "导出 logcat",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -195,6 +209,20 @@ object Strings {
         "report_summary_header" to "===== Summary =====",
         "report_export_header" to "Device Info Export",
         "report_generated" to "Generated: %s",
+        // Logcat
+        "logcat" to "Logcat",
+        "nav_logcat" to "Logcat",
+        "level" to "Level",
+        "tag_include" to "Tag includes",
+        "tag_exclude" to "Tag excludes",
+        "text_search" to "Text search",
+        "pid" to "PID",
+        "pause" to "Pause",
+        "resume" to "Resume",
+        "copy" to "Copy",
+        "reconnecting_logcat" to "Reconnecting logcat…",
+        "no_device_selected_logcat" to "No device selected",
+        "save_logcat_title" to "Export logcat",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)
