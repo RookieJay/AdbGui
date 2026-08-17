@@ -41,3 +41,31 @@
 
 ### v1 范围外（后续阶段）
 Shell 终端页 / Logcat 实时流 / 文件 push-pull / 投屏（scrcpy）/ 调试与系统操作（端口转发、`adb pair`、reboot/recovery、root/remount、monkey 压测）。见 spec §11。
+
+---
+
+## v2: Logcat 实时流 (branch `feat/logcat`, 2026-08-17)
+
+### 功能
+- **实时 logcat 查看器**：长驻 `adb logcat -v threadtime` 子进程，逐行流入 `:core` `LogcatController`（~10000 行环形缓冲，溢出最旧）。
+- **过滤**：级别下拉（V/D/I/W/E/F 多选）+ 一个文本输入框（子串匹配整行 = tag+消息+时间戳+pid）。（tag/msg/pid 分字段 + package 过滤留后续——logcat threadtime 无 package 字段，package 过滤需 `pidof` 解析，较复杂，暂不做。）
+- **控制**：暂停/恢复（暂停丢新行不积压）、清空、导出为 `logcat_<stamp>.txt`（+ Open/Open-folder 链接）、复制可见行。
+- **流式自愈**：子进程死亡/异常 → 指数退避重启（1s→…→30s），3 次失败置 `FAILED` 继续尝试。
+- **设备切换自动重起**：`LogcatViewModel` `selectedSerial.collect { controller.start(it) }`。
+- **UI**：按级别着色（V/D 灰、I 黑、W 橙、E/F 红）、自动滚底（向上滚后右下角浮动 ↓ 跳回最新）、内联错误。
+
+### 真机测试发现并修复的问题
+- **`LogcatController` 最初用 `limitedParallelism(1)` 串行化 deque 变更 → 阻塞 `readline()` 占着单线程，把 `setFilters`/`clear` 饿死**（过滤/清空无反应）。改用 `Mutex`：runLoop 跑在多线程 `scope`（阻塞 readline 只占一个 Default 线程、不持锁），`onLine`/`clear`/`setFilters`/`start`-clear 用 `mutex.withLock` 串行化。教训：单线程 dispatcher confinement 不能给"含阻塞 I/O 的 runLoop"用，会饿死同 dispatcher 的控制调用。
+- **过滤输入框绑定 controller 异步 StateFlow → 复选框不能取消、文本框不能打字**：`setFilters` 异步（mutex/serialDispatcher 路由），输入读旧快照。改为屏幕**本地 Compose 状态**驱动输入（同步），`setFilters` 异步只管过滤。
+- **`LazyColumn key={it.raw.hashCode()}` → 重复行同 key 运行时崩溃**（`IllegalArgumentException`）→ 改 `itemsIndexed`（位置 key）。
+- **自动滚底 `isScrollInProgress` 判定只覆盖"正在拖"**，用户静止向上滚仍被拽到底 → 改 `derivedStateOf` sticky-bottom（按最后可见 item 判定）+ 浮动 ↓ 跳回按钮。
+- **导出 `runCatching` 静默吞 IO 错误** → 加内联 `exportError` 红条。
+- **`catch(Throwable)` 吞 `CancellationException`** → 重抛（`stop()` 的 cancel 干净退出 runLoop，无瞬态 RECONNECTING）。
+
+### 已知技术债（logcat）
+- `stream: AdbStream?` 跨 `stop()`/`runLoop` 未同步 → stop-during-reconnect 边缘下一瞬子进程泄漏（非崩溃）。
+- 取消选中（selectedSerial→null）不停 logcat 流（VM `it?.let{}` 跳过 null）→ 旧设备后台流残留（一行修）。
+- 暂停测试仅断言 status-toggle（channel 在 pause 前已 emit 完，文档化）。
+- `Color.Black`/`Gray` 在暗色主题下 I/V/D 可读性差（v1 可接受）。
+- tag/msg/pid 分字段过滤 + package 过滤未做（见上"功能"注）。
+
