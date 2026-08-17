@@ -52,6 +52,7 @@ fun DeviceListPane(
     onReconnect: (String, Int) -> Unit = { _, _ -> },
 ) {
     var showConnect by remember { mutableStateOf(false) }
+    var showPair by remember { mutableStateOf(false) }
     val devices by vm.devices.collectAsState()
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
@@ -65,6 +66,7 @@ fun DeviceListPane(
             ) {
                 Text(Strings.t("devices"), style = MaterialTheme.typography.subtitle1)
                 Spacer(Modifier.weight(1f))
+                TextButton(onClick = { showPair = true }) { Text(Strings.t("pair")) }
                 IconButton(onClick = { showConnect = true }) {
                     Text("+", style = MaterialTheme.typography.h6)
                 }
@@ -108,6 +110,13 @@ fun DeviceListPane(
         ConnectDialog(
             vm = vm,
             onDismiss = { showConnect = false },
+        )
+    }
+
+    if (showPair) {
+        PairDialog(
+            vm = vm,
+            onDismiss = { showPair = false },
         )
     }
 }

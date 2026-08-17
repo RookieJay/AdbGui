@@ -131,6 +131,11 @@ object Strings {
         "remount_op" to "Remount",
         "reboot_confirm_title" to "确认重启？",
         "reboot_confirm_body" to "将重启到 %s，设备会短暂断连。",
+        // Wireless Pairing
+        "pair" to "配对",
+        "pair_title" to "无线配对",
+        "pairing_code" to "配对码",
+        "pair_hint" to "在设备的「无线调试」中获取 IP:端口 和配对码",
         // Shell
         "shell" to "Shell",
         "nav_shell" to "Shell",
@@ -253,6 +258,11 @@ object Strings {
         "remount_op" to "Remount",
         "reboot_confirm_title" to "Confirm Reboot?",
         "reboot_confirm_body" to "Will reboot to %s; the device disconnects briefly.",
+        // Wireless Pairing
+        "pair" to "Pair",
+        "pair_title" to "Wireless Pairing",
+        "pairing_code" to "Pairing code",
+        "pair_hint" to "Get the IP:port and pairing code from the device's \"Wireless debugging\" screen",
         // Shell
         "shell" to "Shell",
         "nav_shell" to "Shell",

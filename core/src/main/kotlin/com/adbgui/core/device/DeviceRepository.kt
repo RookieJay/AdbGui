@@ -75,6 +75,10 @@ class DeviceRepository(
         return r
     }
 
+    suspend fun pair(ip: String, port: Int, code: String): com.adbgui.core.domain.PairResult {
+        return commands.pair(ip, port, code)
+    }
+
     suspend fun disconnect(target: String): Boolean = commands.disconnect(target)
     suspend fun listPackages(serial: String): List<PackageInfo> = commands.listPackages(serial)
     suspend fun install(serial: String, apkPath: String, reinstall: Boolean): InstallResult =

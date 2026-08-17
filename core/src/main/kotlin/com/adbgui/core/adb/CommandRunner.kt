@@ -28,6 +28,15 @@ class CommandRunner(
         return ConnectResultParser.parse(r.stdout, r.stderr, r.exitCode)
     }
 
+    suspend fun pair(ip: String, port: Int, code: String): com.adbgui.core.domain.PairResult {
+        server.ensureStarted()
+        val target = "$ip:$port"
+        val cmd = listOf("pair", target, code)
+        val r = runner.run(adb(), cmd)
+        logger.debug("adb ${cmd.joinToString(" ")} -> exit=${r.exitCode} out=${r.stdout.take(120)}")
+        return PairResultParser.parse(r.stdout, r.stderr, r.exitCode)
+    }
+
     suspend fun disconnect(target: String): Boolean {
         server.ensureStarted()
         val r = runner.run(adb(), listOf("disconnect", target))

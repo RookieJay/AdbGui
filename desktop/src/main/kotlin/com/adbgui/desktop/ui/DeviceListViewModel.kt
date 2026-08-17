@@ -3,6 +3,7 @@ package com.adbgui.desktop.ui
 import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceView
+import com.adbgui.core.domain.PairResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,4 +43,16 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
 
     fun setAlias(serial: String, alias: String?) { scope.launch { repo.setAlias(serial, alias) } }
     fun forget(serial: String) { scope.launch { repo.forgetDevice(serial) } }
+
+    fun pair(ip: String, port: Int, code: String, onResult: (PairResult) -> Unit = {}) {
+        scope.launch {
+            _error.value = null
+            _busy.value = true
+            try {
+                val r = repo.pair(ip, port, code)
+                if (!r.success) _error.value = r.message
+                onResult(r)
+            } finally { _busy.value = false }
+        }
+    }
 }
