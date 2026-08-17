@@ -16,6 +16,7 @@ import com.adbgui.core.device.LogcatFilters
 import com.adbgui.core.device.LogcatStatus
 import com.adbgui.core.domain.LogcatLevel
 import com.adbgui.desktop.ui.i18n.Strings
+import kotlinx.coroutines.launch
 import java.awt.FileDialog
 import java.awt.Frame
 import java.awt.Toolkit
@@ -134,9 +135,19 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
             LaunchedEffect(lines.size) {
                 if (userAtBottom && lines.isNotEmpty()) listState.animateScrollToItem(lines.size - 1)
             }
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(lines) { _, line ->
-                    Text(line.raw, color = levelColor(line.level), style = MaterialTheme.typography.body2)
+            val scrollScope = rememberCoroutineScope()
+            Box(Modifier.fillMaxSize()) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                    itemsIndexed(lines) { _, line ->
+                        Text(line.raw, color = levelColor(line.level), style = MaterialTheme.typography.body2)
+                    }
+                }
+                // Floating "jump to latest" button when the user has scrolled up.
+                if (!userAtBottom && lines.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = { scrollScope.launch { listState.animateScrollToItem(lines.size - 1) } },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                    ) { Text("↓") }
                 }
             }
         }

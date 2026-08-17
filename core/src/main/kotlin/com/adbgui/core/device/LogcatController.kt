@@ -7,9 +7,7 @@ import com.adbgui.core.domain.LogcatLine
 import com.adbgui.core.domain.LogcatLevel
 import com.adbgui.core.log.Logger
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +15,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 enum class LogcatStatus { IDLE, RUNNING, PAUSED, RECONNECTING, FAILED }
 
@@ -47,17 +47,18 @@ class LogcatController(
     private val filtered = ArrayDeque<LogcatLine>()
     private var stream: AdbStream? = null
     private var job: Job? = null
-    // Single-thread dispatcher serializing all ring/filtered mutations (ArrayDeque is not
-    // thread-safe; onLine runs here from runLoop, and clear()/start() route here too).
-    // Derived from the scope's dispatcher (the test scheduler under runTest — so
-    // advanceUntilIdle controls it; limited to parallelism 1 for production safety).
-    private val serialDispatcher: CoroutineDispatcher =
-        (scope.coroutineContext[CoroutineDispatcher] ?: Dispatchers.Default).limitedParallelism(1)
+
+    // Mutex serializes ALL ring/filtered mutations (ArrayDeque is not thread-safe).
+    // runLoop runs on the regular multi-threaded `scope` so its blocking readline() does NOT
+    // hold the mutex (only onLine does, per line) — control calls (clear/setFilters) acquire
+    // the mutex between lines, so they never starve (the prior limitedParallelism(1) confinement
+    // starved them: the blocking readline pinned the single thread).
+    private val mutex = Mutex()
 
     fun start(serial: String) {
         stop()
-        job = scope.launch(serialDispatcher) {
-            ring.clear(); filtered.clear(); _lines.value = emptyList(); _error.value = null
+        job = scope.launch {
+            mutex.withLock { ring.clear(); filtered.clear(); _lines.value = emptyList(); _error.value = null }
             runLoop(serial)
         }
     }
@@ -72,18 +73,11 @@ class LogcatController(
     fun resume() { if (_status.value == LogcatStatus.PAUSED) _status.value = LogcatStatus.RUNNING }
 
     fun clear() {
-        // Route onto serialDispatcher so deque mutations serialize with runLoop's onLine.
-        scope.launch(serialDispatcher) { ring.clear(); filtered.clear(); _lines.value = emptyList() }
+        scope.launch { mutex.withLock { ring.clear(); filtered.clear(); _lines.value = emptyList() } }
     }
 
-    // setFilters routes through serialDispatcher so deque mutations serialize with onLine
-    // (Task 4 carry-over: ArrayDeque is not thread-safe; the UI thread must not mutate
-    // filtered/ring/_lines concurrently with runLoop's onLine on serialDispatcher).
     fun setFilters(f: LogcatFilters) {
-        scope.launch(serialDispatcher) {
-            _filters.value = f
-            recomputeFiltered()
-        }
+        scope.launch { mutex.withLock { _filters.value = f; recomputeFiltered() } }
     }
 
     private fun recomputeFiltered() {
@@ -121,14 +115,16 @@ class LogcatController(
         }
     }
 
-    private fun onLine(line: LogcatLine) {
+    private suspend fun onLine(line: LogcatLine) {
         if (_status.value == LogcatStatus.PAUSED) return
-        ring.addLast(line)
-        while (ring.size > ringCap) ring.removeFirst()
-        if (matches(line, _filters.value)) {
-            filtered.addLast(line)
-            while (filtered.size > ringCap) filtered.removeFirst()
-            _lines.value = filtered.toList()
+        mutex.withLock {
+            ring.addLast(line)
+            while (ring.size > ringCap) ring.removeFirst()
+            if (matches(line, _filters.value)) {
+                filtered.addLast(line)
+                while (filtered.size > ringCap) filtered.removeFirst()
+                _lines.value = filtered.toList()
+            }
         }
     }
 
