@@ -91,3 +91,19 @@ Shell 终端页 / Logcat 实时流 / 文件 push-pull / 投屏（scrcpy）/ 调�
 - adb-not-found 点击时内联报错（非 spec §5 "置灰"——需 eager locate 才能预置灰，可接受）。
 - 无 VM/Compose 测 ShellScreen（无状态；launcher 由 S1 测；真机冒烟手动）。
 
+---
+
+## v2: 系统操作页 (branch `feat/debug-ops`, 2026-08-17)
+
+### 功能
+- **System Ops 页**：6 个按钮——4 个重启（正常 / 到恢复 / 到引导 / 到侧载）+ root + remount。
+- 重启类**弹确认框**（会断连设备）；root/remount 直接执行（生产版无害失败）。
+- **成功显示 adb stdout**（绿色信息条，如 `adbd is already running as root`）；失败红色错误条（含 adb 原文折叠）。
+- `:core` 加 `RebootMode` enum + `CommandRunner.reboot/root/remount`（返回 stdout）+ Repository 暴露 + 4 单测。
+
+### 实现要点
+- `RebootMode` enum（`com.adbgui.core.domain`），`CommandRunner.reboot(serial, mode)→String` / `root(serial)→String` / `remount(serial)→String`（走 `runCmd`，失败抛 `AdbCommandException`）。
+- `SystemOpsViewModel`（`error`/`message`/`busy` StateFlow；success → `message`=stdout，failure → `error`；clear on op start）。
+- `SystemOpsScreen`（6 按钮 + 确认 AlertDialog + 绿/红信息条 + 空状态）。
+- i18n：`system_ops`/`nav_system_ops`/`reboot*`/`root_op`/`remount_op`/`reboot_confirm_*`（zh+en）。
+
