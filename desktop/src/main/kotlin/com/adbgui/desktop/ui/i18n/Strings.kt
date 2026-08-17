@@ -119,6 +119,10 @@ object Strings {
         "reconnecting_logcat" to "正在重连 logcat…",
         "no_device_selected_logcat" to "未选择设备",
         "save_logcat_title" to "导出 logcat",
+        // Shell
+        "shell" to "Shell",
+        "nav_shell" to "Shell",
+        "open_shell" to "打开 Shell",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -225,6 +229,10 @@ object Strings {
         "reconnecting_logcat" to "Reconnecting logcat…",
         "no_device_selected_logcat" to "No device selected",
         "save_logcat_title" to "Export logcat",
+        // Shell
+        "shell" to "Shell",
+        "nav_shell" to "Shell",
+        "open_shell" to "Open Shell",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)

@@ -43,6 +43,7 @@ fun AppShell(
     screenshotVm: ScreenshotViewModel? = null,
     logcatVm: LogcatViewModel? = null,
     selectedSerial: MutableStateFlow<String?>? = null,
+    onOpenShell: (String) -> Unit = {},
     rightContent: @Composable () -> Unit = { DefaultRightPane() },
 ) {
     var showSettings by remember { mutableStateOf(false) }
@@ -85,6 +86,10 @@ fun AppShell(
                         onClick = { showSettings = false; page = NavPage.LOGCAT },
                     ) { Text(if (page == NavPage.LOGCAT && !showSettings) "${Strings.t("nav_logcat")} *" else Strings.t("nav_logcat")) }
                 }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                    onClick = { showSettings = false; page = NavPage.SHELL },
+                ) { Text(if (page == NavPage.SHELL && !showSettings) "${Strings.t("nav_shell")} *" else Strings.t("nav_shell")) }
                 if (settingsVm != null && configDir != null) {
                     Divider()
                     TextButton(
@@ -113,6 +118,9 @@ fun AppShell(
                     selected != null && page == NavPage.LOGCAT && logcatVm != null -> {
                         LogcatScreen(vm = logcatVm)
                     }
+                    selected != null && page == NavPage.SHELL -> {
+                        ShellScreen(selectedSerial = selected, onOpenShell = onOpenShell)
+                    }
                     else -> rightContent()
                 }
             }
@@ -120,7 +128,7 @@ fun AppShell(
     }
 }
 
-private enum class NavPage { DEVICE_INFO, SCREENSHOT, APP_MANAGER, LOGCAT }
+private enum class NavPage { DEVICE_INFO, SCREENSHOT, APP_MANAGER, LOGCAT, SHELL }
 
 @Composable
 private fun DefaultRightPane() {

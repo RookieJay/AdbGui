@@ -33,6 +33,7 @@ fun main() = application {
     val screenshotVm = ScreenshotViewModel(root.repository, selectedSerial, root.scope)
     val logcatController = com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope)
     val logcatVm = LogcatViewModel(logcatController, selectedSerial, root.scope)
+    val shellLauncher = com.adbgui.desktop.platform.WindowsShellLauncher()
     // Auto-select the first ONLINE device when nothing is validly selected.
     // Never steals an active selection: if the current serial is still online, leave it.
     // (A device going offline counts as an invalid selection → cleared/re-picked, so stale
@@ -57,6 +58,12 @@ fun main() = application {
                 screenshotVm = screenshotVm,
                 logcatVm = logcatVm,
                 selectedSerial = selectedSerial,
+                onOpenShell = { serial ->
+                    kotlinx.coroutines.runBlocking {
+                        val adb = root.locator.locate()
+                        shellLauncher.open(adb.path, serial)
+                    }
+                },
             )
         }
     }

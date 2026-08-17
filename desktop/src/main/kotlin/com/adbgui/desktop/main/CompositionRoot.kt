@@ -24,7 +24,7 @@ class CompositionRoot {
     val logger: Logger = FileLogger(configDir.resolve("logs"), clock = { System.currentTimeMillis() })
     val settings = SettingsStore(configDir)
     private val runner = JvmAdbProcessRunner()
-    private val locator = AdbLocator(settings, ResourceBundledAdbProvider(), SystemPathProbe())
+    val locator = AdbLocator(settings, ResourceBundledAdbProvider(), SystemPathProbe())
     val server = AdbServerController({ locator.locate() }, runner, logger)
     val commands = CommandRunner({ locator.locate() }, runner, logger, scope, CommandRunner.AdbServerStarter { server.ensureStarted() })
     private val history = DeviceHistoryStore(configDir, clock = { System.currentTimeMillis() })
