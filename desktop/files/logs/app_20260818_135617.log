@@ -1,5 +1,0 @@
-=== App started at 20260818_135617 ===
-=== Package: com.ljsy.iptv ===
-=== Filter: *:D SDM_SVDP:S NGB_SVDP:S ACodec:S OMX:S BufferQueueLayer:S ===
---------- beginning of main
-08-18 13:56:17.956  5835  5835 I AutoAuthApp: AcbsLibrary initialized

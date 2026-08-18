@@ -9,3 +9,5 @@ build/
 desktop/*.png
 desktop/*.txt
 desktop/*.rc
+desktop/files/
+desktop/default.prop
