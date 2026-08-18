@@ -148,6 +148,8 @@ fun DeviceInfoScreen(
                     Text(Strings.t("no_device_selected_refresh"), style = MaterialTheme.typography.body2)
                 }
             } else {
+                PropRow(Strings.t("prop_brand"), p.brand)
+                PropRow(Strings.t("prop_manufacturer"), p.manufacturer)
                 PropRow(Strings.t("prop_model"), p.model)
                 PropRow(Strings.t("prop_android_version"), p.androidVersion)
                 PropRow(Strings.t("prop_sdk"), p.sdkInt.toString())

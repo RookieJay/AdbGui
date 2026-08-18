@@ -30,6 +30,8 @@ data class ConnectResult(val serial: String?, val success: Boolean, val message:
 data class InstallResult(val success: Boolean, val message: String, val code: String? = null)
 
 data class DeviceProps(
+    val brand: String,
+    val manufacturer: String,
     val model: String,
     val androidVersion: String,
     val sdkInt: Int,
