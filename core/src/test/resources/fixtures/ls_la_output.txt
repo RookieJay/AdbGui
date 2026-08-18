@@ -1,5 +1,10 @@
-total 32
-drwxrwx--- 2 root root 4096 2020-01-01 12:00 Photos
--rw-rw---- 1 root root  123 2020-01-01 12:00 test.txt
-drwxr-xr-x 3 root root 4096 2020-01-02 08:30 Music
--rw-r--r-- 1 root root 4567 2021-05-15 14:22 my notes.txt
+total 1632
+drwxr-xr-x 25 root root 4096 2009-01-01 00:00 acct
+drwxr-xr-x 2 root root 4096 2009-01-01 00:00 bin
+lrw-r--r-- 1 root root 50 2009-01-01 00:00 bugreports -> /data/user_de/0/com.android.shell/files/bugreports
+drwxrwx--- 7 system cache 4096 2026-07-14 15:23 cache
+lrw-r--r-- 1 root root 13 2009-01-01 00:00 charger -> /sbin/charger
+lrw-r--r-- 1 root root 17 2009-01-01 00:00 d -> /sys/kernel/debug
+drwxrwx--x 39 system system 4096 2026-08-18 09:48 data
+lrw-r--r-- 1 root root 11 2009-01-01 00:00 etc -> /system/etc
+-rwxr-x--- 1 root shell 1478764 2009-01-01 00:00 init

@@ -42,4 +42,15 @@ class LsParserTest {
         val list2 = LsParser.parse("drwxrwx--- 2 root root 4096 2020-01-01 12:00 .\ndrwxrwx--- 2 root root 4096 2020-01-01 12:00 ..\n")
         assertEquals(0, list2.size)
     }
+
+    @Test fun parses_symlinks() {
+        val out = """
+            lrw-r--r-- 1 root root 11 2009-01-01 00:00 etc -> /system/etc
+            -rwxr-x--- 1 root shell 1478764 2009-01-01 00:00 init
+        """.trimIndent()
+        val list = LsParser.parse(out)
+        assertEquals(2, list.size)
+        assertEquals("etc -> /system/etc", list[0].name)
+        assertTrue(list[0].isDirectory)   // symlinks start with 'l' — treat as non-file (navigable)
+    }
 }

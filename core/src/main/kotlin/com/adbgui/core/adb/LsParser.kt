@@ -4,7 +4,8 @@ import com.adbgui.core.domain.FileEntry
 
 object LsParser {
     // drwxrwx--- 2 root root 4096 2020-01-01 12:00 Photos
-    private val re = Regex("""^([drwxst-]{10})\s+\d+\s+\S+\s+\S+\s+(\d+)\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(.+)$""")
+    // lrw-r--r-- 1 root root 50 2020-01-01 12:00 etc -> /system/etc
+    private val re = Regex("""^([ldrwxst-]{10})\s+\d+\s+\S+\s+\S+\s+(\d+)\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(.+)$""")
 
     fun parse(stdout: String): List<FileEntry> {
         return stdout.lineSequence()
@@ -17,7 +18,7 @@ object LsParser {
                 if (name == "." || name == "..") return@mapNotNull null
                 FileEntry(
                     name = name,
-                    isDirectory = perms.firstOrNull() == 'd',
+                    isDirectory = perms.firstOrNull() == 'd' || perms.firstOrNull() == 'l',
                     size = m.groupValues[2].toLongOrNull() ?: 0,
                     date = "${m.groupValues[3]} ${m.groupValues[4]}",
                     permissions = perms,
