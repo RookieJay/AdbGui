@@ -138,7 +138,10 @@ class CommandRunner(
     }
 
     suspend fun ls(serial: String, path: String): String {
-        return runCmd(serial, listOf("shell", "ls", "-la", path)).stdout
+        // Trailing slash is critical: `ls -la /sdcard` (symlink) shows the link itself;
+        // `ls -la /sdcard/` follows the link and lists the directory contents.
+        val p = if (path.endsWith("/")) path else "$path/"
+        return runCmd(serial, listOf("shell", "ls", "-la", p)).stdout
     }
 
     suspend fun push(serial: String, localPath: String, devicePath: String) {
