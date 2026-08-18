@@ -33,7 +33,19 @@ class FileExplorerViewModel(
         _busy.value = true; _error.value = null
         try {
             val stdout = repo.ls(serial, normPath)
-            val parsed = LsParser.parse(stdout)
+            var parsed = LsParser.parse(stdout)
+            // Batch-check symlinks: which ones are actually dirs (test -d)?
+            val symlinks = parsed.filter { it.isSymlink }
+            if (symlinks.isNotEmpty()) {
+                val paths = symlinks.map { e -> "${if (normPath.endsWith("/")) normPath else "$normPath/"}${e.name}" }
+                val isDirs = repo.checkSymlinkDirs(serial, paths)
+                symlinks.forEachIndexed { i, e ->
+                    val idx = parsed.indexOf(e)
+                    if (isDirs.getOrElse(i) { false }) {
+                        parsed = parsed.toMutableList().also { it[idx] = e.copy(isDirectory = true) }
+                    }
+                }
+            }
             // push current to backStack (if navigating to a different path)
             if (normPath != _currentPath.value) backStack.addLast(_currentPath.value)
             _currentPath.value = normPath

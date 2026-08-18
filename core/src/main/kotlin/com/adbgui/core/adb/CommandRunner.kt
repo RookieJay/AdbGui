@@ -144,6 +144,14 @@ class CommandRunner(
         return runCmd(serial, listOf("shell", "ls", "-la", p)).stdout
     }
 
+    suspend fun checkSymlinkDirs(serial: String, paths: List<String>): List<Boolean> {
+        if (paths.isEmpty()) return emptyList()
+        server.ensureStarted()
+        val script = paths.joinToString("; ") { p -> "test -d \"$p\" && echo 1 || echo 0" }
+        val r = runner.run(adb(), listOf("-s", serial, "shell", script))
+        return r.stdout.lineSequence().map { it.trim() == "1" }.toList()
+    }
+
     suspend fun push(serial: String, localPath: String, devicePath: String) {
         runCmd(serial, listOf("push", localPath, devicePath))
     }

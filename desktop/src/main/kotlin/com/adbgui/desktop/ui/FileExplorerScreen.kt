@@ -66,7 +66,7 @@ fun FileExplorerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
-                            .clickable { if (entry.isDirectory || entry.permissions.startsWith("l")) vm.navigate("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}") }
+                            .clickable { if (entry.isDirectory) vm.navigate("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}") }
                             .pointerInput(Unit) {
                                 awaitPointerEventScope {
                                     while (true) {
@@ -82,27 +82,26 @@ fun FileExplorerScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(when {
-                            entry.permissions.startsWith("l") -> "🔗"
+                            entry.isSymlink && entry.isDirectory -> "🔗📁"
+                            entry.isSymlink -> "🔗📄"
                             entry.isDirectory -> "📁"
                             else -> "📄"
                         }, modifier = Modifier.padding(end = 8.dp))
                         Text(entry.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.body2)
                         Text("${entry.size}", style = MaterialTheme.typography.caption, modifier = Modifier.padding(end = 8.dp))
                         Text(entry.date, style = MaterialTheme.typography.caption)
-                    }
-                    // Right-click context menu (positioned at the click location)
-                    DropdownMenu(
-                        expanded = menuOpen,
-                        offset = androidx.compose.ui.unit.DpOffset(with(density) { clickX.toDp() }, with(density) { clickY.toDp() }),
-                        onDismissRequest = { menuOpen = false },
-                    ) {
-                        DropdownMenuItem(onClick = {
-                            menuOpen = false
-                            val dlg = FileDialog(Frame(), "Upload", FileDialog.LOAD)
-                            dlg.isVisible = true
-                            if (dlg.file != null) vm.push("${dlg.directory}${dlg.file}")
-                        }) { Text(Strings.t("upload")) }
-                        if (!entry.isDirectory) {
+                        // Right-click context menu inside the Row (offset relative to Row bounds)
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            offset = androidx.compose.ui.unit.DpOffset(with(density) { clickX.toDp() }, with(density) { clickY.toDp() }),
+                            onDismissRequest = { menuOpen = false },
+                        ) {
+                            DropdownMenuItem(onClick = {
+                                menuOpen = false
+                                val dlg = FileDialog(Frame(), "Upload", FileDialog.LOAD)
+                                dlg.isVisible = true
+                                if (dlg.file != null) vm.push("${dlg.directory}${dlg.file}")
+                            }) { Text(Strings.t("upload")) }
                             DropdownMenuItem(onClick = {
                                 menuOpen = false
                                 val dlg = FileDialog(Frame(), "Save", FileDialog.SAVE)
@@ -110,16 +109,16 @@ fun FileExplorerScreen(
                                 dlg.isVisible = true
                                 if (dlg.file != null) vm.pull("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}", "${dlg.directory}${dlg.file}")
                             }) { Text(Strings.t("save_file")) }
+                            DropdownMenuItem(onClick = {
+                                menuOpen = false
+                                vm.refresh()
+                            }) { Text(Strings.t("refresh")) }
+                            DropdownMenuItem(onClick = {
+                                menuOpen = false
+                                val path = "${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}"
+                                Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null)
+                            }) { Text(Strings.t("copy_path")) }
                         }
-                        DropdownMenuItem(onClick = {
-                            menuOpen = false
-                            vm.refresh()
-                        }) { Text(Strings.t("refresh")) }
-                        DropdownMenuItem(onClick = {
-                            menuOpen = false
-                            val path = "${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}"
-                            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null)
-                        }) { Text(Strings.t("copy_path")) }
                     }
                 }
             }

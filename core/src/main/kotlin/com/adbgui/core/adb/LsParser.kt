@@ -20,6 +20,7 @@ object LsParser {
                 FileEntry(
                     name = linkName,
                     isDirectory = perms.firstOrNull() == 'd',
+                    isSymlink = perms.firstOrNull() == 'l',
                     size = m.groupValues[2].toLongOrNull() ?: 0,
                     date = "${m.groupValues[3]} ${m.groupValues[4]}",
                     permissions = perms,
