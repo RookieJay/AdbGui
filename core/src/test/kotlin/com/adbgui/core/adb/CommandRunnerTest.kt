@@ -137,4 +137,30 @@ class CommandRunnerTest {
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         cr.remount("abc")
     }
+
+    @Test
+    fun ls_returns_stdout_for_path() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("ls", "-la"), AdbProcessResult(0, "drwxrwx--- 2 root root 4096 2020-01-01 12:00 Photos\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val out = cr.ls("abc", "/sdcard")
+        assert(out.contains("Photos"))
+    }
+
+    @Test
+    fun push_passes_local_and_device_path() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("push"), AdbProcessResult(0, "pushed", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.push("abc", "/local/file.txt", "/sdcard/file.txt")
+        // success: no throw
+    }
+
+    @Test
+    fun pull_failure_throws() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pull"), AdbProcessResult(1, "", "device offline"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<RuntimeException> { cr.pull("abc", "/sdcard/file.txt", "/local/file.txt") }
+    }
 }

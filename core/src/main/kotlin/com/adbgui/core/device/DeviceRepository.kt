@@ -102,4 +102,7 @@ class DeviceRepository(
     suspend fun reboot(serial: String, mode: com.adbgui.core.domain.RebootMode): String = commands.reboot(serial, mode)
     suspend fun root(serial: String): String = commands.root(serial)
     suspend fun remount(serial: String): String = commands.remount(serial)
+    suspend fun ls(serial: String, path: String): String = commands.ls(serial, path)
+    suspend fun push(serial: String, localPath: String, devicePath: String) = commands.push(serial, localPath, devicePath)
+    suspend fun pull(serial: String, devicePath: String, localPath: String) = commands.pull(serial, devicePath, localPath)
 }

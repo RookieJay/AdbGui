@@ -137,6 +137,18 @@ class CommandRunner(
         return runCmd(serial, listOf("remount")).stdout
     }
 
+    suspend fun ls(serial: String, path: String): String {
+        return runCmd(serial, listOf("shell", "ls", "-la", path)).stdout
+    }
+
+    suspend fun push(serial: String, localPath: String, devicePath: String) {
+        runCmd(serial, listOf("push", localPath, devicePath))
+    }
+
+    suspend fun pull(serial: String, devicePath: String, localPath: String) {
+        runCmd(serial, listOf("pull", devicePath, localPath))
+    }
+
     private fun extractPng(bytes: ByteArray): ByteArray? {
         val sig = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
         val start = indexOf(bytes, sig) ?: return null
