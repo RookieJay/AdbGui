@@ -137,6 +137,10 @@ class CommandRunner(
         return runCmd(serial, listOf("remount")).stdout
     }
 
+    suspend fun inputKey(serial: String, keycode: Int) {
+        runCmd(serial, listOf("shell", "input", "keyevent", keycode.toString()))
+    }
+
     suspend fun ls(serial: String, path: String): String {
         // Trailing slash is critical: `ls -la /sdcard` (symlink) shows the link itself;
         // `ls -la /sdcard/` follows the link and lists the directory contents.

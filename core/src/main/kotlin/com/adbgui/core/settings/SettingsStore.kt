@@ -1,5 +1,6 @@
 package com.adbgui.core.settings
 
+import com.adbgui.core.domain.RemoteButton
 import com.adbgui.core.log.LogLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,6 +20,13 @@ data class Settings(
     val theme: String = "system",
     val locale: String = "zh",
     val windowBounds: WindowBounds? = null,
+    val remoteButtons: List<RemoteButton> = listOf(
+        RemoteButton("vol_up", "Vol +", 24),
+        RemoteButton("vol_down", "Vol −", 25),
+        RemoteButton("vol_mute", "Mute", 91),
+        RemoteButton("power", "Power", 26),
+        RemoteButton("app_switch", "App Switch", 187),
+    ),
 )
 
 class SettingsStore(private val configDir: Path) {

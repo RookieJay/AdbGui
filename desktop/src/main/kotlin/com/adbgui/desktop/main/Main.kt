@@ -13,6 +13,7 @@ import com.adbgui.desktop.ui.FileExplorerViewModel
 import com.adbgui.desktop.ui.LogcatViewModel
 import com.adbgui.desktop.ui.SettingsViewModel
 import com.adbgui.desktop.ui.ScreenshotViewModel
+import com.adbgui.desktop.ui.RemoteViewModel
 import com.adbgui.desktop.ui.SystemOpsViewModel
 import com.adbgui.desktop.ui.i18n.Locale
 import com.adbgui.desktop.ui.i18n.Strings
@@ -36,6 +37,7 @@ fun main() = application {
     val logcatController = com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope)
     val logcatVm = LogcatViewModel(logcatController, selectedSerial, root.scope)
     val systemOpsVm = SystemOpsViewModel(root.repository, selectedSerial, root.scope)
+    val remoteVm = RemoteViewModel(root.repository, selectedSerial, root.settings, root.scope)
     val fileExplorerVm = FileExplorerViewModel(root.repository, selectedSerial, root.scope)
     val shellLauncher = com.adbgui.desktop.platform.WindowsShellLauncher()
     // Auto-select the first ONLINE device when nothing is validly selected.
@@ -62,6 +64,7 @@ fun main() = application {
                 screenshotVm = screenshotVm,
                 logcatVm = logcatVm,
                 systemOpsVm = systemOpsVm,
+                remoteVm = remoteVm,
                 fileExplorerVm = fileExplorerVm,
                 selectedSerial = selectedSerial,
                 onOpenShell = { serial ->

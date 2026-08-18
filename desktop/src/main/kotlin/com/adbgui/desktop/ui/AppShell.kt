@@ -43,6 +43,7 @@ fun AppShell(
     screenshotVm: ScreenshotViewModel? = null,
     logcatVm: LogcatViewModel? = null,
     systemOpsVm: SystemOpsViewModel? = null,
+    remoteVm: RemoteViewModel? = null,
     fileExplorerVm: FileExplorerViewModel? = null,
     selectedSerial: MutableStateFlow<String?>? = null,
     onOpenShell: (String) -> Unit = {},
@@ -98,6 +99,12 @@ fun AppShell(
                         onClick = { showSettings = false; page = NavPage.SYSTEM_OPS },
                     ) { Text(if (page == NavPage.SYSTEM_OPS && !showSettings) "${Strings.t("nav_system_ops")} *" else Strings.t("nav_system_ops")) }
                 }
+                if (remoteVm != null) {
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        onClick = { showSettings = false; page = NavPage.REMOTE },
+                    ) { Text(if (page == NavPage.REMOTE && !showSettings) "${Strings.t("nav_remote")} *" else Strings.t("nav_remote")) }
+                }
                 if (fileExplorerVm != null) {
                     TextButton(
                         modifier = Modifier.fillMaxWidth().height(40.dp),
@@ -138,6 +145,9 @@ fun AppShell(
                     selected != null && page == NavPage.SYSTEM_OPS && systemOpsVm != null -> {
                         SystemOpsScreen(vm = systemOpsVm, selectedSerial = selected)
                     }
+                    selected != null && page == NavPage.REMOTE && remoteVm != null -> {
+                        RemoteScreen(vm = remoteVm, selectedSerial = selected)
+                    }
                     selected != null && page == NavPage.FILE_EXPLORER && fileExplorerVm != null -> {
                         FileExplorerScreen(vm = fileExplorerVm, selectedSerial = selected)
                     }
@@ -148,7 +158,7 @@ fun AppShell(
     }
 }
 
-private enum class NavPage { DEVICE_INFO, SCREENSHOT, APP_MANAGER, LOGCAT, SHELL, SYSTEM_OPS, FILE_EXPLORER }
+private enum class NavPage { DEVICE_INFO, SCREENSHOT, APP_MANAGER, LOGCAT, SHELL, SYSTEM_OPS, FILE_EXPLORER, REMOTE }
 
 @Composable
 private fun DefaultRightPane() {
