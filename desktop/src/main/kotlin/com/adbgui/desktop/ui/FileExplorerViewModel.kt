@@ -29,11 +29,17 @@ class FileExplorerViewModel(
 
     private val backStack = ArrayDeque<String>()
 
-    /** ls + parse + batch test -d for symlinks + sort. Shared by navigate/back. 15s timeout. */
+    /** ls + parse + batch test -d for symlinks + sort. Shared by navigate/back. 15s timeout.
+     *  If ls fails with "Permission denied", fall back to blind-probing known Android subdirs
+     *  (test -d only needs x on parent, not r — same trick AS uses). */
     private suspend fun listAndClassify(serial: String, path: String): List<FileEntry> {
-        val stdout = kotlinx.coroutines.withTimeoutOrNull(15_000) {
-            repo.ls(serial, path)
-        } ?: throw RuntimeException("unable to list entries: $path (timeout)")
+        val stdout = try {
+            kotlinx.coroutines.withTimeoutOrNull(15_000) { repo.ls(serial, path) }
+                ?: throw RuntimeException("unable to list entries: $path (timeout)")
+        } catch (e: AdbCommandException) {
+            if (e.stderr.contains("Permission denied")) return blindProbeDirs(serial, path)
+            throw e
+        }
         var parsed = LsParser.parse(stdout)
         val symlinks = parsed.filter { it.isSymlink }
         if (symlinks.isNotEmpty()) {
@@ -48,6 +54,17 @@ class FileExplorerViewModel(
             }
         }
         return parsed.sortedWith(compareByDescending<FileEntry> { it.isDirectory }.thenBy { it.name })
+    }
+
+    /** Blind-probe known Android subdirs when ls is Permission denied. */
+    private suspend fun blindProbeDirs(serial: String, path: String): List<FileEntry> {
+        val known = listOf("app", "data", "local", "media", "misc", "property", "system", "user",
+            "dalvik-cache", "anr", "backup", "dontpanic", "drm", "nfc", "radio", "rss", "vpn", "wifi", "lost+found")
+        val basePath = if (path.endsWith("/")) path else "$path/"
+        val results = repo.checkSymlinkDirs(serial, known.map { "$basePath$it" })
+        return known.filterIndexed { i, _ -> results.getOrElse(i) { false } }
+            .map { FileEntry(it, isDirectory = true, isSymlink = false, 0, "", "d---------", "") }
+            .sortedBy { it.name }
     }
 
     fun navigate(path: String) = scope.launch {
