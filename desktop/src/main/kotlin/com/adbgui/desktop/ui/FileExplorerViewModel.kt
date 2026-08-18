@@ -29,13 +29,14 @@ class FileExplorerViewModel(
 
     fun navigate(path: String) = scope.launch {
         val serial = selectedSerial.value ?: return@launch
+        val normPath = path.replace(Regex("/+"), "/").let { if (it.length > 1) it.trimEnd('/') else it }
         _busy.value = true; _error.value = null
         try {
-            val stdout = repo.ls(serial, path)
+            val stdout = repo.ls(serial, normPath)
             val parsed = LsParser.parse(stdout)
             // push current to backStack (if navigating to a different path)
-            if (path != _currentPath.value) backStack.addLast(_currentPath.value)
-            _currentPath.value = path
+            if (normPath != _currentPath.value) backStack.addLast(_currentPath.value)
+            _currentPath.value = normPath
             _entries.value = parsed.sortedWith(compareByDescending<FileEntry> { it.isDirectory }.thenBy { it.name })
         } catch (e: AdbCommandException) {
             _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
