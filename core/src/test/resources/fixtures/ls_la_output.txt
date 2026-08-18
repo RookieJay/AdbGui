@@ -1,0 +1,5 @@
+total 32
+drwxrwx--- 2 root root 4096 2020-01-01 12:00 Photos
+-rw-rw---- 1 root root  123 2020-01-01 12:00 test.txt
+drwxr-xr-x 3 root root 4096 2020-01-02 08:30 Music
+-rw-r--r-- 1 root root 4567 2021-05-15 14:22 my notes.txt
