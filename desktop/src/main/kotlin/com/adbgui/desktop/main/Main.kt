@@ -53,26 +53,24 @@ fun main() = application {
     }
     Window(onCloseRequest = ::exitApplication, title = Strings.t("app_title")) {
         MaterialTheme {
-            androidx.compose.foundation.text.selection.SelectionContainer {
-                AppShell(
-                    vm = vm,
-                    settingsVm = settingsVm,
-                    configDir = root.configDir,
-                    appManagerVm = appManagerVm,
-                    deviceInfoVm = deviceInfoVm,
-                    screenshotVm = screenshotVm,
-                    logcatVm = logcatVm,
-                    systemOpsVm = systemOpsVm,
-                    fileExplorerVm = fileExplorerVm,
-                    selectedSerial = selectedSerial,
-                    onOpenShell = { serial ->
-                        kotlinx.coroutines.runBlocking {
-                            val adb = root.locator.locate()
-                            shellLauncher.open(adb.path, serial)
-                        }
-                    },
-                )
-            }
+            AppShell(
+                vm = vm,
+                settingsVm = settingsVm,
+                configDir = root.configDir,
+                appManagerVm = appManagerVm,
+                deviceInfoVm = deviceInfoVm,
+                screenshotVm = screenshotVm,
+                logcatVm = logcatVm,
+                systemOpsVm = systemOpsVm,
+                fileExplorerVm = fileExplorerVm,
+                selectedSerial = selectedSerial,
+                onOpenShell = { serial ->
+                    kotlinx.coroutines.runBlocking {
+                        val adb = root.locator.locate()
+                        shellLauncher.open(adb.path, serial)
+                    }
+                },
+            )
         }
     }
 }
