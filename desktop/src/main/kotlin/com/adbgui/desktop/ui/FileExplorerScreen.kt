@@ -76,7 +76,11 @@ fun FileExplorerScreen(
                             },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(if (entry.isDirectory) "📁" else "📄", modifier = Modifier.padding(end = 8.dp))
+                        Text(when {
+                            entry.permissions.startsWith("l") -> "🔗"
+                            entry.isDirectory -> "📁"
+                            else -> "📄"
+                        }, modifier = Modifier.padding(end = 8.dp))
                         Text(entry.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.body2)
                         Text("${entry.size}", style = MaterialTheme.typography.caption, modifier = Modifier.padding(end = 8.dp))
                         Text(entry.date, style = MaterialTheme.typography.caption)
