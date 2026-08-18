@@ -100,7 +100,7 @@ fun AppManagerScreen(
                             }
                         }
                         if (errorExpanded) {
-                            Text(msg, style = MaterialTheme.typography.caption)
+                            SelectableText(msg, style = MaterialTheme.typography.caption)
                         }
                     }
                 }

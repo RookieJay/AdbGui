@@ -55,7 +55,7 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
                     label = { Text(Strings.t("pairing_code")) },
                 )
                 if (busy) Text(Strings.t("pairing"), style = MaterialTheme.typography.caption)
-                error?.let { Text(it, color = Color(0xFFC62828), style = MaterialTheme.typography.caption) }
+                error?.let { SelectableText(it, color = Color(0xFFC62828), style = MaterialTheme.typography.caption) }
             }
         },
         confirmButton = {

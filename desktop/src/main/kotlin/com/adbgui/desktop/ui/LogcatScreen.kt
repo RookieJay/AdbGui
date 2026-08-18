@@ -102,7 +102,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
             }
             error?.let { e ->
                 Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
-                    Text(e, Modifier.padding(6.dp), style = MaterialTheme.typography.caption)
+                    SelectableText(e, Modifier.padding(6.dp), style = MaterialTheme.typography.caption)
                 }
             }
             savedFile?.let { f ->
@@ -118,7 +118,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
 
             exportError?.let { msg ->
                 Surface(color = Color(0xFFFFCDD2), shape = RoundedCornerShape(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    Text(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
+                    SelectableText(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
                 }
             }
 

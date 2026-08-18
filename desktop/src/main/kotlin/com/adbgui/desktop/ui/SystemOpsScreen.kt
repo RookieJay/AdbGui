@@ -74,13 +74,13 @@ fun SystemOpsScreen(
 
             message?.let { msg ->
                 Surface(color = Color(0xFFC8E6C9), modifier = Modifier.fillMaxWidth()) {
-                    Text(msg.trim(), style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
+                    SelectableText(msg.trim(), style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
                 }
             }
 
             error?.let { msg ->
                 Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
-                    Text(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
+                    SelectableText(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
                 }
             }
         }

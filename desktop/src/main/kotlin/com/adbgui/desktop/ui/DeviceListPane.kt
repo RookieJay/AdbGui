@@ -100,7 +100,7 @@ fun DeviceListPane(
                 Box(
                     modifier = Modifier.fillMaxWidth().background(Color(0xFFB00020)).padding(8.dp),
                 ) {
-                    Text(error ?: "", color = Color.White, style = MaterialTheme.typography.caption)
+                    SelectableText(error ?: "", color = Color.White, style = MaterialTheme.typography.caption)
                 }
             }
         }

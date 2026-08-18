@@ -53,9 +53,7 @@ fun FileExplorerScreen(
             }
             error?.let { e ->
                 Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
-                    androidx.compose.foundation.text.selection.SelectionContainer {
-                        Text(e, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
-                    }
+                    SelectableText(e, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
                 }
             }
             savedFile?.let { f ->

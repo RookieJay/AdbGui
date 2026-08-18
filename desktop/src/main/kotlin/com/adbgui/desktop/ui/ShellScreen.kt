@@ -54,7 +54,7 @@ fun ShellScreen(
                 }) { Text(Strings.t("open_shell")) }
                 error?.let { msg ->
                     Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
-                        Text(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
+                        SelectableText(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
                     }
                 }
             }
