@@ -29,9 +29,11 @@ class FileExplorerViewModel(
 
     private val backStack = ArrayDeque<String>()
 
-    /** ls + parse + batch test -d for symlinks + sort. Shared by navigate/back. */
+    /** ls + parse + batch test -d for symlinks + sort. Shared by navigate/back. 15s timeout. */
     private suspend fun listAndClassify(serial: String, path: String): List<FileEntry> {
-        val stdout = repo.ls(serial, path)
+        val stdout = kotlinx.coroutines.withTimeoutOrNull(15_000) {
+            repo.ls(serial, path)
+        } ?: throw RuntimeException("unable to list entries: $path (timeout)")
         var parsed = LsParser.parse(stdout)
         val symlinks = parsed.filter { it.isSymlink }
         if (symlinks.isNotEmpty()) {
@@ -57,8 +59,8 @@ class FileExplorerViewModel(
             if (normPath != _currentPath.value) backStack.addLast(_currentPath.value)
             _currentPath.value = normPath
             _entries.value = entries
-        } catch (e: AdbCommandException) {
-            _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
+        } catch (e: Exception) {
+            _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error")
         } finally { _busy.value = false }
     }
 
@@ -71,8 +73,8 @@ class FileExplorerViewModel(
             val entries = listAndClassify(serial, prev)
             _currentPath.value = prev
             _entries.value = entries
-        } catch (e: AdbCommandException) {
-            _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
+        } catch (e: Exception) {
+            _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error")
         } finally { _busy.value = false }
     }
 
@@ -88,8 +90,8 @@ class FileExplorerViewModel(
         try {
             repo.push(serial, localPath, devicePath)
             refresh()
-        } catch (e: AdbCommandException) {
-            _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
+        } catch (e: Exception) {
+            _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error")
         } finally { _busy.value = false }
     }
 
@@ -99,8 +101,8 @@ class FileExplorerViewModel(
         try {
             repo.pull(serial, devicePath, localSavePath)
             _savedFile.value = java.io.File(localSavePath)
-        } catch (e: AdbCommandException) {
-            _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
+        } catch (e: Exception) {
+            _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error")
         } finally { _busy.value = false }
     }
 

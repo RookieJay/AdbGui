@@ -48,11 +48,14 @@ fun FileExplorerScreen(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { vm.back() }) { Text("←") }
                 Text(currentPath, style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
+                if (busy) CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp))
                 OutlinedButton(onClick = { vm.refresh() }) { Text(Strings.t("refresh")) }
             }
             error?.let { e ->
                 Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
-                    Text(e, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(e, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
+                    }
                 }
             }
             savedFile?.let { f ->
