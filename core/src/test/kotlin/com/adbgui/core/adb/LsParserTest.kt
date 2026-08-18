@@ -50,7 +50,7 @@ class LsParserTest {
         """.trimIndent()
         val list = LsParser.parse(out)
         assertEquals(2, list.size)
-        assertEquals("etc -> /system/etc", list[0].name)
+        assertEquals("etc", list[0].name)
         assertTrue(list[0].isDirectory)   // symlinks start with 'l' — treat as non-file (navigable)
     }
 }

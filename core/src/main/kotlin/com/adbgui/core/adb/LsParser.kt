@@ -15,9 +15,10 @@ object LsParser {
                 val m = re.matchEntire(trimmed) ?: return@mapNotNull null
                 val perms = m.groupValues[1]
                 val name = m.groupValues[5].trim()
-                if (name == "." || name == "..") return@mapNotNull null
+                val linkName = name.substringBefore(" -> ")  // strip symlink target (e.g. "etc -> /system/etc" → "etc")
+                if (linkName == "." || linkName == "..") return@mapNotNull null
                 FileEntry(
-                    name = name,
+                    name = linkName,
                     isDirectory = perms.firstOrNull() == 'd' || perms.firstOrNull() == 'l',
                     size = m.groupValues[2].toLongOrNull() ?: 0,
                     date = "${m.groupValues[3]} ${m.groupValues[4]}",
