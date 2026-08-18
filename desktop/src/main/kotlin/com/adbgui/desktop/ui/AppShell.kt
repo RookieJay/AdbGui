@@ -43,6 +43,7 @@ fun AppShell(
     screenshotVm: ScreenshotViewModel? = null,
     logcatVm: LogcatViewModel? = null,
     systemOpsVm: SystemOpsViewModel? = null,
+    fileExplorerVm: FileExplorerViewModel? = null,
     selectedSerial: MutableStateFlow<String?>? = null,
     onOpenShell: (String) -> Unit = {},
     rightContent: @Composable () -> Unit = { DefaultRightPane() },
@@ -97,6 +98,12 @@ fun AppShell(
                         onClick = { showSettings = false; page = NavPage.SYSTEM_OPS },
                     ) { Text(if (page == NavPage.SYSTEM_OPS && !showSettings) "${Strings.t("nav_system_ops")} *" else Strings.t("nav_system_ops")) }
                 }
+                if (fileExplorerVm != null) {
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        onClick = { showSettings = false; page = NavPage.FILE_EXPLORER },
+                    ) { Text(if (page == NavPage.FILE_EXPLORER && !showSettings) "${Strings.t("nav_file_explorer")} *" else Strings.t("nav_file_explorer")) }
+                }
                 if (settingsVm != null && configDir != null) {
                     Divider()
                     TextButton(
@@ -131,6 +138,9 @@ fun AppShell(
                     selected != null && page == NavPage.SYSTEM_OPS && systemOpsVm != null -> {
                         SystemOpsScreen(vm = systemOpsVm, selectedSerial = selected)
                     }
+                    selected != null && page == NavPage.FILE_EXPLORER && fileExplorerVm != null -> {
+                        FileExplorerScreen(vm = fileExplorerVm, selectedSerial = selected)
+                    }
                     else -> rightContent()
                 }
             }
@@ -138,7 +148,7 @@ fun AppShell(
     }
 }
 
-private enum class NavPage { DEVICE_INFO, SCREENSHOT, APP_MANAGER, LOGCAT, SHELL, SYSTEM_OPS }
+private enum class NavPage { DEVICE_INFO, SCREENSHOT, APP_MANAGER, LOGCAT, SHELL, SYSTEM_OPS, FILE_EXPLORER }
 
 @Composable
 private fun DefaultRightPane() {

@@ -9,6 +9,7 @@ import com.adbgui.desktop.ui.AppShell
 import com.adbgui.desktop.ui.AppManagerViewModel
 import com.adbgui.desktop.ui.DeviceInfoViewModel
 import com.adbgui.desktop.ui.DeviceListViewModel
+import com.adbgui.desktop.ui.FileExplorerViewModel
 import com.adbgui.desktop.ui.LogcatViewModel
 import com.adbgui.desktop.ui.SettingsViewModel
 import com.adbgui.desktop.ui.ScreenshotViewModel
@@ -35,6 +36,7 @@ fun main() = application {
     val logcatController = com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope)
     val logcatVm = LogcatViewModel(logcatController, selectedSerial, root.scope)
     val systemOpsVm = SystemOpsViewModel(root.repository, selectedSerial, root.scope)
+    val fileExplorerVm = FileExplorerViewModel(root.repository, selectedSerial, root.scope)
     val shellLauncher = com.adbgui.desktop.platform.WindowsShellLauncher()
     // Auto-select the first ONLINE device when nothing is validly selected.
     // Never steals an active selection: if the current serial is still online, leave it.
@@ -60,6 +62,7 @@ fun main() = application {
                 screenshotVm = screenshotVm,
                 logcatVm = logcatVm,
                 systemOpsVm = systemOpsVm,
+                fileExplorerVm = fileExplorerVm,
                 selectedSerial = selectedSerial,
                 onOpenShell = { serial ->
                     kotlinx.coroutines.runBlocking {
