@@ -24,32 +24,39 @@ class FileExplorerViewModel(
     val error: StateFlow<String?> = _error.asStateFlow()
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
+    private val _savedFile = MutableStateFlow<java.io.File?>(null)
+    val savedFile: StateFlow<java.io.File?> = _savedFile.asStateFlow()
 
     private val backStack = ArrayDeque<String>()
+
+    /** ls + parse + batch test -d for symlinks + sort. Shared by navigate/back. */
+    private suspend fun listAndClassify(serial: String, path: String): List<FileEntry> {
+        val stdout = repo.ls(serial, path)
+        var parsed = LsParser.parse(stdout)
+        val symlinks = parsed.filter { it.isSymlink }
+        if (symlinks.isNotEmpty()) {
+            val basePath = if (path.endsWith("/")) path else "$path/"
+            val paths = symlinks.map { e -> "$basePath${e.name}" }
+            val isDirs = repo.checkSymlinkDirs(serial, paths)
+            symlinks.forEachIndexed { i, e ->
+                val idx = parsed.indexOf(e)
+                if (isDirs.getOrElse(i) { false }) {
+                    parsed = parsed.toMutableList().also { it[idx] = e.copy(isDirectory = true) }
+                }
+            }
+        }
+        return parsed.sortedWith(compareByDescending<FileEntry> { it.isDirectory }.thenBy { it.name })
+    }
 
     fun navigate(path: String) = scope.launch {
         val serial = selectedSerial.value ?: return@launch
         val normPath = path.replace(Regex("/+"), "/").let { if (it.length > 1) it.trimEnd('/') else it }
         _busy.value = true; _error.value = null
         try {
-            val stdout = repo.ls(serial, normPath)
-            var parsed = LsParser.parse(stdout)
-            // Batch-check symlinks: which ones are actually dirs (test -d)?
-            val symlinks = parsed.filter { it.isSymlink }
-            if (symlinks.isNotEmpty()) {
-                val paths = symlinks.map { e -> "${if (normPath.endsWith("/")) normPath else "$normPath/"}${e.name}" }
-                val isDirs = repo.checkSymlinkDirs(serial, paths)
-                symlinks.forEachIndexed { i, e ->
-                    val idx = parsed.indexOf(e)
-                    if (isDirs.getOrElse(i) { false }) {
-                        parsed = parsed.toMutableList().also { it[idx] = e.copy(isDirectory = true) }
-                    }
-                }
-            }
-            // push current to backStack (if navigating to a different path)
+            val entries = listAndClassify(serial, normPath)
             if (normPath != _currentPath.value) backStack.addLast(_currentPath.value)
             _currentPath.value = normPath
-            _entries.value = parsed.sortedWith(compareByDescending<FileEntry> { it.isDirectory }.thenBy { it.name })
+            _entries.value = entries
         } catch (e: AdbCommandException) {
             _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
         } finally { _busy.value = false }
@@ -58,13 +65,12 @@ class FileExplorerViewModel(
     fun back() = scope.launch {
         if (backStack.isEmpty()) return@launch
         val prev = backStack.removeLast()
-        // navigate without pushing to backStack
         val serial = selectedSerial.value ?: return@launch
         _busy.value = true; _error.value = null
         try {
-            val stdout = repo.ls(serial, prev)
+            val entries = listAndClassify(serial, prev)
             _currentPath.value = prev
-            _entries.value = LsParser.parse(stdout).sortedWith(compareByDescending<FileEntry> { it.isDirectory }.thenBy { it.name })
+            _entries.value = entries
         } catch (e: AdbCommandException) {
             _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
         } finally { _busy.value = false }
@@ -89,9 +95,10 @@ class FileExplorerViewModel(
 
     fun pull(devicePath: String, localSavePath: String) = scope.launch {
         val serial = selectedSerial.value ?: return@launch
-        _busy.value = true; _error.value = null
+        _busy.value = true; _error.value = null; _savedFile.value = null
         try {
             repo.pull(serial, devicePath, localSavePath)
+            _savedFile.value = java.io.File(localSavePath)
         } catch (e: AdbCommandException) {
             _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
         } finally { _busy.value = false }

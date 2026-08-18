@@ -8,3 +8,4 @@ build/
 .DS_Store
 desktop/*.png
 desktop/*.txt
+desktop/*.rc

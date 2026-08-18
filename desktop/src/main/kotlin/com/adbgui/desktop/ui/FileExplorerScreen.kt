@@ -34,6 +34,7 @@ fun FileExplorerScreen(
     val entries by vm.entries.collectAsState()
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
+    val savedFile by vm.savedFile.collectAsState()
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
         if (selectedSerial == null) {
@@ -52,6 +53,16 @@ fun FileExplorerScreen(
             error?.let { e ->
                 Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
                     Text(e, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
+                }
+            }
+            savedFile?.let { f ->
+                Surface(color = MaterialTheme.colors.background, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(Strings.t("saved_path").format(f.absolutePath), style = MaterialTheme.typography.caption)
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(onClick = { openFile(f) }) { Text(Strings.t("open")) }
+                        TextButton(onClick = { revealFile(f) }) { Text(Strings.t("open_folder")) }
+                    }
                 }
             }
             Divider()
@@ -88,7 +99,7 @@ fun FileExplorerScreen(
                             else -> "📄"
                         }, modifier = Modifier.padding(end = 8.dp))
                         Text(entry.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.body2)
-                        Text("${entry.size}", style = MaterialTheme.typography.caption, modifier = Modifier.padding(end = 8.dp))
+                        Text(formatSize(entry.size), style = MaterialTheme.typography.caption, modifier = Modifier.padding(end = 8.dp))
                         Text(entry.date, style = MaterialTheme.typography.caption)
                         // Right-click context menu inside the Row (offset relative to Row bounds)
                         DropdownMenu(
@@ -124,4 +135,13 @@ fun FileExplorerScreen(
             }
         }
     }
+}
+
+private fun formatSize(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val kb = bytes / 1024.0
+    if (kb < 1024) return "%.1f KB".format(kb)
+    val mb = kb / 1024.0
+    if (mb < 1024) return "%.1f MB".format(mb)
+    return "%.1f GB".format(mb / 1024.0)
 }
