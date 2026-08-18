@@ -19,7 +19,7 @@ object LsParser {
                 if (linkName == "." || linkName == "..") return@mapNotNull null
                 FileEntry(
                     name = linkName,
-                    isDirectory = perms.firstOrNull() == 'd' || perms.firstOrNull() == 'l',
+                    isDirectory = perms.firstOrNull() == 'd',
                     size = m.groupValues[2].toLongOrNull() ?: 0,
                     date = "${m.groupValues[3]} ${m.groupValues[4]}",
                     permissions = perms,

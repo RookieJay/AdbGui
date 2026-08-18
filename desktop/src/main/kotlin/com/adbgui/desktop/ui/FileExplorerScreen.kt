@@ -56,19 +56,24 @@ fun FileExplorerScreen(
             }
             Divider()
             // File list
+            val density = androidx.compose.ui.platform.LocalDensity.current
             LazyColumn(Modifier.fillMaxSize()) {
                 itemsIndexed(entries) { _, entry ->
                     var menuOpen by remember { mutableStateOf(false) }
+                    var clickX by remember { mutableStateOf(0f) }
+                    var clickY by remember { mutableStateOf(0f) }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
-                            .clickable { if (entry.isDirectory) vm.navigate("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}") }
+                            .clickable { if (entry.isDirectory || entry.permissions.startsWith("l")) vm.navigate("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}") }
                             .pointerInput(Unit) {
                                 awaitPointerEventScope {
                                     while (true) {
                                         val event = awaitPointerEvent()
                                         if (event.type == PointerEventType.Press && event.button == PointerButton.Secondary) {
+                                            val pos = event.changes.firstOrNull()?.position
+                                            if (pos != null) { clickX = pos.x; clickY = pos.y }
                                             menuOpen = true
                                         }
                                     }
@@ -85,8 +90,12 @@ fun FileExplorerScreen(
                         Text("${entry.size}", style = MaterialTheme.typography.caption, modifier = Modifier.padding(end = 8.dp))
                         Text(entry.date, style = MaterialTheme.typography.caption)
                     }
-                    // Right-click context menu
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    // Right-click context menu (positioned at the click location)
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        offset = androidx.compose.ui.unit.DpOffset(with(density) { clickX.toDp() }, with(density) { clickY.toDp() }),
+                        onDismissRequest = { menuOpen = false },
+                    ) {
                         DropdownMenuItem(onClick = {
                             menuOpen = false
                             val dlg = FileDialog(Frame(), "Upload", FileDialog.LOAD)

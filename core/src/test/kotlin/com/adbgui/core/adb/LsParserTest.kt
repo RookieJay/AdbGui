@@ -51,6 +51,6 @@ class LsParserTest {
         val list = LsParser.parse(out)
         assertEquals(2, list.size)
         assertEquals("etc", list[0].name)
-        assertTrue(list[0].isDirectory)   // symlinks start with 'l' — treat as non-file (navigable)
+        assertTrue(!list[0].isDirectory)   // symlinks are NOT directories — sorted with files, save-enabled
     }
 }
