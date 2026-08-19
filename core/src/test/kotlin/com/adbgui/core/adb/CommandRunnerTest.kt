@@ -163,4 +163,47 @@ class CommandRunnerTest {
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         assertFailsWith<RuntimeException> { cr.pull("abc", "/sdcard/file.txt", "/local/file.txt") }
     }
+
+    @Test
+    fun forceStop_passes_am_force_stop() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("force-stop"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.forceStop("abc", "com.foo")
+    }
+
+    @Test
+    fun startApp_uses_monkey_launcher() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("monkey"), AdbProcessResult(0, "Events injected", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.startApp("abc", "com.foo")
+    }
+
+    @Test
+    fun startAppActivity_passes_am_start_n() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("am", "start"), AdbProcessResult(0, "Starting:", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.startAppActivity("abc", "com.foo", "MainActivity")
+    }
+
+    @Test
+    fun sendBroadcast_passes_action_and_extras() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("broadcast"), AdbProcessResult(0, "Broadcasting Intent { act=com.test }", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val out = cr.sendBroadcast("abc", "com.test.ACTION", null,
+            listOf(com.adbgui.core.domain.Extra(com.adbgui.core.domain.ExtraType.STRING, "key", "val")))
+        assert(out.contains("Broadcasting"))
+    }
+
+    @Test
+    fun queryProvider_passes_uri_and_where() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("content", "query"), AdbProcessResult(0, "Row: 0 _id=1", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val out = cr.queryProvider("abc", "content://settings/system", "name='setting'")
+        assert(out.contains("Row:"))
+    }
 }

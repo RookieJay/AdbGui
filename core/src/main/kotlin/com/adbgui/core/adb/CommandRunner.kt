@@ -4,6 +4,7 @@ import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceProps
+import com.adbgui.core.domain.Extra
 import com.adbgui.core.domain.InstallResult
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.core.domain.RebootMode
@@ -139,6 +140,35 @@ class CommandRunner(
 
     suspend fun inputKey(serial: String, keycode: Int) {
         runCmd(serial, listOf("shell", "input", "keyevent", keycode.toString()))
+    }
+
+    suspend fun forceStop(serial: String, pkg: String): String {
+        return runCmd(serial, listOf("shell", "am", "force-stop", pkg)).stdout
+    }
+
+    suspend fun startApp(serial: String, pkg: String): String {
+        return runCmd(serial, listOf("shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1")).stdout
+    }
+
+    suspend fun startAppActivity(serial: String, pkg: String, activity: String): String {
+        return runCmd(serial, listOf("shell", "am", "start", "-n", "$pkg/$activity")).stdout
+    }
+
+    suspend fun sendBroadcast(serial: String, action: String, uri: String?, extras: List<Extra>): String {
+        val args = buildList {
+            add("shell"); add("am"); add("broadcast"); add("-a"); add(action)
+            if (uri != null) { add("-d"); add(uri) }
+            extras.forEach { add(it.type.flag); add(it.key); add(it.value) }
+        }
+        return runCmd(serial, args).stdout
+    }
+
+    suspend fun queryProvider(serial: String, uri: String, where: String?): String {
+        val args = buildList {
+            add("shell"); add("content"); add("query"); add("--uri"); add(uri)
+            if (where != null) { add("--where"); add(where) }
+        }
+        return runCmd(serial, args).stdout
     }
 
     suspend fun ls(serial: String, path: String): String {
