@@ -22,7 +22,7 @@ class DeviceRepositoryTest {
         val tracker = object : IDeviceTracker {
             override val devices = MutableStateFlow(listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE)))
         }
-        val history = DeviceHistoryStore(Files.createTempDirectory("rep"), clock = { 0L })
+        val history = DeviceHistoryStore(Files.createTempDirectory("rep"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         history.upsert("xyz", DeviceType.WIRELESS, "10.0.0.1", 5555) // offline historical
         val runner = FakeAdbProcessRunner()
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
@@ -37,7 +37,7 @@ class DeviceRepositoryTest {
     @Test
     fun connectWireless_persists_history_on_success() = runTest {
         val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
-        val history = DeviceHistoryStore(Files.createTempDirectory("rep2"), clock = { 42L })
+        val history = DeviceHistoryStore(Files.createTempDirectory("rep2"), clock = { 42L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 192.168.1.50:5555", ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})

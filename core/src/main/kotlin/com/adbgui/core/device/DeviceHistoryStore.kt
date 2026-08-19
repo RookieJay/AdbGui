@@ -1,6 +1,7 @@
 package com.adbgui.core.device
 
 import com.adbgui.core.domain.DeviceType
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -20,11 +21,15 @@ data class DeviceHistoryEntry(
     val lastConnectedAt: Long? = null,
 )
 
-class DeviceHistoryStore(private val configDir: Path, private val clock: () -> Long) {
+class DeviceHistoryStore(
+    private val configDir: Path,
+    private val clock: () -> Long,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true; encodeDefaults = true }
     private val file get() = configDir.resolve("devices.json")
 
-    suspend fun load(): List<DeviceHistoryEntry> = withContext(Dispatchers.IO) {
+    suspend fun load(): List<DeviceHistoryEntry> = withContext(io) {
         if (!Files.exists(file)) emptyList()
         else runCatching { json.decodeFromString(ListSerializer(DeviceHistoryEntry.serializer()), Files.readString(file)) }.getOrDefault(emptyList())
     }
@@ -50,7 +55,7 @@ class DeviceHistoryStore(private val configDir: Path, private val clock: () -> L
     suspend fun remove(serial: String) = mutate { entries -> entries.filterNot { it.serial == serial } }
 
     private suspend fun mutate(transform: (List<DeviceHistoryEntry>) -> List<DeviceHistoryEntry>) =
-        withContext(Dispatchers.IO) {
+        withContext(io) {
             Files.createDirectories(configDir)
             val current = if (Files.exists(file)) runCatching { json.decodeFromString(ListSerializer(DeviceHistoryEntry.serializer()), Files.readString(file)) }.getOrDefault(emptyList()) else emptyList()
             val next = transform(current)

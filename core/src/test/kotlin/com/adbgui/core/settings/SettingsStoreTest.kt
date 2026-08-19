@@ -13,7 +13,7 @@ class SettingsStoreTest {
 
     @Test
     fun load_returns_defaults_when_no_file() = runTest {
-        val store = SettingsStore(tmpDir())
+        val store = SettingsStore(tmpDir(), io = kotlinx.coroutines.Dispatchers.Unconfined)
         val s = store.load()
         assertNull(s.adbPathOverride)
         assertEquals(LogLevel.INFO, s.logLevel)

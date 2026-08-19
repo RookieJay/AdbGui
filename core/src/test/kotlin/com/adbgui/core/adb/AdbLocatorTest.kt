@@ -17,7 +17,7 @@ class AdbLocatorTest {
 
     @Test
     fun prefers_override() = runTest {
-        val settings = SettingsStore(Files.createTempDirectory("adb-loc"))
+        val settings = SettingsStore(Files.createTempDirectory("adb-loc"), io = kotlinx.coroutines.Dispatchers.Unconfined)
         settings.save(Settings(adbPathOverride = "/custom/adb"))
         val loc = AdbLocator(settings, FakeBundled(null), FakePath(null))
         val bin = loc.locate()
@@ -27,21 +27,21 @@ class AdbLocatorTest {
 
     @Test
     fun falls_back_to_bundled() = runTest {
-        val settings = SettingsStore(Files.createTempDirectory("adb-loc"))
+        val settings = SettingsStore(Files.createTempDirectory("adb-loc"), io = kotlinx.coroutines.Dispatchers.Unconfined)
         val loc = AdbLocator(settings, FakeBundled("/bundled/adb.exe"), FakePath(null))
         assertEquals(AdbSource.BUNDLED, loc.locate().source)
     }
 
     @Test
     fun falls_back_to_path() = runTest {
-        val settings = SettingsStore(Files.createTempDirectory("adb-loc"))
+        val settings = SettingsStore(Files.createTempDirectory("adb-loc"), io = kotlinx.coroutines.Dispatchers.Unconfined)
         val loc = AdbLocator(settings, FakeBundled(null), FakePath("/usr/bin/adb"))
         assertEquals(AdbSource.PATH, loc.locate().source)
     }
 
     @Test
     fun throws_when_none() = runTest {
-        val settings = SettingsStore(Files.createTempDirectory("adb-loc"))
+        val settings = SettingsStore(Files.createTempDirectory("adb-loc"), io = kotlinx.coroutines.Dispatchers.Unconfined)
         val loc = AdbLocator(settings, FakeBundled(null), FakePath(null))
         assertFailsWith<AdbNotFoundException> { loc.locate() }
     }

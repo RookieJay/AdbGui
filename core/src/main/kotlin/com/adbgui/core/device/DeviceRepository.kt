@@ -37,12 +37,9 @@ class DeviceRepository(
     private val collectorJob: Job
 
     init {
-        runBlocking { recompute(tracker.devices.value) }   // populate _devices synchronously (history file is tiny)
+        runBlocking { recompute(tracker.devices.value) }
         collectorJob = scope.launch {
             tracker.devices.collectLatest { recompute(it) }
-        }
-        scope.launch {
-            // history changes are read on demand after mutations; recompute is called explicitly there
         }
     }
 

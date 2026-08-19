@@ -28,7 +28,7 @@ class CompositionRoot {
     val server = AdbServerController({ locator.locate() }, runner, logger)
     val commands = CommandRunner({ locator.locate() }, runner, logger, scope, CommandRunner.AdbServerStarter { server.ensureStarted() })
     private val history = DeviceHistoryStore(configDir, clock = { System.currentTimeMillis() })
-    val tracker = DeviceTracker({ locator.locate() }, server, runner, logger, scope, clock = { System.currentTimeMillis() })
+    val tracker = DeviceTracker({ locator.locate() }, server, runner, logger, scope)
     val repository = DeviceRepository(tracker, history, commands, logger, scope, clock = { System.currentTimeMillis() })
 
     // NOTE: the initial locale is set on the UI thread in Main (see Main.kt) — do NOT set

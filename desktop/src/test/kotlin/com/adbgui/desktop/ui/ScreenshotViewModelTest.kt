@@ -20,7 +20,7 @@ class ScreenshotViewModelTest {
     @Test
     fun capture_returns_bytes() = runTest {
         val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
-        val history = DeviceHistoryStore(Files.createTempDirectory("ss"), clock = { 0L })
+        val history = DeviceHistoryStore(Files.createTempDirectory("ss"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val runner = FakeAdbProcessRunner()
         // CommandRunner.screenshot requires a PNG signature (the banner-stripping fix); prefix it.
         runner.setBinaryResponse(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3))

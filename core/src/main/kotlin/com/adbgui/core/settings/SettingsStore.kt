@@ -2,6 +2,7 @@ package com.adbgui.core.settings
 
 import com.adbgui.core.domain.RemoteButton
 import com.adbgui.core.log.LogLevel
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -29,16 +30,16 @@ data class Settings(
     ),
 )
 
-class SettingsStore(private val configDir: Path) {
+class SettingsStore(private val configDir: Path, private val io: CoroutineDispatcher = Dispatchers.IO) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true; encodeDefaults = true }
     private val file get() = configDir.resolve("settings.json")
 
-    suspend fun load(): Settings = withContext(Dispatchers.IO) {
+    suspend fun load(): Settings = withContext(io) {
         if (!Files.exists(file)) return@withContext Settings()
         runCatching { json.decodeFromString<Settings>(Files.readString(file)) }.getOrDefault(Settings())
     }
 
-    suspend fun save(settings: Settings) = withContext(Dispatchers.IO) {
+    suspend fun save(settings: Settings) = withContext(io) {
         Files.createDirectories(configDir)
         val tmp = file.resolveSibling("settings.json.tmp")
         Files.writeString(tmp, json.encodeToString(Settings.serializer(), settings))

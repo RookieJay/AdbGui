@@ -1,7 +1,6 @@
 package com.adbgui.core.domain
 
 class AdbNotFoundException(message: String) : RuntimeException(message)
-class NoDeviceSelectedException : RuntimeException("No device selected")
 
 class AdbCommandException(
     val command: String,

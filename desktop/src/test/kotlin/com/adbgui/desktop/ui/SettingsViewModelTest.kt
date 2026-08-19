@@ -27,7 +27,7 @@ class SettingsViewModelTest {
     @Test
     fun setAdbPath_persists_override() = runTest {
         val dir = Files.createTempDirectory("set")
-        val store = SettingsStore(dir)
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val vm = SettingsViewModel(store, this)
         vm.setAdbPath("/x/adb")
         awaitStore(store, expectedPath = "/x/adb")
@@ -37,7 +37,7 @@ class SettingsViewModelTest {
     @Test
     fun setLogLevel_persists() = runTest {
         val dir = Files.createTempDirectory("set2")
-        val store = SettingsStore(dir)
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val vm = SettingsViewModel(store, this)
         vm.setLogLevel(LogLevel.DEBUG)
         awaitStore(store, expected = LogLevel.DEBUG)

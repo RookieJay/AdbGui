@@ -45,7 +45,7 @@ class LogcatController(
 
     private val ring = ArrayDeque<LogcatLine>()
     private val filtered = ArrayDeque<LogcatLine>()
-    private var stream: AdbStream? = null
+    @Volatile private var stream: AdbStream? = null
     private var job: Job? = null
 
     // Mutex serializes ALL ring/filtered mutations (ArrayDeque is not thread-safe).

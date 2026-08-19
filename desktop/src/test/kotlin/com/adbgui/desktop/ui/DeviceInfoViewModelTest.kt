@@ -21,7 +21,7 @@ class DeviceInfoViewModelTest {
     @Test
     fun load_parses_props() = runTest {
         val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
-        val history = DeviceHistoryStore(Files.createTempDirectory("di"), clock = { 0L })
+        val history = DeviceHistoryStore(Files.createTempDirectory("di"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val runner = FakeAdbProcessRunner()
         val propOut = "[ro.product.model]: [Pixel 6]\n[ro.build.version.release]: [13]\n[ro.build.version.sdk]: [33]\n[ro.product.cpu.abi]: [arm64-v8a]\n"
         runner.whenArgsContains(listOf("getprop"), AdbProcessResult(0, propOut, ""))

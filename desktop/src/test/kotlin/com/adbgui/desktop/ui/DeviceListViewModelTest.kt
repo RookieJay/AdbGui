@@ -24,7 +24,7 @@ class DeviceListViewModelTest {
         val tracker = object : IDeviceTracker {
             override val devices = MutableStateFlow(emptyList<DeviceSnapshot>())
         }
-        val history = DeviceHistoryStore(Files.createTempDirectory("vm"), clock = { 0L })
+        val history = DeviceHistoryStore(Files.createTempDirectory("vm"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 1.2.3.4:5555", ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})

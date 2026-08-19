@@ -22,7 +22,6 @@ class DeviceTracker(
     private val runner: AdbProcessRunner,
     private val logger: Logger,
     private val scope: CoroutineScope,
-    private val clock: () -> Long,
 ) : IDeviceTracker {
     private val _devices = MutableStateFlow<List<DeviceSnapshot>>(emptyList())
     override val devices: StateFlow<List<DeviceSnapshot>> = _devices.asStateFlow()

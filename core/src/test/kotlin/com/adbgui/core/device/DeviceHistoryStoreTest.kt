@@ -13,9 +13,9 @@ class DeviceHistoryStoreTest {
     @Test
     fun upsert_sets_lastConnectedAt_and_persists() = runTest {
         val dir = dir()  // ONE temp dir for both stores
-        val store = DeviceHistoryStore(dir, clock = { 1000L })
+        val store = DeviceHistoryStore(dir, clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         store.upsert("192.168.1.50:5555", DeviceType.WIRELESS, "192.168.1.50", 5555)
-        val loaded = DeviceHistoryStore(dir, clock = { 0L }).load()  // SAME dir
+        val loaded = DeviceHistoryStore(dir, clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined).load()  // SAME dir
         assertEquals(1, loaded.size)
         assertEquals(1000L, loaded[0].lastConnectedAt)
         assertEquals("192.168.1.50", loaded[0].wirelessIp)
@@ -23,7 +23,7 @@ class DeviceHistoryStoreTest {
 
     @Test
     fun setAlias_updates_alias_only() = runTest {
-        val store = DeviceHistoryStore(dir(), clock = { 0L })
+        val store = DeviceHistoryStore(dir(), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         store.upsert("abc", DeviceType.USB, null, null)
         store.setAlias("abc", "My Phone")
         val e = store.load().first()
@@ -32,7 +32,7 @@ class DeviceHistoryStoreTest {
 
     @Test
     fun remove_deletes_entry() = runTest {
-        val store = DeviceHistoryStore(dir(), clock = { 0L })
+        val store = DeviceHistoryStore(dir(), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         store.upsert("abc", DeviceType.USB, null, null)
         store.remove("abc")
         assertEquals(0, store.load().size)
@@ -41,7 +41,7 @@ class DeviceHistoryStoreTest {
     @Test
     fun upsert_without_alias_preserves_existing_alias() = runTest {
         val dir = Files.createTempDirectory("hist")
-        val store = DeviceHistoryStore(dir, clock = { 0L })
+        val store = DeviceHistoryStore(dir, clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         store.upsert("abc", DeviceType.USB, null, null, alias = "My Phone")
         store.upsert("abc", DeviceType.USB, null, null)  // no alias → must NOT wipe
         val e = store.load().first()

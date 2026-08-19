@@ -22,7 +22,7 @@ class FileExplorerViewModelTest {
 
     private fun vm(runner: FakeAdbProcessRunner, selected: MutableStateFlow<String?>, scope: kotlinx.coroutines.CoroutineScope): Pair<DeviceRepository, FileExplorerViewModel> {
         val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
-        val history = DeviceHistoryStore(Files.createTempDirectory("fe"), clock = { 0L })
+        val history = DeviceHistoryStore(Files.createTempDirectory("fe"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val cmd = CommandRunner({ adb }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter{})
         val repo = DeviceRepository(tracker, history, cmd, NoopLogger, scope, clock = { 0L })
         return repo to FileExplorerViewModel(repo, selected, scope)

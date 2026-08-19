@@ -21,7 +21,7 @@ class AppManagerViewModelTest {
     @Test
     fun load_lists_packages_for_selected_serial() = runTest {
         val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
-        val history = DeviceHistoryStore(Files.createTempDirectory("am"), clock = { 0L })
+        val history = DeviceHistoryStore(Files.createTempDirectory("am"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("pm", "list"), AdbProcessResult(0, "package:com.foo\npackage:com.bar\n", ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})

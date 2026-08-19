@@ -21,7 +21,7 @@ class DeviceTrackerTest {
         runner.whenArgsContains(listOf("devices"),
             AdbProcessResult(0, "List of devices attached\nabc device\nxyz offline\n", ""))
         val server = AdbServerController({ adb }, FakeAdbProcessRunner(), NoopLogger)
-        val tracker = DeviceTracker({ adb }, server, runner, NoopLogger, this, clock = { 0L })
+        val tracker = DeviceTracker({ adb }, server, runner, NoopLogger, this)
         tracker.start()
         advanceTimeBy(2100)  // let the first poll + delay cycle run
         val snap = tracker.devices.value
