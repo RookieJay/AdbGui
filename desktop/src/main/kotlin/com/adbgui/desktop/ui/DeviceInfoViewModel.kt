@@ -61,5 +61,19 @@ class DeviceInfoViewModel(
 
     // Auto-refresh when the selected device changes (incl. the first auto-select).
     private val refreshJob: Job = scope.launch { selectedSerial.collect { load() } }
-    fun stop() { refreshJob.cancel() }
+
+    // Auto-retry when device recovers: if there's a stale error and the device
+    // is back ONLINE (tracker poll shows it), clear the error + retry load().
+    private val recoveryJob: Job = scope.launch {
+        repo.devices.collect { devices ->
+            val serial = selectedSerial.value
+            if (serial != null && _error.value != null) {
+                val nowOnline = devices.any { it.serial == serial && it.status == com.adbgui.core.domain.DeviceStatus.ONLINE }
+                if (nowOnline) {
+                    load()
+                }
+            }
+        }
+    }
+    fun stop() { refreshJob.cancel(); recoveryJob.cancel() }
 }
