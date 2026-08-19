@@ -28,9 +28,12 @@ import java.nio.file.Path
 /**
  * Two-pane app shell: left = device list sidebar (+ Settings nav entry), right = content slot.
  * Right pane defaults to "No device selected"; a Settings entry swaps it to [SettingsScreen]
- * when `settingsVm` and `configDir` are supplied; selecting a device swaps it to
- * [AppManagerScreen] when `appManagerVm` is supplied, [DeviceInfoScreen] when `deviceInfoVm`
- * is supplied, or [ScreenshotScreen] when `screenshotVm` is supplied (nav buttons toggle pages).
+ * when `settingsVm` and `configDir` are supplied; selecting a device swaps it to one of the
+ * feature pages (nav buttons toggle pages).
+ *
+ * Nav reorg (Task 5): NavPage consolidated from 8 entries to 6 —
+ * `DEVICE_OVERVIEW` (composes DeviceInfo + Screenshot + Remote) and `APP_CONSOLE`
+ * (replaces APP_MANAGER) replace the four old entries DEVICE_INFO/SCREENSHOT/APP_MANAGER/REMOTE.
  */
 @Composable
 fun AppShell(
@@ -38,19 +41,19 @@ fun AppShell(
     modifier: Modifier = Modifier,
     settingsVm: SettingsViewModel? = null,
     configDir: Path? = null,
-    appManagerVm: AppManagerViewModel? = null,
-    deviceInfoVm: DeviceInfoViewModel? = null,
-    screenshotVm: ScreenshotViewModel? = null,
+    deviceOverviewDeviceInfoVm: DeviceInfoViewModel? = null,
+    deviceOverviewScreenshotVm: ScreenshotViewModel? = null,
+    deviceOverviewRemoteVm: RemoteViewModel? = null,
+    appConsoleVm: AppConsoleViewModel? = null,
     logcatVm: LogcatViewModel? = null,
     systemOpsVm: SystemOpsViewModel? = null,
-    remoteVm: RemoteViewModel? = null,
     fileExplorerVm: FileExplorerViewModel? = null,
     selectedSerial: MutableStateFlow<String?>? = null,
     onOpenShell: (String) -> Unit = {},
     rightContent: @Composable () -> Unit = { DefaultRightPane() },
 ) {
     var showSettings by remember { mutableStateOf(false) }
-    var page by remember { mutableStateOf(NavPage.DEVICE_INFO) }
+    var page by remember { mutableStateOf(NavPage.DEVICE_OVERVIEW) }
     val serialFlow = selectedSerial ?: remember { MutableStateFlow<String?>(null) }
     val selected by serialFlow.collectAsState()
 
@@ -64,24 +67,18 @@ fun AppShell(
                     onSelect = { device -> selectedSerial?.value = device.serial },
                     onReconnect = { ip, port -> vm.reconnect(ip, port) },
                 )
-                if (deviceInfoVm != null) {
-                    Divider()
+                Divider()
+                if (deviceOverviewDeviceInfoVm != null && deviceOverviewScreenshotVm != null && deviceOverviewRemoteVm != null) {
                     TextButton(
                         modifier = Modifier.fillMaxWidth().height(40.dp),
-                        onClick = { showSettings = false; page = NavPage.DEVICE_INFO },
-                    ) { Text(if (page == NavPage.DEVICE_INFO && !showSettings) "${Strings.t("nav_device_info")} *" else Strings.t("nav_device_info")) }
+                        onClick = { showSettings = false; page = NavPage.DEVICE_OVERVIEW },
+                    ) { Text(if (page == NavPage.DEVICE_OVERVIEW && !showSettings) "${Strings.t("nav_device_overview")} *" else Strings.t("nav_device_overview")) }
                 }
-                if (screenshotVm != null) {
+                if (appConsoleVm != null) {
                     TextButton(
                         modifier = Modifier.fillMaxWidth().height(40.dp),
-                        onClick = { showSettings = false; page = NavPage.SCREENSHOT },
-                    ) { Text(if (page == NavPage.SCREENSHOT && !showSettings) "${Strings.t("nav_screenshot")} *" else Strings.t("nav_screenshot")) }
-                }
-                if (appManagerVm != null) {
-                    TextButton(
-                        modifier = Modifier.fillMaxWidth().height(40.dp),
-                        onClick = { showSettings = false; page = NavPage.APP_MANAGER },
-                    ) { Text(if (page == NavPage.APP_MANAGER && !showSettings) "${Strings.t("nav_app_manager")} *" else Strings.t("nav_app_manager")) }
+                        onClick = { showSettings = false; page = NavPage.APP_CONSOLE },
+                    ) { Text(if (page == NavPage.APP_CONSOLE && !showSettings) "${Strings.t("nav_app_console")} *" else Strings.t("nav_app_console")) }
                 }
                 if (logcatVm != null) {
                     TextButton(
@@ -98,12 +95,6 @@ fun AppShell(
                         modifier = Modifier.fillMaxWidth().height(40.dp),
                         onClick = { showSettings = false; page = NavPage.SYSTEM_OPS },
                     ) { Text(if (page == NavPage.SYSTEM_OPS && !showSettings) "${Strings.t("nav_system_ops")} *" else Strings.t("nav_system_ops")) }
-                }
-                if (remoteVm != null) {
-                    TextButton(
-                        modifier = Modifier.fillMaxWidth().height(40.dp),
-                        onClick = { showSettings = false; page = NavPage.REMOTE },
-                    ) { Text(if (page == NavPage.REMOTE && !showSettings) "${Strings.t("nav_remote")} *" else Strings.t("nav_remote")) }
                 }
                 if (fileExplorerVm != null) {
                     TextButton(
@@ -127,14 +118,19 @@ fun AppShell(
                     showSettings && settingsVm != null && configDir != null -> {
                         SettingsScreen(vm = settingsVm, configDir = configDir)
                     }
-                    selected != null && page == NavPage.APP_MANAGER && appManagerVm != null -> {
-                        AppManagerScreen(vm = appManagerVm)
+                    selected != null && page == NavPage.DEVICE_OVERVIEW
+                        && deviceOverviewDeviceInfoVm != null
+                        && deviceOverviewScreenshotVm != null
+                        && deviceOverviewRemoteVm != null -> {
+                        DeviceOverviewScreen(
+                            deviceInfoVm = deviceOverviewDeviceInfoVm,
+                            screenshotVm = deviceOverviewScreenshotVm,
+                            remoteVm = deviceOverviewRemoteVm,
+                            selectedSerial = selected,
+                        )
                     }
-                    selected != null && page == NavPage.DEVICE_INFO && deviceInfoVm != null -> {
-                        DeviceInfoScreen(vm = deviceInfoVm)
-                    }
-                    selected != null && page == NavPage.SCREENSHOT && screenshotVm != null -> {
-                        ScreenshotScreen(vm = screenshotVm)
+                    selected != null && page == NavPage.APP_CONSOLE && appConsoleVm != null -> {
+                        AppConsoleScreen(vm = appConsoleVm, selectedSerial = selected)
                     }
                     selected != null && page == NavPage.LOGCAT && logcatVm != null -> {
                         LogcatScreen(vm = logcatVm)
@@ -144,9 +140,6 @@ fun AppShell(
                     }
                     selected != null && page == NavPage.SYSTEM_OPS && systemOpsVm != null -> {
                         SystemOpsScreen(vm = systemOpsVm, selectedSerial = selected)
-                    }
-                    selected != null && page == NavPage.REMOTE && remoteVm != null -> {
-                        RemoteScreen(vm = remoteVm, selectedSerial = selected)
                     }
                     selected != null && page == NavPage.FILE_EXPLORER && fileExplorerVm != null -> {
                         FileExplorerScreen(vm = fileExplorerVm, selectedSerial = selected)
@@ -158,7 +151,7 @@ fun AppShell(
     }
 }
 
-private enum class NavPage { DEVICE_INFO, SCREENSHOT, APP_MANAGER, LOGCAT, SHELL, SYSTEM_OPS, FILE_EXPLORER, REMOTE }
+private enum class NavPage { DEVICE_OVERVIEW, APP_CONSOLE, LOGCAT, SHELL, SYSTEM_OPS, FILE_EXPLORER }
 
 @Composable
 private fun DefaultRightPane() {

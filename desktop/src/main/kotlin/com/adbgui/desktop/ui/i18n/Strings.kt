@@ -161,6 +161,26 @@ object Strings {
         "upload" to "上传",
         "save_file" to "保存",
         "copy_path" to "复制路径",
+        // Nav reorg (Task 5)
+        "device_overview" to "设备概览",
+        "nav_device_overview" to "概览",
+        "app_console" to "应用控制台",
+        "nav_app_console" to "应用",
+        "force_stop" to "停止",
+        "start_app" to "启动",
+        "restart_app" to "重启",
+        "send_broadcast" to "发送广播",
+        "query_provider" to "查询 Provider",
+        "broadcast_result" to "广播结果",
+        "provider_result" to "查询结果",
+        "advanced_ops" to "高级操作",
+        "activity_name" to "Activity",
+        "start_activity" to "启动 Activity",
+        "broadcast_action" to "Action",
+        "broadcast_uri" to "URI（可选）",
+        "extras" to "Extras",
+        "provider_uri" to "URI",
+        "provider_where" to "Where（可选）",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -309,6 +329,26 @@ object Strings {
         "upload" to "Upload",
         "save_file" to "Save",
         "copy_path" to "Copy path",
+        // Nav reorg (Task 5)
+        "device_overview" to "Device Overview",
+        "nav_device_overview" to "Overview",
+        "app_console" to "App Console",
+        "nav_app_console" to "Apps",
+        "force_stop" to "Stop",
+        "start_app" to "Start",
+        "restart_app" to "Restart",
+        "send_broadcast" to "Send Broadcast",
+        "query_provider" to "Query Provider",
+        "broadcast_result" to "Broadcast Result",
+        "provider_result" to "Query Result",
+        "advanced_ops" to "Advanced",
+        "activity_name" to "Activity",
+        "start_activity" to "Start Activity",
+        "broadcast_action" to "Action",
+        "broadcast_uri" to "URI (optional)",
+        "extras" to "Extras",
+        "provider_uri" to "URI",
+        "provider_where" to "Where (optional)",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)

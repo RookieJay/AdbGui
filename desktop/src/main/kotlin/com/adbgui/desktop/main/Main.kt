@@ -6,7 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.adbgui.desktop.ui.AppShell
-import com.adbgui.desktop.ui.AppManagerViewModel
+import com.adbgui.desktop.ui.AppConsoleViewModel
 import com.adbgui.desktop.ui.DeviceInfoViewModel
 import com.adbgui.desktop.ui.DeviceListViewModel
 import com.adbgui.desktop.ui.FileExplorerViewModel
@@ -31,7 +31,7 @@ fun main() = application {
     val vm = DeviceListViewModel(root.repository, root.scope)
     val settingsVm = SettingsViewModel(root.settings, root.scope)
     val selectedSerial = remember { MutableStateFlow<String?>(null) }
-    val appManagerVm = AppManagerViewModel(root.repository, selectedSerial, root.scope)
+    val appConsoleVm = AppConsoleViewModel(root.repository, selectedSerial, root.scope)
     val deviceInfoVm = DeviceInfoViewModel(root.repository, selectedSerial, root.scope)
     val screenshotVm = ScreenshotViewModel(root.repository, selectedSerial, root.scope)
     val logcatController = com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope)
@@ -59,12 +59,12 @@ fun main() = application {
                 vm = vm,
                 settingsVm = settingsVm,
                 configDir = root.configDir,
-                appManagerVm = appManagerVm,
-                deviceInfoVm = deviceInfoVm,
-                screenshotVm = screenshotVm,
+                deviceOverviewDeviceInfoVm = deviceInfoVm,
+                deviceOverviewScreenshotVm = screenshotVm,
+                deviceOverviewRemoteVm = remoteVm,
+                appConsoleVm = appConsoleVm,
                 logcatVm = logcatVm,
                 systemOpsVm = systemOpsVm,
-                remoteVm = remoteVm,
                 fileExplorerVm = fileExplorerVm,
                 selectedSerial = selectedSerial,
                 onOpenShell = { serial ->
