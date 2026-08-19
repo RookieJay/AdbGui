@@ -22,11 +22,11 @@ data class Settings(
     val locale: String = "zh",
     val windowBounds: WindowBounds? = null,
     val remoteButtons: List<RemoteButton> = listOf(
-        RemoteButton("vol_up", "Vol +", 24),
-        RemoteButton("vol_down", "Vol −", 25),
-        RemoteButton("vol_mute", "Mute", 91),
-        RemoteButton("power", "Power", 26),
-        RemoteButton("app_switch", "App Switch", 187),
+        RemoteButton("vol_up", "音量+", 24),
+        RemoteButton("vol_down", "音量−", 25),
+        RemoteButton("vol_mute", "静音", 91),
+        RemoteButton("power", "电源", 26),
+        RemoteButton("app_switch", "应用切换", 187),
     ),
 )
 

@@ -92,7 +92,7 @@ fun RemoteScreen(
                     }
                 }
             }
-            OutlinedButton(onClick = { showAdd = true }) { Text(Strings.t("add_button")) }
+            TextButton(onClick = { showAdd = true }) { Text("+ ${Strings.t("add_button")}") }
             error?.let { msg ->
                 LaunchedEffect(msg) {
                     kotlinx.coroutines.delay(3000)
