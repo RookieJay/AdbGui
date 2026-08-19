@@ -39,6 +39,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.DeviceView
 import com.adbgui.desktop.ui.i18n.Strings
@@ -163,10 +169,22 @@ private fun DeviceRow(
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 if (renaming) {
+                    val focusRequester = remember { FocusRequester() }
+                    androidx.compose.runtime.LaunchedEffect(renaming) {
+                        if (renaming) focusRequester.requestFocus()
+                    }
                     TextField(
                         value = aliasDraft,
                         onValueChange = { aliasDraft = it },
-                        modifier = Modifier.widthIn(max = 180.dp),
+                        modifier = Modifier.widthIn(max = 180.dp)
+                            .focusRequester(focusRequester)
+                            .onPreviewKeyEvent { e ->
+                                if (e.key == Key.Enter || e.key == Key.NumPadEnter) {
+                                    onRename(aliasDraft.ifBlank { null })
+                                    renaming = false
+                                    true
+                                } else false
+                            },
                         singleLine = true,
                     )
                     Row {
