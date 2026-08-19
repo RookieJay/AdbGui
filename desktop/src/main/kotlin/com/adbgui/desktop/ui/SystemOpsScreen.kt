@@ -32,6 +32,7 @@ fun SystemOpsScreen(
     vm: SystemOpsViewModel,
     selectedSerial: String?,
     modifier: Modifier = Modifier,
+    onOpenShell: (String) -> Unit = {},
 ) {
     val error by vm.error.collectAsState()
     val message by vm.message.collectAsState()
@@ -70,6 +71,7 @@ fun SystemOpsScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(enabled = !busy, onClick = { vm.root() }) { Text(Strings.t("root_op")) }
                 OutlinedButton(enabled = !busy, onClick = { vm.remount() }) { Text(Strings.t("remount_op")) }
+                OutlinedButton(enabled = selectedSerial != null, onClick = { onOpenShell(selectedSerial!!) }) { Text(Strings.t("open_shell")) }
             }
 
             message?.let { msg ->

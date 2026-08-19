@@ -73,7 +73,16 @@ class CommandRunner(
 
     suspend fun deviceProps(serial: String): DeviceProps {
         val r = runCmd(serial, listOf("shell", "getprop"))
-        return GetpropParser.parse(r.stdout, serial)
+        var props = GetpropParser.parse(r.stdout, serial)
+        // Resolution isn't in getprop on most devices — use wm size
+        val wmSizeRe = Regex("Physical size: (\\d+x\\d+)")
+        runCatching { runner.run(adb(), listOf("-s", serial, "shell", "wm", "size")).stdout }
+            .getOrNull()?.let { out ->
+                wmSizeRe.find(out)?.groupValues?.get(1)?.let { res ->
+                    props = props.copy(resolution = res)
+                }
+            }
+        return props
     }
 
     suspend fun screenshot(serial: String): ByteArray {

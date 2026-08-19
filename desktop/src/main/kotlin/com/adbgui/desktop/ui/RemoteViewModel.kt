@@ -35,12 +35,22 @@ class RemoteViewModel(
     }
 
     fun addButton(label: String, keycode: Int) = scope.launch {
+        val existing = settingsStore.load().remoteButtons
+        if (existing.any { it.keycode == keycode }) {
+            _error.value = "Keycode $keycode 已存在（按钮：${existing.first { it.keycode == keycode }.label}）"
+            return@launch
+        }
         val btn = RemoteButton(id = "btn_${System.currentTimeMillis()}", label = label, keycode = keycode)
         settingsStore.update { it.copy(remoteButtons = it.remoteButtons + btn) }
         refresh()
     }
 
     fun updateButton(id: String, label: String, keycode: Int) = scope.launch {
+        val existing = settingsStore.load().remoteButtons
+        if (existing.any { it.keycode == keycode && it.id != id }) {
+            _error.value = "Keycode $keycode 已存在（按钮：${existing.first { it.keycode == keycode && it.id != id }.label}）"
+            return@launch
+        }
         settingsStore.update { s ->
             s.copy(remoteButtons = s.remoteButtons.map { if (it.id == id) it.copy(label = label, keycode = keycode) else it })
         }

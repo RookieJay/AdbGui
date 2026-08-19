@@ -2,6 +2,7 @@ package com.adbgui.desktop.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,12 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
 
-/**
- * Device Overview screen: composes the three existing feature screens
- * ([DeviceInfoScreen], [ScreenshotScreen], [RemoteScreen]) into a single scrollable
- * page. Errors remain inline (delegated to each sub-screen). Refresh/Capture/Send
- * actions live inside their respective sub-screens.
- */
 @Composable
 fun DeviceOverviewScreen(
     deviceInfoVm: DeviceInfoViewModel,
@@ -37,11 +32,16 @@ fun DeviceOverviewScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(Strings.t("device_overview"), style = MaterialTheme.typography.h5)
-            // --- Props + export (DeviceInfoScreen hosts its own Refresh/Export) ---
-            DeviceInfoScreen(vm = deviceInfoVm, modifier = Modifier.fillMaxWidth())
-            // --- Screenshot (Capture/Save + preview) ---
-            ScreenshotScreen(vm = screenshotVm, modifier = Modifier.fillMaxWidth())
-            // --- Remote (D-pad + Back/Home/Menu + custom buttons) ---
+            // --- Top row: device info (left) + screenshot (right) ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                DeviceInfoScreen(vm = deviceInfoVm, modifier = Modifier.weight(1f))
+                ScreenshotScreen(vm = screenshotVm, modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(8.dp))
+            // --- Remote (full width below) ---
             RemoteScreen(vm = remoteVm, selectedSerial = selectedSerial, modifier = Modifier.fillMaxWidth())
         }
     }

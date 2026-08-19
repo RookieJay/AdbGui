@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
+import androidx.compose.material.AlertDialog
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
@@ -67,6 +68,7 @@ fun AppConsoleScreen(
     var search by remember { mutableStateOf("") }
     var errorExpanded by remember { mutableStateOf(true) }
     var advancedOpen by remember { mutableStateOf(false) }
+    var confirmUninstall by remember { mutableStateOf<String?>(null) }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
         if (selectedSerial == null) {
@@ -185,7 +187,7 @@ fun AppConsoleScreen(
                         Button(enabled = !busy, onClick = { vm.forceStop(sel) }) { Text(Strings.t("force_stop")) }
                         Button(enabled = !busy, onClick = { vm.restart(sel) }) { Text(Strings.t("restart_app")) }
                         OutlinedButton(enabled = !busy, onClick = { vm.clearData(sel) }) { Text(Strings.t("clear")) }
-                        OutlinedButton(enabled = !busy, onClick = { vm.uninstall(sel); selectedPkg = null }) {
+                        OutlinedButton(enabled = !busy, onClick = { confirmUninstall = sel }) {
                             Text(Strings.t("uninstall"))
                         }
                     }
@@ -210,6 +212,19 @@ fun AppConsoleScreen(
                 }
             }
         }
+    }
+
+    // Uninstall confirmation
+    confirmUninstall?.let { pkg ->
+        AlertDialog(
+            onDismissRequest = { confirmUninstall = null },
+            title = { Text(Strings.t("uninstall")) },
+            text = { Text("$pkg?") },
+            confirmButton = {
+                TextButton(onClick = { vm.uninstall(pkg); confirmUninstall = null }) { Text(Strings.t("uninstall")) }
+            },
+            dismissButton = { TextButton(onClick = { confirmUninstall = null }) { Text(Strings.t("cancel")) } },
+        )
     }
 }
 

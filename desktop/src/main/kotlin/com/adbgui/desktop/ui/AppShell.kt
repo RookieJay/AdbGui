@@ -25,16 +25,6 @@ import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.nio.file.Path
 
-/**
- * Two-pane app shell: left = device list sidebar (+ Settings nav entry), right = content slot.
- * Right pane defaults to "No device selected"; a Settings entry swaps it to [SettingsScreen]
- * when `settingsVm` and `configDir` are supplied; selecting a device swaps it to one of the
- * feature pages (nav buttons toggle pages).
- *
- * Nav reorg (Task 5): NavPage consolidated from 8 entries to 6 —
- * `DEVICE_OVERVIEW` (composes DeviceInfo + Screenshot + Remote) and `APP_CONSOLE`
- * (replaces APP_MANAGER) replace the four old entries DEVICE_INFO/SCREENSHOT/APP_MANAGER/REMOTE.
- */
 @Composable
 fun AppShell(
     vm: DeviceListViewModel,
@@ -86,10 +76,6 @@ fun AppShell(
                         onClick = { showSettings = false; page = NavPage.LOGCAT },
                     ) { Text(if (page == NavPage.LOGCAT && !showSettings) "${Strings.t("nav_logcat")} *" else Strings.t("nav_logcat")) }
                 }
-                TextButton(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                    onClick = { showSettings = false; page = NavPage.SHELL },
-                ) { Text(if (page == NavPage.SHELL && !showSettings) "${Strings.t("nav_shell")} *" else Strings.t("nav_shell")) }
                 if (systemOpsVm != null) {
                     TextButton(
                         modifier = Modifier.fillMaxWidth().height(40.dp),
@@ -118,10 +104,7 @@ fun AppShell(
                     showSettings && settingsVm != null && configDir != null -> {
                         SettingsScreen(vm = settingsVm, configDir = configDir)
                     }
-                    selected != null && page == NavPage.DEVICE_OVERVIEW
-                        && deviceOverviewDeviceInfoVm != null
-                        && deviceOverviewScreenshotVm != null
-                        && deviceOverviewRemoteVm != null -> {
+                    selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewScreenshotVm != null && deviceOverviewRemoteVm != null -> {
                         DeviceOverviewScreen(
                             deviceInfoVm = deviceOverviewDeviceInfoVm,
                             screenshotVm = deviceOverviewScreenshotVm,
@@ -135,11 +118,8 @@ fun AppShell(
                     selected != null && page == NavPage.LOGCAT && logcatVm != null -> {
                         LogcatScreen(vm = logcatVm)
                     }
-                    selected != null && page == NavPage.SHELL -> {
-                        ShellScreen(selectedSerial = selected, onOpenShell = onOpenShell)
-                    }
                     selected != null && page == NavPage.SYSTEM_OPS && systemOpsVm != null -> {
-                        SystemOpsScreen(vm = systemOpsVm, selectedSerial = selected)
+                        SystemOpsScreen(vm = systemOpsVm, selectedSerial = selected, onOpenShell = onOpenShell)
                     }
                     selected != null && page == NavPage.FILE_EXPLORER && fileExplorerVm != null -> {
                         FileExplorerScreen(vm = fileExplorerVm, selectedSerial = selected)
@@ -151,7 +131,7 @@ fun AppShell(
     }
 }
 
-private enum class NavPage { DEVICE_OVERVIEW, APP_CONSOLE, LOGCAT, SHELL, SYSTEM_OPS, FILE_EXPLORER }
+private enum class NavPage { DEVICE_OVERVIEW, APP_CONSOLE, LOGCAT, SYSTEM_OPS, FILE_EXPLORER }
 
 @Composable
 private fun DefaultRightPane() {
