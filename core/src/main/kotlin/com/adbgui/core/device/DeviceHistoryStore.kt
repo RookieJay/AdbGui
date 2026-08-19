@@ -49,7 +49,9 @@ class DeviceHistoryStore(
         }
 
     suspend fun setAlias(serial: String, alias: String?) = mutate { entries ->
-        entries.map { if (it.serial == serial) it.copy(alias = alias) else it }
+        val existing = entries.indexOfFirst { it.serial == serial }
+        if (existing >= 0) entries.map { if (it.serial == serial) it.copy(alias = alias) else it }
+        else entries + DeviceHistoryEntry(serial = serial, alias = alias)
     }
 
     suspend fun remove(serial: String) = mutate { entries -> entries.filterNot { it.serial == serial } }
