@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -91,7 +93,13 @@ fun RemoteScreen(
                 }
             }
             OutlinedButton(onClick = { showAdd = true }) { Text(Strings.t("add_button")) }
-            error?.let { SelectableText(it, modifier = Modifier.padding(4.dp)) }
+            error?.let { msg ->
+                LaunchedEffect(msg) {
+                    kotlinx.coroutines.delay(3000)
+                    vm.clearError()
+                }
+                SelectableText(msg, color = androidx.compose.ui.graphics.Color(0xFFC62828), modifier = Modifier.padding(4.dp))
+            }
         }
     }
 
