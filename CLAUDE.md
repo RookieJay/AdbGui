@@ -56,6 +56,31 @@ Windows 优先的 adb GUI 桌面工具，服务开发/测试人员：快速连�
 - 协程 scope：`CommandRunner`/`DeviceRepository` 用注入的 scope，命令可取消；`DeviceTracker` 用长生命周期 scope，不随功能页销毁。
 - 持久化文件写用户配置目录（Windows: `%APPDATA%/AdbGui/`）：`settings.json`、`devices.json`、`logs/`。原子写：写 `.tmp` 再 `ATOMIC_MOVE` 重命名。
 
+## 技术债防范规范（强制）
+
+以下规则来自 v1/v2 开发中踩过的坑，违反 = 引入已知技术债。
+
+### 1. `:core` 所有 I/O 操作必须注入 Dispatcher
+- 任何 `withContext(Dispatchers.IO)` **不许硬编码 `Dispatchers.IO`**——构造函数接收 `io: CoroutineDispatcher = Dispatchers.IO`，测试传 `Dispatchers.Unconfined`。
+- 硬编码 `Dispatchers.IO` 在 `runTest` 下跑在真实线程池（非 test scheduler）→ `advanceUntilIdle()` 无法等待 → 测试 flaky → 不得不加轮询 workaround → 技术债。
+- **已修**：`DeviceHistoryStore`、`SettingsStore` 注入了 `io` 参数。新 store/仓库必须照此做。
+
+### 2. 不留死代码
+- **不许加"以后可能用"的占位代码**（空 `scope.launch{}`、未引用的异常类、未用的构造参数）。
+- 重构移除某用法时，**同时删除声明**——不要留未引用的 class/val/param。
+- **已修**：删了 `NoDeviceSelectedException`（守卫移到 UI 层后未删）、`DeviceTracker.clock`（轮询化后未用但构造参数留着）、`DeviceRepository` 空 `scope.launch{}`（占位从未填充）。
+- 检查清单：提交前 `grep -rn "ClassName" --include="*.kt"` 如果只在定义处出现 → 删。
+
+### 3. 跨线程可变状态必须标记
+- `:core` 里跨线程读写的 `var` 字段**必须 `@Volatile`** 或包在 `Mutex.withLock` 内，或改用 `MutableStateFlow`（`.value` 本身线程安全）。
+- 普通的 `private var` 不保证可见性 → stop-during-reconnect 等竞态下子进程泄漏。
+- **已修**：`LogcatController.stream` 加了 `@Volatile`。新 controller/长生命周期组件的跨线程 `var` 必须照此做。
+
+### 4. Parser fixture 必须真实录制
+- adb 输出 fixture **不许手写**——必须从真机 `adb shell ... > fixtures/xxx.txt` 录制。手写 fixture 漏了变体（日期格式 `Mon DD` vs `YYYY-MM-DD`、symlink `->` 格式、权限字符差异）→ 跨设备运行时静默丢行。
+- 检查清单：fixture 文件头一行注释标明来源设备 + Android 版本 + 录制日期。
+- **已知未修**：`LsParser` 只覆盖了 VIDAA TV 的 `YYYY-MM-DD` 格式；旧 Android 可能用 `Mon DD HH:MM`。需补充多设备 fixture。
+
 ## v1 范围边界（非 v1 不做）
 
 v1 = 连接管理核心 + 应用管理 + 设备信息 + 截图 + 日志。以下**不在 v1**，新增需先更新 spec 再开任务，不要顺手扩：
