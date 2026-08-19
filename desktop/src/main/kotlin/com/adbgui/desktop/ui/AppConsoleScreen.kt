@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
@@ -170,13 +172,13 @@ fun AppConsoleScreen(
                 }
             } else {
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
                         sel,
                         style = MaterialTheme.typography.subtitle1,
-                        modifier = Modifier.background(MaterialTheme.colors.background).padding(8.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(8.dp).fillMaxWidth(),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(enabled = !busy, onClick = { vm.startApp(sel) }) { Text(Strings.t("start_app")) }
@@ -255,7 +257,7 @@ private fun AdvancedPanel(
     var pWhere by remember { mutableStateOf("") }
 
     Surface(
-        color = MaterialTheme.colors.background,
+        color = MaterialTheme.colors.surface,
         shape = RoundedCornerShape(4.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
