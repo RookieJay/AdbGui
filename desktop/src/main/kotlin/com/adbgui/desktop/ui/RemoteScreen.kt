@@ -82,7 +82,7 @@ fun RemoteScreen(
                                     }
                                 }
                             ) {
-                                OutlinedButton(onClick = { vm.sendKey(btn.keycode) }, enabled = !busy) { Text(btn.label) }
+                                OutlinedButton(onClick = { vm.sendKey(btn.keycode) }, enabled = !busy) { Text(remoteButtonLabel(btn)) }
                                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                                     DropdownMenuItem(onClick = { menuOpen = false; editingButton = btn }) { Text(Strings.t("edit_button")) }
                                     DropdownMenuItem(onClick = { menuOpen = false; confirmDelete = btn }) { Text(Strings.t("remove")) }
@@ -128,6 +128,19 @@ fun RemoteScreen(
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(Strings.t("cancel")) } },
         )
     }
+}
+
+@Composable
+private fun remoteButtonLabel(btn: RemoteButton): String {
+    val key = when (btn.id) {
+        "vol_up" -> "btn_vol_up"
+        "vol_down" -> "btn_vol_down"
+        "vol_mute" -> "btn_vol_mute"
+        "power" -> "btn_power"
+        "app_switch" -> "btn_app_switch"
+        else -> return btn.label  // user-added button → show as-is
+    }
+    return Strings.t(key)
 }
 
 @Composable
