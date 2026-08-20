@@ -53,6 +53,9 @@ class DeviceTracker(
                 consecutiveFailures = 0
             } catch (t: Throwable) {
                 consecutiveFailures++
+                // A failed poll may mean the adb server died; drop the cached "started"
+                // flag so the next loop re-runs start-server (self-heal within ~2s).
+                server.invalidate()
                 logger.warn("devices poll error: ${t.message}")
                 if (consecutiveFailures >= 3) {
                     _status.value = TrackerStatus.FAILED
