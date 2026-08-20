@@ -88,7 +88,7 @@ class CommandRunner(
     suspend fun screenshot(serial: String): ByteArray {
         server.ensureStarted()
         logger.info("[screenshot] adb exec-out screencap start serial=$serial")
-        val raw = runner.runBinary(adb(), listOf("-s", serial, "exec-out", "screencap", "-p"), timeoutMs = 15_000L)
+        val raw = runner.runBinary(adb(), listOf("-s", serial, "exec-out", "screencap", "-p"), timeoutMs = 30_000L)
         logger.info("[screenshot] adb returned raw=${raw.size} bytes")
         val png = extractPng(raw) ?: throw AdbCommandException(
             command = "adb -s $serial exec-out screencap -p",

@@ -8,6 +8,9 @@ import java.io.StringWriter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 class FileLogger(
     private val logDir: Path,
@@ -18,6 +21,7 @@ class FileLogger(
     private val maxFiles = 5
     private val current get() = logDir.resolve("adbgui.log")
     private val lock = Any()
+    private val tsFmt = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss.SSS").withZone(ZoneId.systemDefault())
 
     init { Files.createDirectories(logDir) }
 
@@ -33,6 +37,7 @@ class FileLogger(
         synchronized(lock) {
             maybeRoll()
             val line = buildString {
+                append("[").append(tsFmt.format(Instant.ofEpochMilli(clock()))).append("] ")
                 append("[").append(lvl.name).append("] ").append(msg)
                 if (t != null) {
                     val sw = StringWriter(); t.printStackTrace(PrintWriter(sw)); append("\n").append(sw)
