@@ -8,6 +8,8 @@ plugins {
 dependencies {
     implementation(project(":core"))
     implementation(compose.desktop.currentOs)
+    implementation("net.java.dev.jna:jna:5.14.0")
+    implementation("net.java.dev.jna:jna-platform:5.14.0")
     testImplementation(kotlin("test"))
     testImplementation(libs.coroutines.test)
 }
