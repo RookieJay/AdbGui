@@ -21,6 +21,9 @@ data class Settings(
     val theme: String = "system",
     val locale: String = "zh",
     val windowBounds: WindowBounds? = null,
+    val scrcpyPathOverride: String? = null,
+    val scrcpyDownloadUrl: String? = null,  // null = GitHub releases
+    val scrcpyMode: String = "EXTERNAL",  // EMBEDDED / EXTERNAL
     val remoteButtons: List<RemoteButton> = listOf(
         RemoteButton("vol_up", "音量+", 24),
         RemoteButton("vol_down", "音量−", 25),
