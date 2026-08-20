@@ -24,6 +24,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.ScrcpyMode
 import com.adbgui.core.domain.ScrcpyOptions
+import com.adbgui.core.domain.ScrcpyLaunchProfile
 import com.adbgui.desktop.platform.ScrcpyInstaller
 import com.adbgui.desktop.platform.ScrcpyLauncher
 import com.adbgui.desktop.platform.WindowsScrcpyLocator
@@ -54,6 +56,7 @@ fun DeviceOverviewScreen(
     scrcpyInstaller: ScrcpyInstaller,
     scrcpyLocator: WindowsScrcpyLocator,
     scrcpyLauncher: ScrcpyLauncher,
+    settingsVm: SettingsViewModel? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
@@ -93,6 +96,22 @@ fun DeviceOverviewScreen(
             val optMaxSize = remember { mutableStateOf(ScrcpyOptions().maxSize.toString()) }
             val optMaxFps = remember { mutableStateOf(ScrcpyOptions().maxFps.toString()) }
             val optRecordPath = remember { mutableStateOf(ScrcpyOptions().recordPath.orEmpty()) }
+            // Seed opt states from the persisted profile (re-applied when scrcpyLaunch changes —
+            // i.e. on initial async load and after each save; on save the values are what the user
+            // just launched, so re-apply is a no-op).
+            val settingsState = settingsVm?.settings?.collectAsState()?.value
+            LaunchedEffect(settingsState?.scrcpyLaunch) {
+                val p = settingsState?.scrcpyLaunch ?: return@LaunchedEffect
+                optMaxSize.value = p.maxSize.toString()
+                optMaxFps.value = p.maxFps.toString()
+                optStayAwake.value = p.stayAwake
+                optTurnScreenOff.value = p.turnScreenOff
+                optAlwaysOnTop.value = p.alwaysOnTop
+                optFullscreen.value = p.fullscreen
+                optNoAudio.value = p.noAudio
+                optRecord.value = !p.recordFolder.isNullOrBlank()
+                optRecordPath.value = p.recordFolder ?: ""
+            }
             val showShortcuts = remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
@@ -214,6 +233,18 @@ fun DeviceOverviewScreen(
                                     fullscreen = optFullscreen.value,
                                     maxFps = optMaxFps.value.toIntOrNull() ?: 0,
                                     noAudio = optNoAudio.value,
+                                )
+                                settingsVm?.setScrcpyLaunch(
+                                    ScrcpyLaunchProfile(
+                                        maxSize = optMaxSize.value.toIntOrNull() ?: 0,
+                                        stayAwake = optStayAwake.value,
+                                        turnScreenOff = optTurnScreenOff.value,
+                                        alwaysOnTop = optAlwaysOnTop.value,
+                                        fullscreen = optFullscreen.value,
+                                        maxFps = optMaxFps.value.toIntOrNull() ?: 0,
+                                        noAudio = optNoAudio.value,
+                                        recordFolder = if (optRecord.value) optRecordPath.value.ifBlank { null } else null,
+                                    )
                                 )
                                 scrcpyRunning.value = true
                                 scrcpyError.value = null

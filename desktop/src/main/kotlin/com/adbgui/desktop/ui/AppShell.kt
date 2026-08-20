@@ -118,6 +118,7 @@ fun AppShell(
                             scrcpyInstaller = scrcpyInstaller,
                             scrcpyLocator = scrcpyLocator,
                             scrcpyLauncher = scrcpyLauncher,
+                            settingsVm = settingsVm,
                         )
                     }
                     selected != null && page == NavPage.APP_CONSOLE && appConsoleVm != null -> {
