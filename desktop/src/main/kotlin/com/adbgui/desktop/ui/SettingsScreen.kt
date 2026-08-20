@@ -33,6 +33,7 @@ import com.adbgui.desktop.ui.i18n.Strings
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
+import javax.swing.JFileChooser
 import java.io.File
 import java.nio.file.Path
 import java.util.zip.ZipEntry
@@ -138,12 +139,13 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = {
-                    val dialog = FileDialog(Frame(), Strings.t("select_scrcpy_binary"), FileDialog.LOAD)
-                    dialog.isMultipleMode = false
-                    dialog.isVisible = true
-                    val sel = dialog.file
-                    if (sel != null) {
-                        val chosen = File(dialog.directory, sel).absolutePath
+                    // JFileChooser (not AWT FileDialog): its "File name" field accepts a pasted
+                    // full path + Enter, so users can paste a copied scrcpy.exe path directly.
+                    val chooser = JFileChooser()
+                    chooser.isAcceptAllFileFilterUsed = false
+                    chooser.dialogTitle = Strings.t("select_scrcpy_binary")
+                    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                        val chosen = chooser.selectedFile.absolutePath
                         scrcpyDraft = chosen
                         vm.setScrcpyPath(chosen)
                         status = Strings.t("status_scrcpy_path_set").format(chosen)
