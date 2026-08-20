@@ -68,6 +68,8 @@ object Strings {
         "export_logs" to "导出日志",
         "status_adb_path_set" to "adb 路径已设置：%s",
         "status_adb_cleared" to "adb 路径覆盖已清除",
+        "status_scrcpy_path_set" to "scrcpy 路径已设置：%s",
+        "status_scrcpy_path_cleared" to "scrcpy 路径覆盖已清除",
         "status_log_level_set" to "日志级别已设置：%s",
         "status_open_failed" to "打开失败：%s",
         "status_no_logs" to "没有可导出的日志",
@@ -228,6 +230,7 @@ object Strings {
         "scrcpy_disconnected" to "投屏已断开",
         "scrcpy_retry" to "重试",
         "scrcpy_manual_path" to "手动指定路径",
+        "scrcpy_path_placeholder" to "（使用内置 / 自动下载）",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -283,6 +286,8 @@ object Strings {
         "export_logs" to "Export logs",
         "status_adb_path_set" to "adb path set: %s",
         "status_adb_cleared" to "adb override cleared",
+        "status_scrcpy_path_set" to "scrcpy path set: %s",
+        "status_scrcpy_path_cleared" to "scrcpy override cleared",
         "status_log_level_set" to "log level set: %s",
         "status_open_failed" to "open failed: %s",
         "status_no_logs" to "no logs to export",
@@ -443,6 +448,7 @@ object Strings {
         "scrcpy_disconnected" to "Mirror disconnected",
         "scrcpy_retry" to "Retry",
         "scrcpy_manual_path" to "Set Path Manually",
+        "scrcpy_path_placeholder" to "(use bundled / auto-download)",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)

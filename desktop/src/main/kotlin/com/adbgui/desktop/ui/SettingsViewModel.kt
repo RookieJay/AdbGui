@@ -17,6 +17,8 @@ class SettingsViewModel(private val store: SettingsStore, private val scope: Cor
     init { scope.launch { _settings.value = store.load() } }
 
     fun setAdbPath(path: String?) = scope.launch { store.update { it.copy(adbPathOverride = path) }; refresh() }
+    fun setScrcpyPath(path: String?) = scope.launch { store.update { it.copy(scrcpyPathOverride = path) }; refresh() }
+    fun setScrcpyMode(mode: String) = scope.launch { store.update { it.copy(scrcpyMode = mode) }; refresh() }
     fun setLogLevel(level: LogLevel) = scope.launch { store.update { it.copy(logLevel = level) }; refresh() }
     fun setLocale(locale: Locale) = scope.launch {
         store.update { it.copy(locale = locale.code) }

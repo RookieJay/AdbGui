@@ -54,6 +54,9 @@ fun SettingsScreen(
     var adbDraft by remember(settings.adbPathOverride) {
         mutableStateOf(settings.adbPathOverride.orEmpty())
     }
+    var scrcpyDraft by remember(settings.scrcpyPathOverride) {
+        mutableStateOf(settings.scrcpyPathOverride.orEmpty())
+    }
     var levelMenu by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
 
@@ -117,6 +120,34 @@ fun SettingsScreen(
                     adbDraft = ""
                     vm.setAdbPath(null)
                     status = Strings.t("status_adb_cleared")
+                }) { Text(Strings.t("clear")) }
+            }
+
+            Divider()
+
+            // --- scrcpy path override ---
+            Text(Strings.t("scrcpy"), style = MaterialTheme.typography.subtitle1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = scrcpyDraft,
+                    onValueChange = { scrcpyDraft = it },
+                    label = { Text(Strings.t("scrcpy_manual_path")) },
+                    placeholder = { Text(Strings.t("scrcpy_path_placeholder")) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val path = scrcpyDraft.trim().ifBlank { null }
+                    vm.setScrcpyPath(path)
+                    status = if (path == null) Strings.t("status_scrcpy_path_cleared")
+                    else Strings.t("status_scrcpy_path_set").format(path)
+                }) { Text(Strings.t("apply")) }
+                Spacer(Modifier.width(4.dp))
+                TextButton(onClick = {
+                    scrcpyDraft = ""
+                    vm.setScrcpyPath(null)
+                    status = Strings.t("status_scrcpy_path_cleared")
                 }) { Text(Strings.t("clear")) }
             }
 

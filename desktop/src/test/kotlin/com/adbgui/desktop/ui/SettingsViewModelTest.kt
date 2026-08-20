@@ -56,4 +56,26 @@ class SettingsViewModelTest {
         assertEquals(profile, vm.settings.value.scrcpyLaunch)
         assertEquals(profile, store.load().scrcpyLaunch)
     }
+
+    @Test
+    fun setScrcpyPath_persists_override() = runTest {
+        val dir = Files.createTempDirectory("scrcpy-path")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = SettingsViewModel(store, this)
+        vm.setScrcpyPath("/x/scrcpy.exe")
+        advanceUntilIdle()
+        assertEquals("/x/scrcpy.exe", vm.settings.value.scrcpyPathOverride)
+        assertEquals("/x/scrcpy.exe", store.load().scrcpyPathOverride)
+    }
+
+    @Test
+    fun setScrcpyMode_persists() = runTest {
+        val dir = Files.createTempDirectory("scrcpy-mode")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = SettingsViewModel(store, this)
+        vm.setScrcpyMode("EMBEDDED")
+        advanceUntilIdle()
+        assertEquals("EMBEDDED", vm.settings.value.scrcpyMode)
+        assertEquals("EMBEDDED", store.load().scrcpyMode)
+    }
 }
