@@ -25,14 +25,7 @@ class WindowsScrcpyLauncher : ScrcpyLauncher {
 
     override fun open(scrcpyPath: String, serial: String, options: ScrcpyOptions, mode: ScrcpyMode) {
         stop()
-        val args = buildList {
-            add(scrcpyPath)
-            add("-s"); add(serial)
-            if (options.maxSize > 0) { add("--max-size"); add(options.maxSize.toString()) }
-            if (options.stayAwake) add("--stay-awake")
-            if (options.turnScreenOff) add("--turn-screen-off")
-            options.recordPath?.let { add("--record"); add(it) }
-        }
+        val args = ScrcpyArgsBuilder.build(scrcpyPath, serial, options)
         val proc = ProcessBuilder(args).redirectErrorStream(true).start()
         processRef.set(proc)
         if (mode == ScrcpyMode.EMBEDDED) {
