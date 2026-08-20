@@ -32,8 +32,9 @@ fun AppShell(
     settingsVm: SettingsViewModel? = null,
     configDir: Path? = null,
     deviceOverviewDeviceInfoVm: DeviceInfoViewModel? = null,
-    deviceOverviewScreenshotVm: ScreenshotViewModel? = null,
     deviceOverviewRemoteVm: RemoteViewModel? = null,
+    onOpenScreenshot: () -> Unit = {},
+    screenshotLoading: Boolean = false,
     scrcpyInstaller: com.adbgui.desktop.platform.ScrcpyInstaller? = null,
     scrcpyLocator: com.adbgui.desktop.platform.WindowsScrcpyLocator? = null,
     scrcpyLauncher: com.adbgui.desktop.platform.ScrcpyLauncher? = null,
@@ -61,7 +62,7 @@ fun AppShell(
                     onReconnect = { ip, port -> vm.reconnect(ip, port) },
                 )
                 Divider()
-                if (deviceOverviewDeviceInfoVm != null && deviceOverviewScreenshotVm != null && deviceOverviewRemoteVm != null) {
+                if (deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null) {
                     TextButton(
                         modifier = Modifier.fillMaxWidth().height(40.dp),
                         onClick = { showSettings = false; page = NavPage.DEVICE_OVERVIEW },
@@ -107,11 +108,12 @@ fun AppShell(
                     showSettings && settingsVm != null && configDir != null -> {
                         SettingsScreen(vm = settingsVm, configDir = configDir)
                     }
-                    selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewScreenshotVm != null && deviceOverviewRemoteVm != null && scrcpyInstaller != null && scrcpyLocator != null && scrcpyLauncher != null -> {
+                    selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null && scrcpyInstaller != null && scrcpyLocator != null && scrcpyLauncher != null -> {
                         DeviceOverviewScreen(
                             deviceInfoVm = deviceOverviewDeviceInfoVm,
-                            screenshotVm = deviceOverviewScreenshotVm,
                             remoteVm = deviceOverviewRemoteVm,
+                            onOpenScreenshot = onOpenScreenshot,
+                            screenshotLoading = screenshotLoading,
                             selectedSerial = selected,
                             scrcpyInstaller = scrcpyInstaller,
                             scrcpyLocator = scrcpyLocator,

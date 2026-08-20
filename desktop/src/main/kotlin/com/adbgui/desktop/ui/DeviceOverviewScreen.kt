@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
@@ -38,12 +39,17 @@ import com.adbgui.desktop.platform.ScrcpyLauncher
 import com.adbgui.desktop.platform.WindowsScrcpyLocator
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.launch
+import java.io.File
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import javax.swing.JFileChooser
 
 @Composable
 fun DeviceOverviewScreen(
     deviceInfoVm: DeviceInfoViewModel,
-    screenshotVm: ScreenshotViewModel,
     remoteVm: RemoteViewModel,
+    onOpenScreenshot: () -> Unit,
+    screenshotLoading: Boolean,
     selectedSerial: String?,
     scrcpyInstaller: ScrcpyInstaller,
     scrcpyLocator: WindowsScrcpyLocator,
@@ -56,14 +62,14 @@ fun DeviceOverviewScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(Strings.t("device_overview"), style = MaterialTheme.typography.h5)
-            // --- Top row: device info (left) + screenshot (right) ---
-            Row(
+            // --- Device info (full width). Screenshot button lives in its toolbar;
+            // opens an independent window. ---
+            DeviceInfoScreen(
+                vm = deviceInfoVm,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                DeviceInfoScreen(vm = deviceInfoVm, modifier = Modifier.weight(1f))
-                ScreenshotScreen(vm = screenshotVm, modifier = Modifier.weight(1f))
-            }
+                onOpenScreenshot = onOpenScreenshot,
+                screenshotLoading = screenshotLoading,
+            )
             Spacer(Modifier.height(8.dp))
             // --- Remote (full width below) ---
             RemoteScreen(vm = remoteVm, selectedSerial = selectedSerial, modifier = Modifier.fillMaxWidth())
@@ -74,12 +80,16 @@ fun DeviceOverviewScreen(
             val scrcpyStatus = remember { mutableStateOf("installing") } // installing | installed | failed
             val scrcpyRunning = remember { mutableStateOf(false) }
             val scrcpyError = remember { mutableStateOf<String?>(null) }
+            // Path of the most recent recording (set at Start, kept after Stop so the user can
+            // locate the file). Cleared when a new投屏 starts without recording.
+            val lastRecordFile = remember { mutableStateOf<String?>(null) }
             // Launch options (session state). Defaults mirror ScrcpyOptions defaults.
             val optStayAwake = remember { mutableStateOf(ScrcpyOptions().stayAwake) }
             val optTurnScreenOff = remember { mutableStateOf(ScrcpyOptions().turnScreenOff) }
             val optAlwaysOnTop = remember { mutableStateOf(ScrcpyOptions().alwaysOnTop) }
             val optFullscreen = remember { mutableStateOf(ScrcpyOptions().fullscreen) }
             val optNoAudio = remember { mutableStateOf(ScrcpyOptions().noAudio) }
+            val optRecord = remember { mutableStateOf(false) }
             val optMaxSize = remember { mutableStateOf(ScrcpyOptions().maxSize.toString()) }
             val optMaxFps = remember { mutableStateOf(ScrcpyOptions().maxFps.toString()) }
             val optRecordPath = remember { mutableStateOf(ScrcpyOptions().recordPath.orEmpty()) }
@@ -153,13 +163,34 @@ fun DeviceOverviewScreen(
                             modifier = Modifier.width(140.dp),
                         )
                     }
-                    OutlinedTextField(
-                        value = optRecordPath.value,
-                        onValueChange = { optRecordPath.value = it },
-                        label = { Text(Strings.t("scrcpy_record")) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    // Recording is explicit: only when checked do we pass --record.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = optRecord.value, onCheckedChange = { optRecord.value = it })
+                        Spacer(Modifier.width(4.dp))
+                        Text(Strings.t("scrcpy_record_toggle"))
+                    }
+                    if (optRecord.value) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = optRecordPath.value,
+                                onValueChange = { optRecordPath.value = it },
+                                label = { Text(Strings.t("scrcpy_record")) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Button(onClick = {
+                                val chooser = JFileChooser()
+                                chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                                chooser.isAcceptAllFileFilterUsed = false
+                                chooser.dialogTitle = Strings.t("scrcpy_record")
+                                chooser.approveButtonText = Strings.t("select_folder")
+                                if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                                    optRecordPath.value = chooser.selectedFile.absolutePath
+                                }
+                            }) { Text(Strings.t("browse")) }
+                        }
+                    }
                     // --- Buttons row ---
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Button(
@@ -167,11 +198,18 @@ fun DeviceOverviewScreen(
                             onClick = {
                                 val path = scrcpyPath.value ?: return@Button
                                 val serial = selectedSerial ?: return@Button
+                                val recordPath = if (optRecord.value) {
+                                    optRecordPath.value.ifBlank { null }?.let {
+                                        val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                                        File(it, "scrcpy_$stamp.mp4").absolutePath
+                                    }
+                                } else null
+                                lastRecordFile.value = recordPath
                                 val options = ScrcpyOptions(
                                     maxSize = optMaxSize.value.toIntOrNull() ?: 0,
                                     stayAwake = optStayAwake.value,
                                     turnScreenOff = optTurnScreenOff.value,
-                                    recordPath = optRecordPath.value.ifBlank { null },
+                                    recordPath = recordPath,
                                     alwaysOnTop = optAlwaysOnTop.value,
                                     fullscreen = optFullscreen.value,
                                     maxFps = optMaxFps.value.toIntOrNull() ?: 0,
@@ -203,6 +241,27 @@ fun DeviceOverviewScreen(
                         }
                     }
                     scrcpyError.value?.let { SelectableText(it) }
+                    // After stopping, show the recorded file's path with open/reveal links.
+                    lastRecordFile.value?.let { path ->
+                        val f = File(path)
+                        Surface(
+                            color = MaterialTheme.colors.background,
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text(
+                                    Strings.t("saved_path").format(path),
+                                    style = MaterialTheme.typography.caption,
+                                )
+                                Row {
+                                    TextButton(onClick = { openFile(f) }) { Text(Strings.t("open")) }
+                                    Spacer(Modifier.width(8.dp))
+                                    TextButton(onClick = { revealFile(f) }) { Text(Strings.t("open_folder")) }
+                                }
+                            }
+                        }
+                    }
                     // --- Shortcuts dialog ---
                     if (showShortcuts.value) {
                         ScrcpyShortcutsDialog(onDismiss = { showShortcuts.value = false })

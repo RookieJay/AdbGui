@@ -43,6 +43,8 @@ import java.time.format.DateTimeFormatter
 fun DeviceInfoScreen(
     vm: DeviceInfoViewModel,
     modifier: Modifier = Modifier,
+    onOpenScreenshot: () -> Unit = {},
+    screenshotLoading: Boolean = false,
 ) {
     val props by vm.props.collectAsState()
     val error by vm.error.collectAsState()
@@ -73,6 +75,15 @@ fun DeviceInfoScreen(
                     enabled = props != null && !exportBusy,
                     onClick = { vm.export() },
                 ) { Text(Strings.t("export")) }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(
+                    enabled = !screenshotLoading,
+                    onClick = onOpenScreenshot,
+                ) { Text(Strings.t("screenshot")) }
+                if (screenshotLoading) {
+                    Spacer(Modifier.width(8.dp))
+                    CircularProgressIndicator(modifier = Modifier.width(18.dp))
+                }
                 if (exportBusy) {
                     Spacer(Modifier.width(8.dp))
                     CircularProgressIndicator(modifier = Modifier.width(18.dp))

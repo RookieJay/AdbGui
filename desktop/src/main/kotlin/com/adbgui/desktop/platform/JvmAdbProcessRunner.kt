@@ -6,6 +6,7 @@ import com.adbgui.core.adb.AdbStream
 import com.adbgui.core.domain.AdbBinary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
@@ -26,7 +27,18 @@ class JvmAdbProcessRunner : AdbProcessRunner {
 
     override suspend fun runBinary(adb: AdbBinary, args: List<String>, timeoutMs: Long?): ByteArray = withContext(Dispatchers.IO) {
         val proc = ProcessBuilder(listOf(adb.path) + args).redirectErrorStream(false).start()
-        val bytes = proc.inputStream.readBytes()
+        // Read on a child job so a timeout can cancel the wait and destroy the process;
+        // blocking readBytes() otherwise hangs forever if adb never closes stdout.
+        val readDeferred = async { proc.inputStream.readBytes() }
+        val bytes: ByteArray? = if (timeoutMs != null) {
+            withTimeoutOrNull(timeoutMs) { readDeferred.await() }
+        } else {
+            readDeferred.await()
+        }
+        if (bytes == null) {
+            proc.destroyForcibly()
+            throw RuntimeException("adb timeout: ${args.joinToString(" ")}")
+        }
         proc.waitFor()
         bytes
     }

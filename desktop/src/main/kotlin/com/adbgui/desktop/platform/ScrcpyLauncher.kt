@@ -38,7 +38,7 @@ class WindowsScrcpyLauncher : ScrcpyLauncher {
             Thread {
                 try {
                     Thread.sleep(2000) // wait for the SDL window to appear
-                    val scrcpyHwnd = findScrcpyWindow(serial) ?: return@Thread
+                    val scrcpyHwnd = findScrcpyWindow(proc.pid()) ?: return@Thread
                     // Native.getComponentID returns the canvas HWND; requires the canvas
                     // to be added to a heavyweight peer (displayable window).
                     val canvasHwndLong = Native.getComponentID(canvas)
@@ -59,26 +59,46 @@ class WindowsScrcpyLauncher : ScrcpyLauncher {
     }
 
     override fun stop() {
-        processRef.getAndSet(null)?.destroyForcibly()
+        val proc = processRef.getAndSet(null) ?: return
         canvasRef.set(null)
+        // Graceful stop: post WM_CLOSE to the scrcpy SDL window so scrcpy exits its
+        // main loop cleanly and finalizes any in-progress --record mp4 (writes the moov
+        // atom). Process.destroy()/destroyForcibly() on Windows both force-kill
+        // (TerminateProcess), which would corrupt an mp4 being recorded. We wait up
+        // to 3s for a clean exit, then force-kill as a fallback. Runs off the UI thread.
+        Thread {
+            try {
+                val hwnd = findScrcpyWindow(proc.pid())
+                if (hwnd != null) {
+                    User32.INSTANCE.PostMessage(hwnd, WinUser.WM_CLOSE, WinDef.WPARAM(0), WinDef.LPARAM(0))
+                    val deadline = System.currentTimeMillis() + 3000
+                    while (proc.isAlive && System.currentTimeMillis() < deadline) {
+                        Thread.sleep(100)
+                    }
+                }
+                if (proc.isAlive) proc.destroyForcibly()
+            } catch (_: Throwable) {
+                if (proc.isAlive) proc.destroyForcibly()
+            }
+        }.also { it.isDaemon = true; it.start() }
     }
 
     override fun embeddedCanvas(): Canvas? = canvasRef.get()
 
-    private fun findScrcpyWindow(serial: String): WinDef.HWND? {
+    /** Finds the visible top-level window belonging to [pid] (the scrcpy SDL window).
+     * Matched by process id, not title — scrcpy's window title is the device model,
+     * not the serial, so title-based matching would miss it. */
+    private fun findScrcpyWindow(pid: Long): WinDef.HWND? {
         val user32 = User32.INSTANCE
         var found: WinDef.HWND? = null
+        val pidRef = com.sun.jna.ptr.IntByReference()
         val proc = object : WinUser.WNDENUMPROC {
             override fun callback(hWnd: WinDef.HWND, data: Pointer?): Boolean {
                 if (found != null) return false
-                val buf = CharArray(256)
-                val len = user32.GetWindowText(hWnd, buf, 256)
-                if (len > 0) {
-                    val title = String(buf, 0, len)
-                    if (title.contains("scrcpy", ignoreCase = true) && title.contains(serial)) {
-                        found = hWnd
-                        return false
-                    }
+                user32.GetWindowThreadProcessId(hWnd, pidRef)
+                if (pidRef.value.toLong() == pid && user32.IsWindowVisible(hWnd)) {
+                    found = hWnd
+                    return false
                 }
                 return true
             }
