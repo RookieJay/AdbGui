@@ -138,6 +138,19 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = {
+                    val dialog = FileDialog(Frame(), Strings.t("select_scrcpy_binary"), FileDialog.LOAD)
+                    dialog.isMultipleMode = false
+                    dialog.isVisible = true
+                    val sel = dialog.file
+                    if (sel != null) {
+                        val chosen = File(dialog.directory, sel).absolutePath
+                        scrcpyDraft = chosen
+                        vm.setScrcpyPath(chosen)
+                        status = Strings.t("status_scrcpy_path_set").format(chosen)
+                    }
+                }) { Text(Strings.t("browse")) }
+                Spacer(Modifier.width(4.dp))
+                Button(onClick = {
                     val path = scrcpyDraft.trim().ifBlank { null }
                     vm.setScrcpyPath(path)
                     status = if (path == null) Strings.t("status_scrcpy_path_cleared")

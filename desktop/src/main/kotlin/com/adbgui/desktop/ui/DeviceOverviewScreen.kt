@@ -32,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.ScrcpyMode
 import com.adbgui.core.domain.ScrcpyOptions
@@ -128,6 +129,17 @@ fun DeviceOverviewScreen(
             when (scrcpyStatus.value) {
                 "installed" -> {
                     Text(Strings.t("scrcpy_status_installed"))
+                    // Launch/run errors surface here (red, top of section) so they're not
+                    // buried below the buttons in black text.
+                    scrcpyError.value?.let { msg ->
+                        Surface(
+                            color = Color(0xFFFFCDD2),
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            SelectableText(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
+                        }
+                    }
                     // Mode toggle. EXTERNAL works; EMBEDDED (JNA reparent) is reserved —
                     // disabled pending implementation, slot kept so users know it's planned.
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -287,7 +299,6 @@ fun DeviceOverviewScreen(
                             Text(Strings.t("scrcpy_shortcuts"))
                         }
                     }
-                    scrcpyError.value?.let { SelectableText(it) }
                     // After stopping, show the recorded file's path with open/reveal links.
                     lastRecordFile.value?.let { path ->
                         val f = File(path)

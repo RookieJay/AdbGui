@@ -231,6 +231,7 @@ object Strings {
         "scrcpy_retry" to "重试",
         "scrcpy_manual_path" to "手动指定路径",
         "scrcpy_path_placeholder" to "（使用内置 / 自动下载）",
+        "select_scrcpy_binary" to "选择 scrcpy 可执行文件",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -449,6 +450,7 @@ object Strings {
         "scrcpy_retry" to "Retry",
         "scrcpy_manual_path" to "Set Path Manually",
         "scrcpy_path_placeholder" to "(use bundled / auto-download)",
+        "select_scrcpy_binary" to "Select scrcpy binary",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)
