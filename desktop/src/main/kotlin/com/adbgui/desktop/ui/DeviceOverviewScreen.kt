@@ -84,15 +84,16 @@ fun DeviceOverviewScreen(
             when (scrcpyStatus.value) {
                 "installed" -> {
                     Text(Strings.t("scrcpy_status_installed"))
-                    // Mode toggle — EXTERNAL default; full settings later.
+                    // Mode toggle. EXTERNAL works; EMBEDDED (JNA reparent) is reserved —
+                    // disabled pending implementation, slot kept so users know it's planned.
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        RadioButton(selected = true, onClick = {})
+                        RadioButton(selected = true, onClick = {}, enabled = false)
                         Spacer(Modifier.width(4.dp))
                         Text(Strings.t("scrcpy_mode_external"))
                         Spacer(Modifier.width(16.dp))
-                        RadioButton(selected = false, onClick = {})
+                        RadioButton(selected = false, onClick = {}, enabled = false)
                         Spacer(Modifier.width(4.dp))
-                        Text(Strings.t("scrcpy_mode_embedded"))
+                        Text(Strings.t("scrcpy_mode_embedded") + " " + Strings.t("scrcpy_mode_wip"))
                     }
                     Row {
                         Button(
