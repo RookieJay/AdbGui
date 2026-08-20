@@ -1,6 +1,6 @@
 # scrcpy 启动选项持久化 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Persist the scrcpy launch options (resolution cap, stay-awake, turn-screen-off, always-on-top, fullscreen, max-fps, no-audio, record folder) to `settings.json` so they survive app restarts; load them back into the Device Overview panel on startup; save the launched profile when the user starts scrcpy.
 
@@ -66,7 +66,7 @@ Defaults mirror `ScrcpyOptions` defaults (`stayAwake = true`, rest false/zero).
 **Interfaces:**
 - Produces: `ScrcpyLaunchProfile(maxSize, stayAwake, turnScreenOff, alwaysOnTop, fullscreen, maxFps, noAudio, recordFolder)` — used by Task 2 (`SettingsViewModel.setScrcpyLaunch`) and Task 3 (`DeviceOverviewScreen` load/save).
 
-- [ ] **Step 1: Write the failing tests** (`SettingsStoreTest.kt`, append inside the class):
+- [x] **Step 1: Write the failing tests** (`SettingsStoreTest.kt`, append inside the class):
 
 ```kotlin
 @Test
@@ -92,12 +92,12 @@ fun save_then_load_preserves_scrcpy_launch() = runTest {
 
 Add the import: `import com.adbgui.core.domain.ScrcpyLaunchProfile`.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `./gradlew :core:test --tests "*SettingsStoreTest" 2>&1 | tail -15`
 Expected: FAIL with `Unresolved reference: scrcpyLaunch` (and `ScrcpyLaunchProfile`).
 
-- [ ] **Step 3: Create `ScrcpyLaunchProfile.kt`**
+- [x] **Step 3: Create `ScrcpyLaunchProfile.kt`**
 
 ```kotlin
 package com.adbgui.core.domain
@@ -123,7 +123,7 @@ data class ScrcpyLaunchProfile(
 )
 ```
 
-- [ ] **Step 4: Add the field to `Settings`**
+- [x] **Step 4: Add the field to `Settings`**
 
 In `core/src/main/kotlin/com/adbgui/core/settings/Settings.kt`, add `import com.adbgui.core.domain.ScrcpyLaunchProfile` and one field to the `Settings` data class (after `scrcpyMode`):
 
@@ -132,12 +132,12 @@ In `core/src/main/kotlin/com/adbgui/core/settings/Settings.kt`, add `import com.
     val scrcpyLaunch: ScrcpyLaunchProfile = ScrcpyLaunchProfile(),
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `./gradlew :core:test --tests "*SettingsStoreTest" 2>&1 | tail -10`
 Expected: BUILD SUCCESSFUL, both new tests green. (`encodeDefaults = true` in `SettingsStore.json` ensures the profile is written even when all-default; `ignoreUnknownKeys = true` keeps old settings files loadable.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add core/src/main/kotlin/com/adbgui/core/domain/ScrcpyLaunchProfile.kt \
@@ -158,7 +158,7 @@ git commit -m "feat(core): add ScrcpyLaunchProfile persisted to settings"
 - Consumes: `ScrcpyLaunchProfile` (Task 1), `SettingsStore.update { it.copy(scrcpyLaunch = ...) }`.
 - Produces: `SettingsViewModel.setScrcpyLaunch(profile: ScrcpyLaunchProfile)` + `settings.value.scrcpyLaunch` (read by Task 3).
 
-- [ ] **Step 1: Write the failing test** (`SettingsViewModelTest.kt`, append inside the class):
+- [x] **Step 1: Write the failing test** (`SettingsViewModelTest.kt`, append inside the class):
 
 ```kotlin
 @Test
@@ -176,12 +176,12 @@ fun setScrcpyLaunch_persists_and_updates_state() = runTest {
 
 Add imports: `import com.adbgui.core.domain.ScrcpyLaunchProfile`, `import java.nio.file.Files` (if not present).
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `./gradlew :desktop:test --tests "*SettingsViewModelTest.setScrcpyLaunch*" 2>&1 | tail -10`
 Expected: FAIL with `Unresolved reference: setScrcpyLaunch`.
 
-- [ ] **Step 3: Implement `setScrcpyLaunch`** in `SettingsViewModel`:
+- [x] **Step 3: Implement `setScrcpyLaunch`** in `SettingsViewModel`:
 
 ```kotlin
 fun setScrcpyLaunch(profile: com.adbgui.core.domain.ScrcpyLaunchProfile) = scope.launch {
@@ -192,12 +192,12 @@ fun setScrcpyLaunch(profile: com.adbgui.core.domain.ScrcpyLaunchProfile) = scope
 
 (Add the import `import com.adbgui.core.domain.ScrcpyLaunchProfile` and use the short name in the signature.)
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `./gradlew :desktop:test --tests "*SettingsViewModelTest" 2>&1 | tail -10`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/src/main/kotlin/com/adbgui/desktop/ui/SettingsViewModel.kt \
@@ -217,7 +217,7 @@ git commit -m "feat(desktop): SettingsViewModel.setScrcpyLaunch persists launch 
 - Consumes: `ScrcpyLaunchProfile` (Task 1), `SettingsViewModel.settings` StateFlow + `setScrcpyLaunch` (Task 2).
 - Produces: persisted profile on Start; opt states seeded from the profile on load.
 
-- [ ] **Step 1: Add `settingsVm` param to `DeviceOverviewScreen`**
+- [x] **Step 1: Add `settingsVm` param to `DeviceOverviewScreen`**
 
 In `DeviceOverviewScreen.kt`, add a nullable param (after `scrcpyLauncher`) and the import:
 
@@ -242,7 +242,7 @@ fun DeviceOverviewScreen(
 ) {
 ```
 
-- [ ] **Step 2: Seed opt states from the loaded profile**
+- [x] **Step 2: Seed opt states from the loaded profile**
 
 Just after the existing `val optRecordPath = remember { mutableStateOf(ScrcpyOptions().recordPath.orEmpty()) }` (and the other `opt*` declarations), add a reactive loader that re-applies the profile whenever `scrcpyLaunch` changes (initial async load + after each save — on save the values are what the user just launched, so re-apply is a no-op):
 
@@ -264,7 +264,7 @@ Just after the existing `val optRecordPath = remember { mutableStateOf(ScrcpyOpt
 
 (`LaunchedEffect` import already present; `collectAsState` added in Step 1.)
 
-- [ ] **Step 3: Save the profile on Start**
+- [x] **Step 3: Save the profile on Start**
 
 In the Start button's `onClick`, after the `ScrcpyOptions(...)` is built (right before `scrcpyRunning.value = true`), build and persist the profile. Find the existing block:
 
@@ -298,7 +298,7 @@ Add immediately after it:
                                 )
 ```
 
-- [ ] **Step 4: Thread `settingsVm` through `AppShell`**
+- [x] **Step 4: Thread `settingsVm` through `AppShell`**
 
 In `AppShell.kt`, the `DeviceOverviewScreen(...)` call (inside the `NavPage.DEVICE_OVERVIEW` branch) — add `settingsVm = settingsVm,`:
 
@@ -316,24 +316,24 @@ In `AppShell.kt`, the `DeviceOverviewScreen(...)` call (inside the `NavPage.DEVI
                         )
 ```
 
-- [ ] **Step 5: Compile**
+- [x] **Step 5: Compile**
 
 Run: `./gradlew :desktop:compileKotlin 2>&1 | tail -10`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 6: Run full test suite (no regressions)**
+- [x] **Step 6: Run full test suite (no regressions)**
 
 Run: `./gradlew :core:test :desktop:test 2>&1 | tail -10`
 Expected: BUILD SUCCESSFUL (the new `settingsVm` param has a default of `null`, so existing `DeviceOverviewScreen` usages/tests still compile; `SettingsViewModel` is already constructed in `Main.kt` and passed to `AppShell`).
 
-- [ ] **Step 7: Smoke test** — `./gradlew :desktop:run`
+- [x] **Step 7: Smoke test** — `./gradlew :desktop:run`
   - Set some scrcpy options (e.g. check 置顶 + 关音频, resolution cap 1280, record toggle + a folder).
   - Click 开始投屏 (scrcpy launches with those flags — verify as before).
   - Close the app, relaunch.
   - Confirm the same options are pre-filled in the panel (loaded from `settings.json`).
   - Optional: inspect `%APPDATA%/AdbGui/settings.json` — a `scrcpyLaunch` object is present.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add desktop/src/main/kotlin/com/adbgui/desktop/ui/DeviceOverviewScreen.kt \

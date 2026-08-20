@@ -3,6 +3,25 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — scrcpy 投屏 (branch `feat/scrcpy`, merged to `master` 2026-08-20)
+
+### scrcpy 投屏
+- **EXTERNAL 投屏**：内置 scrcpy-win64 v4.1（自动解压到 `%APPDATA%/AdbGui/scrcpy/`）；`ScrcpyLocator`（override > 内置 > PATH）；`ScrcpyLauncher` 启动外部 SDL 窗口。EMBEDDED（JNA `SetParent`）预留禁用（"开发中"）。
+- **启动选项面板**：`ScrcpyArgsBuilder`（纯函数 TDD）构建 CLI 参数；8 选项（分辨率限制/保持唤醒/息屏/置顶/全屏/最大帧率/关音频/录制）；MOD+key 快捷键对话框。
+- **录制**：显式「录制」开关 + 选文件夹（JFileChooser）+ `scrcpy_<ts>.mp4`；**优雅停止**（WM_CLOSE 让 scrcpy finalize mp4，按进程 PID 找窗口，不强杀致损）+ 兜底强杀；停止后显示文件路径 + 打开/打开文件夹。
+- **截图独立窗口**：`ScreenshotWindow`（真 Compose Window）；点击 → loading → 截图完成弹窗（`captureDone` 信号）；底部复制/保存（保存默认焦点）；`ContentScale.Inside` 不放大（清晰）；复制到剪贴板 + 状态反馈。
+- **选项持久化**：`ScrcpyLaunchProfile` 存 `settings.json`，重启回填，开始投屏时保存。
+- **按钮状态同步**：`proc.onExit()` 回调，scrcpy 窗口关闭后 Start/Stop 自动归位。
+- **Settings**：scrcpy 路径覆盖（Browse=JFileChooser 支持粘贴 + 显示「当前使用」实际路径）；失败错误红底醒目透传（非零退出码 + scrcpy 输出尾部）。
+
+### 基础设施修复
+- **composable VM 必须 remember**：`Main` 的 `application{}` 里 root + 全部 VM/controller 用 `remember{}`（之前每次重组重建 → 丢实例态 + 泄漏 track 流；截图 bug 查多轮才定位）。`root.start()` 用 `LaunchedEffect(Unit)` 只跑一次。
+- **adb start-server 缓存**：`AdbServerController` 缓存 `@Volatile started`，不再每命令 fork `adb start-server`（之前 5k+ 日志行/会话）；tracker 失败时 `invalidate()` 自愈（~2s 重启）。
+- **runBinary 超时**：`JvmAdbProcessRunner.runBinary` 尊重 `timeoutMs`（async 读 + `withTimeoutOrNull` + 强杀）；截图 30s 兜底。
+- **日志时间戳**：`FileLogger` 每行前缀 `[MM-dd HH:mm:ss.SSS]`。
+- **run.bat**：项目根启动脚本（`run.bat clean` 强制重建 core/desktop jar，避免 stale-jar 假象）。
+
+
 ## v1 (branch `feat/adb-gui-v1`, 2026-08)
 
 ### 已交付功能
