@@ -187,6 +187,21 @@ object Strings {
         "extras" to "Extras",
         "provider_uri" to "URI",
         "provider_where" to "Where（可选）",
+        // Scrcpy
+        "scrcpy" to "投屏",
+        "scrcpy_status_installed" to "✅ scrcpy 已安装",
+        "scrcpy_status_installing" to "⏳ 正在安装 scrcpy...",
+        "scrcpy_status_failed" to "❌ 安装失败",
+        "start_scrcpy" to "开始投屏",
+        "stop_scrcpy" to "停止投屏",
+        "scrcpy_mode_external" to "独立窗口",
+        "scrcpy_mode_embedded" to "内嵌窗口",
+        "scrcpy_max_size" to "分辨率限制",
+        "scrcpy_stay_awake" to "保持唤醒",
+        "scrcpy_record" to "录制路径",
+        "scrcpy_disconnected" to "投屏已断开",
+        "scrcpy_retry" to "重试",
+        "scrcpy_manual_path" to "手动指定路径",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -361,6 +376,21 @@ object Strings {
         "extras" to "Extras",
         "provider_uri" to "URI",
         "provider_where" to "Where (optional)",
+        // Scrcpy
+        "scrcpy" to "Screen Mirror",
+        "scrcpy_status_installed" to "✅ scrcpy installed",
+        "scrcpy_status_installing" to "⏳ Installing scrcpy...",
+        "scrcpy_status_failed" to "❌ Installation failed",
+        "start_scrcpy" to "Start Mirror",
+        "stop_scrcpy" to "Stop Mirror",
+        "scrcpy_mode_external" to "External Window",
+        "scrcpy_mode_embedded" to "Embedded",
+        "scrcpy_max_size" to "Max Resolution",
+        "scrcpy_stay_awake" to "Stay Awake",
+        "scrcpy_record" to "Record Path",
+        "scrcpy_disconnected" to "Mirror disconnected",
+        "scrcpy_retry" to "Retry",
+        "scrcpy_manual_path" to "Set Path Manually",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)

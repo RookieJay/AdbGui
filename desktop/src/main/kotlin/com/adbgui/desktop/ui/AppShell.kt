@@ -34,6 +34,9 @@ fun AppShell(
     deviceOverviewDeviceInfoVm: DeviceInfoViewModel? = null,
     deviceOverviewScreenshotVm: ScreenshotViewModel? = null,
     deviceOverviewRemoteVm: RemoteViewModel? = null,
+    scrcpyInstaller: com.adbgui.desktop.platform.ScrcpyInstaller? = null,
+    scrcpyLocator: com.adbgui.desktop.platform.WindowsScrcpyLocator? = null,
+    scrcpyLauncher: com.adbgui.desktop.platform.ScrcpyLauncher? = null,
     appConsoleVm: AppConsoleViewModel? = null,
     logcatVm: LogcatViewModel? = null,
     systemOpsVm: SystemOpsViewModel? = null,
@@ -104,12 +107,15 @@ fun AppShell(
                     showSettings && settingsVm != null && configDir != null -> {
                         SettingsScreen(vm = settingsVm, configDir = configDir)
                     }
-                    selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewScreenshotVm != null && deviceOverviewRemoteVm != null -> {
+                    selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewScreenshotVm != null && deviceOverviewRemoteVm != null && scrcpyInstaller != null && scrcpyLocator != null && scrcpyLauncher != null -> {
                         DeviceOverviewScreen(
                             deviceInfoVm = deviceOverviewDeviceInfoVm,
                             screenshotVm = deviceOverviewScreenshotVm,
                             remoteVm = deviceOverviewRemoteVm,
                             selectedSerial = selected,
+                            scrcpyInstaller = scrcpyInstaller,
+                            scrcpyLocator = scrcpyLocator,
+                            scrcpyLauncher = scrcpyLauncher,
                         )
                     }
                     selected != null && page == NavPage.APP_CONSOLE && appConsoleVm != null -> {

@@ -30,6 +30,10 @@ class CompositionRoot {
     private val history = DeviceHistoryStore(configDir, clock = { System.currentTimeMillis() })
     val tracker = DeviceTracker({ locator.locate() }, server, runner, logger, scope)
     val repository = DeviceRepository(tracker, history, commands, logger, scope, clock = { System.currentTimeMillis() })
+    // scrcpy wiring (Task 5)
+    val scrcpyInstaller = com.adbgui.desktop.platform.ScrcpyInstaller(configDir)
+    val scrcpyLocator = com.adbgui.desktop.platform.WindowsScrcpyLocator(settings, configDir, SystemPathProbe())
+    val scrcpyLauncher = com.adbgui.desktop.platform.WindowsScrcpyLauncher()
 
     // NOTE: the initial locale is set on the UI thread in Main (see Main.kt) — do NOT set
     // Strings here on the background scope, which would create the Compose state off the UI
