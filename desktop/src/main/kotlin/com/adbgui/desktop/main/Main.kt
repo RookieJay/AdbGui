@@ -27,19 +27,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 
 fun main() = application {
-    val root = CompositionRoot()
-    // Set the initial locale on the UI thread BEFORE root.start() touches anything, so the
-    // Strings Compose state is created here (avoids cross-thread snapshot read errors).
-    val settings = runBlocking { root.settings.load() }
-    Strings.set(Locale.fromCode(settings.locale))
-    root.start()
-    val vm = DeviceListViewModel(root.repository, root.scope)
-    val settingsVm = SettingsViewModel(root.settings, root.scope)
+    // Everything below lives in the composable application scope, so it must be remembered
+    // or each recomposition recreates it — recreating CompositionRoot would spawn a fresh
+    // DeviceTracker (new track-devices stream) + AdbServerController per recomposition,
+    // and recreating ViewModels would lose instance-local state (the screenshot bug).
+    val root = remember { CompositionRoot() }
+    // Load settings once on the UI thread; Strings Compose state must be created here
+    // (avoids cross-thread snapshot read errors). Set the locale before Window reads it.
+    val settings = remember { runBlocking { root.settings.load() } }
+    remember { Strings.set(Locale.fromCode(settings.locale)) }
+    // Start the adb tracker exactly once — start() spawns a track-devices stream each call.
+    LaunchedEffect(Unit) { root.start() }
+    val vm = remember { DeviceListViewModel(root.repository, root.scope) }
+    val settingsVm = remember { SettingsViewModel(root.settings, root.scope) }
     val selectedSerial = remember { MutableStateFlow<String?>(null) }
     var showScreenshot by remember { mutableStateOf(false) }
     var screenshotLoading by remember { mutableStateOf(false) }
-    val appConsoleVm = AppConsoleViewModel(root.repository, selectedSerial, root.scope)
-    val deviceInfoVm = DeviceInfoViewModel(root.repository, selectedSerial, root.scope)
+    val appConsoleVm = remember { AppConsoleViewModel(root.repository, selectedSerial, root.scope) }
+    val deviceInfoVm = remember { DeviceInfoViewModel(root.repository, selectedSerial, root.scope) }
     val screenshotVm = remember { ScreenshotViewModel(root.repository, selectedSerial, root.scope, root.logger) }
     val captureDone by screenshotVm.captureDone.collectAsState()
     // Open the screenshot window once capture finishes (success or failure).
@@ -52,12 +57,12 @@ fun main() = application {
             root.logger.info("[screenshot] opening window captureDone=$captureDone image=${screenshotVm.image.value?.size ?: "null"}")
         }
     }
-    val logcatController = com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope)
-    val logcatVm = LogcatViewModel(logcatController, selectedSerial, root.scope)
-    val systemOpsVm = SystemOpsViewModel(root.repository, selectedSerial, root.scope)
-    val remoteVm = RemoteViewModel(root.repository, selectedSerial, root.settings, root.scope)
-    val fileExplorerVm = FileExplorerViewModel(root.repository, selectedSerial, root.scope)
-    val shellLauncher = com.adbgui.desktop.platform.WindowsShellLauncher()
+    val logcatController = remember { com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope) }
+    val logcatVm = remember { LogcatViewModel(logcatController, selectedSerial, root.scope) }
+    val systemOpsVm = remember { SystemOpsViewModel(root.repository, selectedSerial, root.scope) }
+    val remoteVm = remember { RemoteViewModel(root.repository, selectedSerial, root.settings, root.scope) }
+    val fileExplorerVm = remember { FileExplorerViewModel(root.repository, selectedSerial, root.scope) }
+    val shellLauncher = remember { com.adbgui.desktop.platform.WindowsShellLauncher() }
     // Auto-select the first ONLINE device when nothing is validly selected.
     // Never steals an active selection: if the current serial is still online, leave it.
     // (A device going offline counts as an invalid selection → cleared/re-picked, so stale
