@@ -106,7 +106,7 @@ fun AppShell(
             Surface(modifier = Modifier.fillMaxSize()) {
                 when {
                     showSettings && settingsVm != null && configDir != null -> {
-                        SettingsScreen(vm = settingsVm, configDir = configDir)
+                        SettingsScreen(vm = settingsVm, configDir = configDir, scrcpyLocator = scrcpyLocator)
                     }
                     selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null && scrcpyInstaller != null && scrcpyLocator != null && scrcpyLauncher != null -> {
                         DeviceOverviewScreen(

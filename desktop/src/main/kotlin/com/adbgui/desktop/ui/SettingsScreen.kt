@@ -49,9 +49,13 @@ import java.util.zip.ZipOutputStream
 fun SettingsScreen(
     vm: SettingsViewModel,
     configDir: Path,
+    scrcpyLocator: com.adbgui.desktop.platform.ScrcpyLocator? = null,
     modifier: Modifier = Modifier,
 ) {
     val settings by vm.settings.collectAsState()
+    // The scrcpy path actually in use (override > bundled > PATH). Recomputed when the
+    // override changes so Apply gives immediate feedback, and the default is visible.
+    val activeScrcpy = remember(settings.scrcpyPathOverride) { scrcpyLocator?.locate() }
     var adbDraft by remember(settings.adbPathOverride) {
         mutableStateOf(settings.adbPathOverride.orEmpty())
     }
@@ -165,6 +169,10 @@ fun SettingsScreen(
                     status = Strings.t("status_scrcpy_path_cleared")
                 }) { Text(Strings.t("clear")) }
             }
+            Text(
+                Strings.t("current").format(activeScrcpy ?: Strings.t("scrcpy_not_found")),
+                style = MaterialTheme.typography.caption,
+            )
 
             Divider()
 
