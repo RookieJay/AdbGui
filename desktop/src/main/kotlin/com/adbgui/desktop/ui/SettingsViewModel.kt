@@ -1,6 +1,7 @@
 package com.adbgui.desktop.ui
 
 import com.adbgui.core.log.LogLevel
+import com.adbgui.core.domain.ScrcpyLaunchProfile
 import com.adbgui.core.settings.Settings
 import com.adbgui.core.settings.SettingsStore
 import com.adbgui.desktop.ui.i18n.Locale
@@ -21,6 +22,10 @@ class SettingsViewModel(private val store: SettingsStore, private val scope: Cor
         store.update { it.copy(locale = locale.code) }
         refresh()
         Strings.set(locale)
+    }
+    fun setScrcpyLaunch(profile: ScrcpyLaunchProfile) = scope.launch {
+        store.update { it.copy(scrcpyLaunch = profile) }
+        refresh()
     }
     private suspend fun refresh() { _settings.value = store.load() }
 }

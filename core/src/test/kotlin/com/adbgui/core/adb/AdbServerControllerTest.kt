@@ -6,19 +6,21 @@ import com.adbgui.core.log.InMemoryLogger
 import com.adbgui.core.log.LogLevel
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class AdbServerControllerTest {
     private val adb = AdbBinary("adb", AdbSource.PATH)
 
     @Test
-    fun ensureStarted_runs_start_server_and_logs_info() = runTest {
+    fun ensureStarted_runs_start_server_once_and_caches() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("start-server"), AdbProcessResult(0, "adb server is running", ""))
-        val logger = InMemoryLogger(LogLevel.INFO) { 0L }
+        val logger = InMemoryLogger(LogLevel.DEBUG) { 0L }
         val ctrl = AdbServerController({ adb }, runner, logger)
         ctrl.ensureStarted()
-        assert(logger.entries.any { it.message.contains("start-server") })
+        ctrl.ensureStarted() // cached: must not re-run start-server
+        assertEquals(1, logger.entries.count { it.message.contains("server running") })
     }
 
     @Test
@@ -28,5 +30,17 @@ class AdbServerControllerTest {
         val ctrl = AdbServerController({ adb }, runner, logger)
         ctrl.ensureStarted()
         assertTrue(logger.entries.any { it.level == LogLevel.WARN })
+    }
+
+    @Test
+    fun invalidate_re_runs_start_server() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("start-server"), AdbProcessResult(0, "ok", ""))
+        val logger = InMemoryLogger(LogLevel.DEBUG) { 0L }
+        val ctrl = AdbServerController({ adb }, runner, logger)
+        ctrl.ensureStarted()
+        ctrl.invalidate()
+        ctrl.ensureStarted()
+        assertEquals(2, logger.entries.count { it.message.contains("server running") })
     }
 }

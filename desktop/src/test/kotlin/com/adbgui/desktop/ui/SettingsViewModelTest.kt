@@ -1,6 +1,7 @@
 package com.adbgui.desktop.ui
 
 import com.adbgui.core.log.LogLevel
+import com.adbgui.core.domain.ScrcpyLaunchProfile
 import com.adbgui.core.settings.SettingsStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
@@ -42,5 +43,17 @@ class SettingsViewModelTest {
         vm.setLogLevel(LogLevel.DEBUG)
         awaitStore(store, expected = LogLevel.DEBUG)
         assertEquals(LogLevel.DEBUG, store.load().logLevel)
+    }
+
+    @Test
+    fun setScrcpyLaunch_persists_and_updates_state() = runTest {
+        val dir = Files.createTempDirectory("scrcpy")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = SettingsViewModel(store, this)
+        val profile = ScrcpyLaunchProfile(maxSize = 1280, noAudio = true, recordFolder = "/rec")
+        vm.setScrcpyLaunch(profile)
+        advanceUntilIdle()
+        assertEquals(profile, vm.settings.value.scrcpyLaunch)
+        assertEquals(profile, store.load().scrcpyLaunch)
     }
 }
