@@ -250,9 +250,22 @@ fun DeviceOverviewScreen(
                                 scrcpyError.value = null
                                 scope.launch {
                                     try {
-                                        scrcpyLauncher.open(path, serial, options, ScrcpyMode.EXTERNAL) {
-                                            // scrcpy exited on its own (window closed / failed) — clear running.
-                                            scope.launch { scrcpyRunning.value = false }
+                                        scrcpyLauncher.open(path, serial, options, ScrcpyMode.EXTERNAL) { code, out ->
+                                            // scrcpy exited on its own (window closed / failed) — clear running,
+                                            // and surface failures (non-zero) so the user sees why (e.g. encoder err).
+                                            scope.launch {
+                                                scrcpyRunning.value = false
+                                                if (code != 0) {
+                                                    scrcpyError.value = buildString {
+                                                        append("scrcpy exited (code $code)")
+                                                        if (out.isNotBlank()) {
+                                                            append('\n')
+                                                            // Trim to a useful tail — scrcpy errors are usually a few lines.
+                                                            append(out.takeLast(500))
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     } catch (e: Exception) {
                                         scrcpyError.value = e.message

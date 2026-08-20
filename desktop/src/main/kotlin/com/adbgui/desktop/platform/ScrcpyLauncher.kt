@@ -12,8 +12,8 @@ import java.util.concurrent.atomic.AtomicReference
 
 interface ScrcpyLauncher {
     /** Launch scrcpy against [serial] with [options]. In [ScrcpyMode.EMBEDDED], an AWT [Canvas] is created and the scrcpy SDL window is reparented into it.
-     *  [onExit] is invoked when the scrcpy process exits on its own (user closed the SDL window, or scrcpy failed) — the UI uses it to clear its "running" state. It is NOT invoked for a process stopped via [stop] (the caller already knows). */
-    fun open(scrcpyPath: String, serial: String, options: ScrcpyOptions, mode: ScrcpyMode, onExit: () -> Unit = {})
+     *  [onExit] is invoked with the process exit code and a tail of scrcpy's merged stdout/stderr when the scrcpy process exits on its own (user closed the SDL window, or scrcpy failed). The UI uses it to clear its "running" state and surface failures (non-zero exit). It is NOT invoked for a process stopped via [stop] (the caller already knows). */
+    fun open(scrcpyPath: String, serial: String, options: ScrcpyOptions, mode: ScrcpyMode, onExit: (exitCode: Int, output: String) -> Unit = { _, _ -> })
     fun isRunning(): Boolean
     fun stop()
     /** The canvas used for embedding, or null when [open] was called with [ScrcpyMode.EXTERNAL] or no process is running. The UI is responsible for adding it to a displayable window before [open] is called for embedding to succeed. */
@@ -24,18 +24,36 @@ class WindowsScrcpyLauncher : ScrcpyLauncher {
     private val processRef = AtomicReference<Process?>(null)
     private val canvasRef = AtomicReference<Canvas?>(null)
 
-    override fun open(scrcpyPath: String, serial: String, options: ScrcpyOptions, mode: ScrcpyMode, onExit: () -> Unit) {
+    override fun open(scrcpyPath: String, serial: String, options: ScrcpyOptions, mode: ScrcpyMode, onExit: (exitCode: Int, output: String) -> Unit) {
         stop()
         val args = ScrcpyArgsBuilder.build(scrcpyPath, serial, options)
         val proc = ProcessBuilder(args).redirectErrorStream(true).start()
         processRef.set(proc)
+        // Drain scrcpy's merged stdout/stderr so it can't block on a full pipe, and keep a
+        // tail for error reporting on exit (scrcpy writes diagnostics, e.g. "Encoder failed").
+        val output = StringBuilder()
+        Thread {
+            try {
+                proc.inputStream.bufferedReader().use { r ->
+                    while (true) {
+                        val line = r.readLine() ?: break
+                        synchronized(output) {
+                            output.append(line).append('\n')
+                            if (output.length > 4000) output.delete(0, output.length - 4000)
+                        }
+                    }
+                }
+            } catch (_: Throwable) { /* reader ends with the process */ }
+        }.also { it.isDaemon = true; it.start() }
         // Notify the UI when scrcpy exits on its own (window closed / failure). Guard by
         // identity so a stale process (replaced by a new open(), or cleared by stop()) does
         // not wrongly clear the current session's running state.
         proc.onExit().thenAccept {
             if (processRef.get() === proc) {
                 processRef.set(null)
-                onExit()
+                val code = runCatching { proc.exitValue() }.getOrDefault(-1)
+                val out = synchronized(output) { output.toString() }.trim()
+                onExit(code, out)
             }
         }
         if (mode == ScrcpyMode.EMBEDDED) {
