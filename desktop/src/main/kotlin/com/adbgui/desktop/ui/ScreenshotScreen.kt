@@ -31,6 +31,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.delay
@@ -86,10 +87,14 @@ fun ScreenshotScreen(
                         runCatching { Image.makeFromEncoded(bytes).asImageBitmap() }.getOrNull()
                     }
                     if (bitmap != null) {
+                        // ContentScale.Inside: fit within the area preserving aspect, but never
+                        // upscale beyond the bitmap's native resolution — fillMaxWidth would
+                        // stretch/upscale a 1920-wide PNG in a wider window and look blurry.
                         Image(
                             bitmap = bitmap,
                             contentDescription = Strings.t("content_screenshot"),
-                            modifier = Modifier.fillMaxWidth(),
+                            contentScale = ContentScale.Inside,
+                            modifier = Modifier.fillMaxSize(),
                         )
                     } else {
                         Text(Strings.t("decode_failed").format(bytes.size), style = MaterialTheme.typography.body2)

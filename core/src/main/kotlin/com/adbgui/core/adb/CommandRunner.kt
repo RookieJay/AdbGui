@@ -95,8 +95,20 @@ class CommandRunner(
             exitCode = -1,
             stderr = "no PNG signature in ${raw.size} bytes (prefix: ${raw.copyOfRange(0, minOf(80, raw.size)).decodeToString().replace("\n", "\\n")})",
         )
-        logger.debug("adb screenshot ${png.size} bytes for $serial (stripped ${raw.size - png.size} banner bytes)")
+        val dims = pngDimensions(png)
+        logger.info("[screenshot] png ${dims?.first ?: "?"}x${dims?.second ?: "?"} ${png.size} bytes (stripped ${raw.size - png.size} banner)")
         return png
+    }
+
+    /** Reads the IHDR width/height from a PNG byte array (big-endian uint32 at offsets 16/20).
+     *  Null if the bytes are too short / not a PNG. Pure byte parse, no image deps. */
+    private fun pngDimensions(png: ByteArray): Pair<Int, Int>? {
+        if (png.size < 24) return null
+        val w = (png[16].toInt() and 0xff shl 24) or (png[17].toInt() and 0xff shl 16) or
+            (png[18].toInt() and 0xff shl 8) or (png[19].toInt() and 0xff)
+        val h = (png[20].toInt() and 0xff shl 24) or (png[21].toInt() and 0xff shl 16) or
+            (png[22].toInt() and 0xff shl 8) or (png[23].toInt() and 0xff)
+        return w to h
     }
 
     suspend fun deviceDetailReport(serial: String): String {
