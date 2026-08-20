@@ -250,7 +250,10 @@ fun DeviceOverviewScreen(
                                 scrcpyError.value = null
                                 scope.launch {
                                     try {
-                                        scrcpyLauncher.open(path, serial, options, ScrcpyMode.EXTERNAL)
+                                        scrcpyLauncher.open(path, serial, options, ScrcpyMode.EXTERNAL) {
+                                            // scrcpy exited on its own (window closed / failed) — clear running.
+                                            scope.launch { scrcpyRunning.value = false }
+                                        }
                                     } catch (e: Exception) {
                                         scrcpyError.value = e.message
                                         scrcpyRunning.value = false

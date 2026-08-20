@@ -11,8 +11,9 @@ import java.awt.Canvas
 import java.util.concurrent.atomic.AtomicReference
 
 interface ScrcpyLauncher {
-    /** Launch scrcpy against [serial] with [options]. In [ScrcpyMode.EMBEDDED], an AWT [Canvas] is created and the scrcpy SDL window is reparented into it. */
-    fun open(scrcpyPath: String, serial: String, options: ScrcpyOptions, mode: ScrcpyMode)
+    /** Launch scrcpy against [serial] with [options]. In [ScrcpyMode.EMBEDDED], an AWT [Canvas] is created and the scrcpy SDL window is reparented into it.
+     *  [onExit] is invoked when the scrcpy process exits on its own (user closed the SDL window, or scrcpy failed) — the UI uses it to clear its "running" state. It is NOT invoked for a process stopped via [stop] (the caller already knows). */
+    fun open(scrcpyPath: String, serial: String, options: ScrcpyOptions, mode: ScrcpyMode, onExit: () -> Unit = {})
     fun isRunning(): Boolean
     fun stop()
     /** The canvas used for embedding, or null when [open] was called with [ScrcpyMode.EXTERNAL] or no process is running. The UI is responsible for adding it to a displayable window before [open] is called for embedding to succeed. */
@@ -23,11 +24,20 @@ class WindowsScrcpyLauncher : ScrcpyLauncher {
     private val processRef = AtomicReference<Process?>(null)
     private val canvasRef = AtomicReference<Canvas?>(null)
 
-    override fun open(scrcpyPath: String, serial: String, options: ScrcpyOptions, mode: ScrcpyMode) {
+    override fun open(scrcpyPath: String, serial: String, options: ScrcpyOptions, mode: ScrcpyMode, onExit: () -> Unit) {
         stop()
         val args = ScrcpyArgsBuilder.build(scrcpyPath, serial, options)
         val proc = ProcessBuilder(args).redirectErrorStream(true).start()
         processRef.set(proc)
+        // Notify the UI when scrcpy exits on its own (window closed / failure). Guard by
+        // identity so a stale process (replaced by a new open(), or cleared by stop()) does
+        // not wrongly clear the current session's running state.
+        proc.onExit().thenAccept {
+            if (processRef.get() === proc) {
+                processRef.set(null)
+                onExit()
+            }
+        }
         if (mode == ScrcpyMode.EMBEDDED) {
             val canvas = Canvas()
             canvasRef.set(canvas)
