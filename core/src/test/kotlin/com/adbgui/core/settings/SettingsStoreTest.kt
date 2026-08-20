@@ -1,5 +1,6 @@
 package com.adbgui.core.settings
 
+import com.adbgui.core.domain.ScrcpyLaunchProfile
 import com.adbgui.core.log.LogLevel
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
@@ -36,5 +37,25 @@ class SettingsStoreTest {
         Files.writeString(dir.resolve("settings.json"), "{ not json")
         val s = SettingsStore(dir).load()
         assertNull(s.adbPathOverride)
+    }
+
+    @Test
+    fun scrcpy_launch_defaults_when_no_file() = runTest {
+        val s = SettingsStore(tmpDir(), io = kotlinx.coroutines.Dispatchers.Unconfined).load()
+        assertEquals(ScrcpyLaunchProfile(), s.scrcpyLaunch)
+    }
+
+    @Test
+    fun save_then_load_preserves_scrcpy_launch() = runTest {
+        val dir = tmpDir()
+        val store = SettingsStore(dir)
+        val profile = ScrcpyLaunchProfile(
+            maxSize = 1920, stayAwake = false, turnScreenOff = true,
+            alwaysOnTop = true, fullscreen = true, maxFps = 60, noAudio = true,
+            recordFolder = "/rec",
+        )
+        store.save(Settings(scrcpyLaunch = profile))
+        val loaded = SettingsStore(dir).load()
+        assertEquals(profile, loaded.scrcpyLaunch)
     }
 }
