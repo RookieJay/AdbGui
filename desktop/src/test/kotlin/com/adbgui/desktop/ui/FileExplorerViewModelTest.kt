@@ -84,4 +84,21 @@ class FileExplorerViewModelTest {
         assertTrue(!vm.isNavigable(file), "regular file must not be navigable")
         vm.stop(); repo.stop()
     }
+
+    @Test fun symlink_sorts_with_directories() = runTest {
+        // When `test -d` is unreliable (TCL), a symlink-to-dir stays isDirectory=false. It must
+        // still sort in the navigable group with directories, not drop to the file section.
+        // FakeAdbProcessRunner returns default (empty stdout) for the checkSymlinkDirs call → all false.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("ls", "-la"), AdbProcessResult(0,
+            "-rw-r--r-- 1 root root 100 2020-01-01 12:00 a_file\n" +
+            "lrwxrwxrwx 1 root root 21 2020-01-01 12:00 sdcard -> /storage/self/primary\n" +
+            "drwxr-xr-x 2 root root 4096 2020-01-01 12:00 z_dir\n", ""))
+        val selected = MutableStateFlow<String?>("abc")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.navigate("/"); advanceUntilIdle()
+        val names = vm.entries.value.map { it.name }
+        assertEquals(listOf("sdcard", "z_dir", "a_file"), names)
+        vm.stop(); repo.stop()
+    }
 }
