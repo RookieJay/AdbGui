@@ -87,6 +87,8 @@ v1 = 连接管理核心 + 应用管理 + 设备信息 + 截图 + 日志。以下
 
 - Shell 终端页 / Logcat 实时流 / 文件 push-pull / 投屏（scrcpy）/ 调试与系统操作（端口转发、`adb pair`、reboot/recovery、root/remount、monkey 压测）
 
+> **实现状态（2026-08-21）**：Shell、Logcat、文件 push-pull、scrcpy、reboot/recovery/root/remount **均已实现**（见 CHANGELOG 各 v2 节）。`adb pair` 也已实现并经一轮缺口修复（配对码日志脱敏、错误 i18n、PairDialog 对齐——见 CHANGELOG「v2 — adb pair 完善」节）；唯一遗留是 PairResultParser fixture 待真实录制（见该节「待办」）。端口转发、monkey 压测尚未实现。
+
 ## 改动时的检查清单
 
 新增一个 adb 命令时，确认：

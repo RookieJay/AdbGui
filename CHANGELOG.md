@@ -3,6 +3,17 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — adb pair 完善 (2026-08-21)
+
+`adb pair`（Android 11+ 无线调试配对）功能已存在，但有多处缺口，本轮修复：
+
+- **配对码泄露进 DEBUG 日志**（`CommandRunner.pair`）：原日志行 `adb ${cmd.joinToString(" ")}` 把 6 位配对码写进 `%APPDATA%/AdbGui/logs/adbgui.log`，违反 CLAUDE.md「不记敏感数据」。改为 `adb pair <ip:port> <code-redacted>`。补 `pair_does_not_log_pairing_code` 单测（InMemoryLogger 断言不含配对码）。
+- **「配对成功但连接失败」错误硬编码中文**（`DeviceListViewModel.pair`）：违反 i18n 约定。新增 `pair_success_connect_failed` i18n key（zh+en，`{0}` 占位），VM 改走 `Strings.t(...).replace("{0}", ...)`。补 `pair_success_connect_failed_uses_i18n_for_error` 单测（EN locale 区分 i18n 与硬编码）。
+- **PairDialog 视觉/行为不一致**：唯一用 bare `TextField`（无 outline）的 dialog；端口/配对码无数字过滤、无 Number 键盘；无 `CircularProgressIndicator`；错误色硬编码 `Color(0xFFC62828)`；busy 时可点外部关闭中断配对。重写对齐 `ConnectDialog`：`OutlinedTextField` + 数字过滤（端口 5 位、配对码 6 位）+ Number 键盘 + padding 布局 + spinner + `MaterialTheme.colors.error` + busy 禁用 dismiss。纯 UI 重构，无行为变更。
+
+### 待办（需真机录制）
+- **PairResultParser fixture 真实化**（CLAUDE.md §4 要求 fixture 必须真实录制，不许手写）：当前 `PairResultParserTest` 用字面量字符串断言。需在开启无线调试的 Android 11+ 设备上录制 `adb pair <ip:port> <code>` 的成功/失败真实输出，存 `core/src/test/resources/fixtures/pair_*.txt`（首行注释标设备+版本+日期+命令，**不含配对码**），测试改读 fixture。若真实输出暴露 parser 漏匹配的变体，按 TDD 红→绿补修。
+
 ## v2 — scrcpy 投屏 (branch `feat/scrcpy`, merged to `master` 2026-08-20)
 
 ### scrcpy 投屏
