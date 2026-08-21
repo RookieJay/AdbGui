@@ -53,4 +53,18 @@ class LsParserTest {
         assertEquals("etc", list[0].name)
         assertTrue(!list[0].isDirectory)   // symlinks are NOT directories — sorted with files, save-enabled
     }
+
+    @Test fun parses_mon_dd_date_format_from_fixture() {
+        val raw = LsParserTest::class.java.getResourceAsStream("/fixtures/ls_la_output_mon.txt")!!
+            .bufferedReader().readText()
+        // Drop the leading '# device ...' header comment so only ls lines are parsed.
+        val out = raw.lineSequence().dropWhile { it.startsWith("#") }.joinToString("\n")
+        val list = LsParser.parse(out)
+        assertTrue(
+            list.isNotEmpty(),
+            "expected ≥1 entry from the Mon DD fixture, got 0 — regex doesn't match Mon DD format"
+        )
+        // None of the parsed entries should carry a raw ISO date; their dates are Mon DD tokens.
+        assertTrue(list.all { !it.date.contains(Regex("\\d{4}-\\d{2}-\\d{2}")) })
+    }
 }
