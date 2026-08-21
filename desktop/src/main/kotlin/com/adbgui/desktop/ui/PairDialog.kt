@@ -29,9 +29,16 @@ import com.adbgui.desktop.ui.i18n.Strings
 
 @Composable
 fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
-    var ip by remember { mutableStateOf("") }
-    var port by remember { mutableStateOf("4321") }
+    // Phase 1: pairing (IP + pairing port + 6-digit code)
+    var pairIp by remember { mutableStateOf("") }
+    var pairPort by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    // Phase 2: connect after pair succeeds (pairing port is single-use; must use the
+    // connect port shown on the device's main Wireless debugging screen)
+    var paired by remember { mutableStateOf(false) }
+    var connectIp by remember { mutableStateOf("") }
+    var connectPort by remember { mutableStateOf("") }
+
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
 
@@ -40,37 +47,65 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
         title = { Text(Strings.t("pair_title")) },
         text = {
             Column {
-                Text(Strings.t("pair_hint"), style = MaterialTheme.typography.caption)
-                Spacer(Modifier.padding(8.dp))
-                OutlinedTextField(
-                    value = ip,
-                    onValueChange = { ip = it },
-                    label = { Text(Strings.t("ip_address")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                )
-                Spacer(Modifier.padding(8.dp))
-                OutlinedTextField(
-                    value = port,
-                    onValueChange = { port = it.filter { c -> c.isDigit() }.take(5) },
-                    label = { Text(Strings.t("port")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                Spacer(Modifier.padding(8.dp))
-                OutlinedTextField(
-                    value = code,
-                    onValueChange = { code = it.filter { c -> c.isDigit() }.take(6) },
-                    label = { Text(Strings.t("pairing_code")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                if (busy) {
-                    Spacer(Modifier.padding(top = 8.dp))
-                    Text(Strings.t("pairing"), style = MaterialTheme.typography.caption)
+                if (!paired) {
+                    // --- Phase 1: pair ---
+                    Text(Strings.t("pair_hint"), style = MaterialTheme.typography.caption)
+                    Spacer(Modifier.padding(8.dp))
+                    OutlinedTextField(
+                        value = pairIp,
+                        onValueChange = { pairIp = it; if (paired) connectIp = it },
+                        label = { Text(Strings.t("ip_address")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    )
+                    Spacer(Modifier.padding(8.dp))
+                    OutlinedTextField(
+                        value = pairPort,
+                        onValueChange = { pairPort = it.filter { c -> c.isDigit() }.take(5) },
+                        label = { Text(Strings.t("pair_port")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    Spacer(Modifier.padding(8.dp))
+                    OutlinedTextField(
+                        value = code,
+                        onValueChange = { code = it.filter { c -> c.isDigit() }.take(6) },
+                        label = { Text(Strings.t("pairing_code")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    if (busy) {
+                        Spacer(Modifier.padding(top = 8.dp))
+                        Text(Strings.t("pairing"), style = MaterialTheme.typography.caption)
+                    }
+                } else {
+                    // --- Phase 2: connect ---
+                    Text(Strings.t("pair_success"), style = MaterialTheme.typography.caption)
+                    Spacer(Modifier.padding(8.dp))
+                    OutlinedTextField(
+                        value = connectIp,
+                        onValueChange = { connectIp = it },
+                        label = { Text(Strings.t("ip_address")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    )
+                    Spacer(Modifier.padding(8.dp))
+                    OutlinedTextField(
+                        value = connectPort,
+                        onValueChange = { connectPort = it.filter { c -> c.isDigit() }.take(5) },
+                        label = { Text(Strings.t("connect_port")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    if (busy) {
+                        Spacer(Modifier.padding(top = 8.dp))
+                        Text(Strings.t("connecting"), style = MaterialTheme.typography.caption)
+                    }
                 }
                 if (error != null) {
                     Spacer(Modifier.padding(top = 8.dp))
@@ -93,14 +128,29 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
                 }
                 TextButton(onClick = onDismiss, enabled = !busy) { Text(Strings.t("cancel")) }
                 Spacer(Modifier.width(8.dp))
-                Button(
-                    enabled = !busy && ip.isNotBlank() && port.isNotBlank() && code.isNotBlank(),
-                    onClick = {
-                        vm.pair(ip, port.toIntOrNull() ?: 0, code) { r ->
-                            if (r.success) onDismiss()
-                        }
-                    },
-                ) { Text(Strings.t("pair")) }
+                if (!paired) {
+                    Button(
+                        enabled = !busy && pairIp.isNotBlank() && pairPort.isNotBlank() && code.isNotBlank(),
+                        onClick = {
+                            connectIp = pairIp  // seed phase-2 IP; user can adjust after seeing device screen
+                            vm.pair(pairIp, pairPort.toIntOrNull() ?: 0, code) { r ->
+                                if (r.success) {
+                                    paired = true
+                                    vm.clearError()
+                                }
+                            }
+                        },
+                    ) { Text(Strings.t("pair")) }
+                } else {
+                    Button(
+                        enabled = !busy && connectIp.isNotBlank() && connectPort.isNotBlank(),
+                        onClick = {
+                            vm.connect(connectIp, connectPort.toIntOrNull() ?: 0) { r ->
+                                if (r.success) onDismiss()
+                            }
+                        },
+                    ) { Text(Strings.t("connect")) }
+                }
             }
         },
     )

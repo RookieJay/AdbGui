@@ -4,7 +4,6 @@ import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceView
 import com.adbgui.core.domain.PairResult
-import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,17 +51,14 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
             _busy.value = true
             try {
                 val pr = repo.pair(ip, port, code)
-                if (pr.success) {
-                    // adb pair only registers the key — connect to actually add the device.
-                    val cr = repo.connectWireless(ip, port)
-                    if (cr.success) {
-                        onResult(pr)  // dialog closes; device appears via tracker poll
-                    } else {
-                        _error.value = Strings.t("pair_success_connect_failed").replace("{0}", cr.message)
-                    }
-                } else {
-                    _error.value = pr.message
-                }
+                // adb pair only registers the key. The pairing port is single-use and closes
+                // right after pairing succeeds; connect must use the *connect* port shown on
+                // the device's main "Wireless debugging" screen, which may differ. So the
+                // UI drives a second connect step with a user-entered connect port — do NOT
+                // auto-connect here (it would hit the now-closed pairing port and fail with
+                // "protocol fault (couldn't read status message)").
+                if (!pr.success) _error.value = pr.message
+                onResult(pr)
             } finally { _busy.value = false }
         }
     }
