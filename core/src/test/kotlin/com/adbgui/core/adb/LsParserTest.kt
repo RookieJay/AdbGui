@@ -67,4 +67,30 @@ class LsParserTest {
         // None of the parsed entries should carry a raw ISO date; their dates are Mon DD tokens.
         assertTrue(list.all { !it.date.contains(Regex("\\d{4}-\\d{2}-\\d{2}")) })
     }
+
+    @Test fun parses_tcl_non_standard_layout_from_fixture() {
+        // TCL Android 6.0 default `ls -la` omits the link-count column and makes size optional
+        // (present for files, absent for symlinks/dirs). The standard regex requires a leading
+        // \d+ link count → every TCL line is dropped. This fixture is a real recording.
+        val raw = LsParserTest::class.java.getResourceAsStream("/fixtures/ls_la_output_tcl_default.txt")!!
+            .bufferedReader().readText()
+        val out = raw.lineSequence().dropWhile { it.startsWith("#") }.joinToString("\n")
+        val list = LsParser.parse(out)
+        assertTrue(
+            list.isNotEmpty(),
+            "expected ≥1 entry from the TCL non-standard-layout fixture, got 0 — regex drops TCL default ls (no link-count column)"
+        )
+        // dir entry (no size column on TCL): acct
+        val acct = list.first { it.name == "acct" }
+        assertTrue(acct.isDirectory)
+        // regular file with a size column: default.prop = 549 bytes
+        val prop = list.first { it.name == "default.prop" }
+        assertTrue(!prop.isDirectory)
+        assertEquals(549, prop.size)
+        // symlink (no size column): etc -> /system/etc
+        val etc = list.first { it.name == "etc" }
+        assertTrue(etc.isSymlink)
+        // TCL default ls is ISO date; the fallback regex's ISO branch must still capture it.
+        assertTrue(list.all { it.date.contains(Regex("\\d{4}-\\d{2}-\\d{2}")) })
+    }
 }
