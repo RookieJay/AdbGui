@@ -1,24 +1,30 @@
 package com.adbgui.desktop.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
-import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
 import com.adbgui.desktop.ui.i18n.Strings
 
 @Composable
@@ -30,44 +36,72 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
     val busy by vm.busy.collectAsState()
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(Strings.t("pair_title")) },
         text = {
             Column {
                 Text(Strings.t("pair_hint"), style = MaterialTheme.typography.caption)
-                Spacer(Modifier.width(8.dp))
-                TextField(
-                    value = ip, singleLine = true,
+                Spacer(Modifier.padding(8.dp))
+                OutlinedTextField(
+                    value = ip,
                     onValueChange = { ip = it },
                     label = { Text(Strings.t("ip_address")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                 )
-                Row {
-                    TextField(
-                        value = port, singleLine = true,
-                        onValueChange = { port = it },
-                        label = { Text(Strings.t("port")) },
-                        modifier = Modifier.width(120.dp),
+                Spacer(Modifier.padding(8.dp))
+                OutlinedTextField(
+                    value = port,
+                    onValueChange = { port = it.filter { c -> c.isDigit() }.take(5) },
+                    label = { Text(Strings.t("port")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.padding(8.dp))
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it.filter { c -> c.isDigit() }.take(6) },
+                    label = { Text(Strings.t("pairing_code")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                if (busy) {
+                    Spacer(Modifier.padding(top = 8.dp))
+                    Text(Strings.t("pairing"), style = MaterialTheme.typography.caption)
+                }
+                if (error != null) {
+                    Spacer(Modifier.padding(top = 8.dp))
+                    SelectableText(
+                        error ?: "",
+                        color = MaterialTheme.colors.error,
+                        style = MaterialTheme.typography.caption,
                     )
                 }
-                TextField(
-                    value = code, singleLine = true,
-                    onValueChange = { code = it },
-                    label = { Text(Strings.t("pairing_code")) },
-                )
-                if (busy) Text(Strings.t("pairing"), style = MaterialTheme.typography.caption)
-                error?.let { SelectableText(it, color = Color(0xFFC62828), style = MaterialTheme.typography.caption) }
             }
         },
-        confirmButton = {
-            Button(
-                enabled = !busy && ip.isNotBlank() && port.isNotBlank() && code.isNotBlank(),
-                onClick = {
-                    vm.pair(ip, port.toIntOrNull() ?: 0, code) { r ->
-                        if (r.success) onDismiss()
-                    }
-                },
-            ) { Text(Strings.t("pair")) }
+        buttons = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(end = 16.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (busy) {
+                    CircularProgressIndicator(modifier = Modifier.width(20.dp).padding(end = 8.dp))
+                }
+                TextButton(onClick = onDismiss, enabled = !busy) { Text(Strings.t("cancel")) }
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    enabled = !busy && ip.isNotBlank() && port.isNotBlank() && code.isNotBlank(),
+                    onClick = {
+                        vm.pair(ip, port.toIntOrNull() ?: 0, code) { r ->
+                            if (r.success) onDismiss()
+                        }
+                    },
+                ) { Text(Strings.t("pair")) }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.t("cancel")) } },
     )
 }
