@@ -1,0 +1,63 @@
+# device: TCL Android TV | manufacturer: TCL Multimedia | android: 6.0 (SDK 23) | board: almond_tcon | build: MRA58K | recorded: 2026-08-21 | dir: / | ls: device default (non-standard layout: no link-count, optional size, ISO date) | via: adb shell ls -la (pty)
+lrwxrwxrwx root     root              2007-01-01 20:00 DatabaseBackup -> /userdata/DatabaseBackup
+drwxr-xr-x root     root              2007-01-01 20:00 acct
+lrwxrwxrwx root     root              2007-01-01 20:00 applications -> /tvos/mstar/applications
+lrwxrwxrwx root     root              2007-01-01 20:00 bin -> /system/bin
+drwxrwx--- system   cache             2026-08-21 10:13 cache
+lrwxrwxrwx root     root              2007-01-01 20:00 certificate -> /tclconfig/mstar/tvconfig/config/certificate
+lrwxrwxrwx root     root              1970-01-01 08:00 charger -> /sbin/healthd
+lrwxrwxrwx root     root              2007-01-01 20:00 config -> /tclconfig/mstar/tvconfig/config
+lrwxrwxrwx root     root              2007-01-01 20:00 d -> /sys/kernel/debug
+drwxrwx--x system   system            2026-08-18 15:44 data
+lrwxrwxrwx root     root              2007-01-01 20:00 database -> /userdata
+-rw-r--r-- root     root          549 1970-01-01 08:00 default.prop
+drwxr-xr-x root     root              2026-08-21 10:19 dev
+lrwxrwxrwx root     root              2007-01-01 20:00 etc -> /system/etc
+-rw-r--r-- root     root        17976 1970-01-01 08:00 file_contexts
+-rw-r----- root     root         4128 1970-01-01 08:00 fstab.mooney
+drwxr-xr-x root     root              2026-08-21 10:13 impdat
+lrwxrwxrwx root     root              2007-01-01 20:00 impdata -> /impdat
+-rwxr-x--- root     root       966376 1970-01-01 08:00 init
+-rwxr-x--- root     root         1586 1970-01-01 08:00 init.environ.rc
+-rwxr-x--- root     root        12700 1970-01-01 08:00 init.mooney.rc
+-rwxr-x--- root     root        11183 1970-01-01 08:00 init.mooney.skd.rc
+-rwxr-x--- root     root        25203 1970-01-01 08:00 init.rc
+-rwxr-x--- root     root         1214 1970-01-01 08:00 init.recovery.mooney.rc
+-rwxr-x--- root     root        25351 1970-01-01 08:00 init.skd.rc
+-rwxr-x--- root     root         1921 1970-01-01 08:00 init.trace.rc
+-rwxr-x--- root     root         4123 1970-01-01 08:00 init.usb.rc
+-rwxr-x--- root     root          301 1970-01-01 08:00 init.zygote32.rc
+-rwxr-x--- root     root          591 1970-01-01 08:00 init.zygote64_32.rc
+lrwxrwxrwx root     root              2007-01-01 20:00 lib -> /tvos/mstar/std_lib/lib
+lrwxrwxrwx root     root              2007-01-01 20:00 mid_base -> /tvos/midbase
+lrwxrwxrwx root     root              2007-01-01 20:00 midbase -> /tvos/midbase
+drwxr-xr-x root     system            2007-01-01 20:00 mnt
+lrwxrwxrwx root     root              2007-01-01 20:00 mslib -> /tvos/mstar/mslib
+lrwxrwxrwx root     root              2007-01-01 20:00 mstar -> /tclconfig/mstar
+drwxr-xr-x root     root              1970-01-01 08:00 oem
+drwxr-xr-x root     root              1970-01-01 08:00 persist
+dr-xr-xr-x root     root              1970-01-01 08:00 proc
+-rw-r--r-- root     root         3603 1970-01-01 08:00 property_contexts
+drwx------ root     root              2020-05-26 12:25 root
+drwxr-x--- root     root              1970-01-01 08:00 sbin
+lrwxrwxrwx root     root              2007-01-01 20:00 sdcard -> /storage/self/primary
+-rw-r--r-- root     root          596 1970-01-01 08:00 seapp_contexts
+-rw-r--r-- root     root           76 1970-01-01 08:00 selinux_version
+-rw-r--r-- root     root       159538 1970-01-01 08:00 sepolicy
+-rw-r--r-- root     root        14944 1970-01-01 08:00 service_contexts
+lrwxrwxrwx root     root              2007-01-01 20:00 soc_lib -> /tvos/soclib
+lrwxrwxrwx root     root              2007-01-01 20:00 soclib -> /tvos/soclib
+drwxr-xr-x root     root              1970-01-01 08:00 storage
+dr-xr-xr-x root     root              2007-01-01 20:00 sys
+drwxr-xr-x root     root              2007-01-01 20:13 system
+-rw-r--r-- root     root         4127 1970-01-01 08:00 tboost.rc
+drwxr-xr-x root     root              1970-01-01 08:00 tclconfig
+lrwxrwxrwx root     root              2007-01-01 20:00 tmp -> /var/tmp
+lrwxrwxrwx root     root              2007-01-01 20:00 tvconfig -> /tclconfig/mstar/tvconfig
+drwxr-xr-x root     root              1970-01-01 08:00 tvos
+lrwxrwxrwx root     root              2007-01-01 20:00 tvservice -> /tvos/mstar
+-rw-r--r-- root     root         1399 1970-01-01 08:00 ueventd.mooney.rc
+-rw-r--r-- root     root         4737 1970-01-01 08:00 ueventd.rc
+drwxr-xr-x root     root              2026-08-21 10:21 userdata
+drwxrwxr-x root     system            2026-08-21 10:13 var
+lrwxrwxrwx root     root              2007-01-01 20:00 vendor -> /system/vendor
