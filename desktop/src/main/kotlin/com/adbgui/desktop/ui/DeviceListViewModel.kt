@@ -4,6 +4,7 @@ import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceView
 import com.adbgui.core.domain.PairResult
+import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -57,7 +58,7 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
                     if (cr.success) {
                         onResult(pr)  // dialog closes; device appears via tracker poll
                     } else {
-                        _error.value = "配对成功但连接失败：${cr.message}"
+                        _error.value = Strings.t("pair_success_connect_failed").replace("{0}", cr.message)
                     }
                 } else {
                     _error.value = pr.message
