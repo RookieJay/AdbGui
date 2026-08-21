@@ -1,0 +1,66 @@
+# device: TCL Android TV | android: 6.0 | recorded: 2026-08-21 | dir: / | format: Mon DD HH:MM / Mon DD YYYY | via: busybox ls (device default ls is ISO YYYY-MM-DD)
+total 1324
+drwxr-xr-x   20 0        0                0 Jan  1  2007 .
+drwxr-xr-x   20 0        0                0 Jan  1  2007 ..
+lrwxrwxrwx    1 0        0               24 Jan  1  2007 DatabaseBackup -> /userdata/DatabaseBackup
+drwxr-xr-x   35 0        0                0 Jan  1  2007 acct
+lrwxrwxrwx    1 0        0               24 Jan  1  2007 applications -> /tvos/mstar/applications
+lrwxrwxrwx    1 0        0               11 Jan  1  2007 bin -> /system/bin
+drwxrwx---    4 1000     2001          4096 Aug 21 01:49 cache
+lrwxrwxrwx    1 0        0               44 Jan  1  2007 certificate -> /tclconfig/mstar/tvconfig/config/certificate
+lrwxrwxrwx    1 0        0               13 Jan  1  1970 charger -> /sbin/healthd
+lrwxrwxrwx    1 0        0               32 Jan  1  2007 config -> /tclconfig/mstar/tvconfig/config
+lrwxrwxrwx    1 0        0               17 Jan  1  2007 d -> /sys/kernel/debug
+drwxrwx--x   28 1000     1000          4096 Aug 18 07:44 data
+lrwxrwxrwx    1 0        0                9 Jan  1  2007 database -> /userdata
+-rw-r--r--    1 0        0              549 Jan  1  1970 default.prop
+drwxr-xr-x   15 0        0             3200 Aug 21 01:52 dev
+lrwxrwxrwx    1 0        0               11 Jan  1  2007 etc -> /system/etc
+-rw-r--r--    1 0        0            17976 Jan  1  1970 file_contexts
+-rw-r-----    1 0        0             4128 Jan  1  1970 fstab.mooney
+drwxr-xr-x    2 0        0             4096 Aug 21 01:49 impdat
+lrwxrwxrwx    1 0        0                7 Jan  1  2007 impdata -> /impdat
+-rwxr-x---    1 0        0           966376 Jan  1  1970 init
+-rwxr-x---    1 0        0             1586 Jan  1  1970 init.environ.rc
+-rwxr-x---    1 0        0            12700 Jan  1  1970 init.mooney.rc
+-rwxr-x---    1 0        0            11183 Jan  1  1970 init.mooney.skd.rc
+-rwxr-x---    1 0        0            25203 Jan  1  1970 init.rc
+-rwxr-x---    1 0        0             1214 Jan  1  1970 init.recovery.mooney.rc
+-rwxr-x---    1 0        0            25351 Jan  1  1970 init.skd.rc
+-rwxr-x---    1 0        0             1921 Jan  1  1970 init.trace.rc
+-rwxr-x---    1 0        0             4123 Jan  1  1970 init.usb.rc
+-rwxr-x---    1 0        0              301 Jan  1  1970 init.zygote32.rc
+-rwxr-x---    1 0        0              591 Jan  1  1970 init.zygote64_32.rc
+lrwxrwxrwx    1 0        0               23 Jan  1  2007 lib -> /tvos/mstar/std_lib/lib
+lrwxrwxrwx    1 0        0               13 Jan  1  2007 mid_base -> /tvos/midbase
+lrwxrwxrwx    1 0        0               13 Jan  1  2007 midbase -> /tvos/midbase
+drwxr-xr-x   13 0        1000           280 Jan  1  2007 mnt
+lrwxrwxrwx    1 0        0               17 Jan  1  2007 mslib -> /tvos/mstar/mslib
+lrwxrwxrwx    1 0        0               16 Jan  1  2007 mstar -> /tclconfig/mstar
+drwxr-xr-x    2 0        0                0 Jan  1  1970 oem
+drwxr-xr-x    3 0        0             4096 Jan  1  1970 persist
+dr-xr-xr-x  224 0        0                0 Jan  1  1970 proc
+-rw-r--r--    1 0        0             3603 Jan  1  1970 property_contexts
+drwx------    2 0        0                0 May 26  2020 root
+drwxr-x---    2 0        0                0 Jan  1  1970 sbin
+lrwxrwxrwx    1 0        0               21 Jan  1  2007 sdcard -> /storage/self/primary
+-rw-r--r--    1 0        0              596 Jan  1  1970 seapp_contexts
+-rw-r--r--    1 0        0               76 Jan  1  1970 selinux_version
+-rw-r--r--    1 0        0           159538 Jan  1  1970 sepolicy
+-rw-r--r--    1 0        0            14944 Jan  1  1970 service_contexts
+lrwxrwxrwx    1 0        0               12 Jan  1  2007 soc_lib -> /tvos/soclib
+lrwxrwxrwx    1 0        0               12 Jan  1  2007 soclib -> /tvos/soclib
+drwxr-xr-x    4 0        0               80 Jan  1  1970 storage
+dr-xr-xr-x   12 0        0                0 Jan  1  2007 sys
+drwxr-xr-x   15 0        0             4096 Jan  1  2007 system
+-rw-r--r--    1 0        0             4127 Jan  1  1970 tboost.rc
+drwxr-xr-x   29 0        0             4096 Jan  1  1970 tclconfig
+lrwxrwxrwx    1 0        0                8 Jan  1  2007 tmp -> /var/tmp
+lrwxrwxrwx    1 0        0               25 Jan  1  2007 tvconfig -> /tclconfig/mstar/tvconfig
+drwxr-xr-x    9 0        0             4096 Jan  1  1970 tvos
+lrwxrwxrwx    1 0        0               11 Jan  1  2007 tvservice -> /tvos/mstar
+-rw-r--r--    1 0        0             1399 Jan  1  1970 ueventd.mooney.rc
+-rw-r--r--    1 0        0             4737 Jan  1  1970 ueventd.rc
+drwxr-xr-x    4 0        0             4096 Aug 21 01:52 userdata
+drwxrwxr-x    5 0        1000           140 Aug 21 01:49 var
+lrwxrwxrwx    1 0        0               14 Jan  1  2007 vendor -> /system/vendor
