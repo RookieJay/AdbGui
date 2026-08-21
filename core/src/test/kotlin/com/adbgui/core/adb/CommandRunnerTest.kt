@@ -75,6 +75,19 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun checkSymlinkDirs_parses_double_CR_line_endings() = runTest {
+        // adb shell (pty) on some devices (TCL Android 6.0) emits \r\r\n per `echo` line. A naive
+        // lineSequence() splits \r\r\n into value + empty line, so the boolean list grows to 2N and
+        // misaligns with the N paths → symlinks past index 0 get wrong dir/file classification.
+        val runner = FakeAdbProcessRunner()
+        // 3 paths: dir, file, dir → stdout 1,0,1 with \r\r\n endings
+        runner.whenArgsContains(listOf("test", "-d"), AdbProcessResult(0, "1\r\r\n0\r\r\n1\r\r\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val isDirs = cr.checkSymlinkDirs("abc", listOf("/sdcard", "/charger", "/etc"))
+        assertEquals(listOf(true, false, true), isDirs)
+    }
+
+    @Test
     fun deviceDetailReport_concatenates_sections_and_is_resilient() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("getprop"), AdbProcessResult(0, "[ro.product.model]: [Pixel]", ""))

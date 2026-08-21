@@ -9,7 +9,6 @@ import com.adbgui.core.device.IDeviceTracker
 import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbSource
 import com.adbgui.core.domain.DeviceSnapshot
-import com.adbgui.core.domain.FileEntry
 import com.adbgui.core.log.NoopLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -69,36 +68,22 @@ class FileExplorerViewModelTest {
         vm.stop(); repo.stop()
     }
 
-    @Test fun isNavigable_for_symlink_even_when_not_classified_as_dir() = runTest {
-        // A symlink whose target is a directory (e.g. /sdcard -> /storage/self/primary) may NOT be
-        // classified as isDirectory when `test -d` is unreliable on a device (TCL Android 6.0).
-        // Navigation must still enter it — clicking follows the link via `ls -la <path>/`.
-        val runner = FakeAdbProcessRunner()
-        val selected = MutableStateFlow<String?>(null)
-        val (repo, vm) = vm(runner, selected, this)
-        val dir = FileEntry("d", isDirectory = true, isSymlink = false, 0, "", "drwxr-xr-x", "")
-        val sym = FileEntry("sdcard", isDirectory = false, isSymlink = true, 0, "", "lrwxrwxrwx", "")
-        val file = FileEntry("f.txt", isDirectory = false, isSymlink = false, 549, "", "-rw-r--r--", "")
-        assertTrue(vm.isNavigable(dir))
-        assertTrue(vm.isNavigable(sym), "symlink must be navigable even when not classified as a dir")
-        assertTrue(!vm.isNavigable(file), "regular file must not be navigable")
-        vm.stop(); repo.stop()
-    }
-
-    @Test fun symlink_sorts_with_directories() = runTest {
-        // When `test -d` is unreliable (TCL), a symlink-to-dir stays isDirectory=false. It must
-        // still sort in the navigable group with directories, not drop to the file section.
-        // FakeAdbProcessRunner returns default (empty stdout) for the checkSymlinkDirs call → all false.
+    @Test fun dir_symlink_classified_and_sorted_with_dirs() = runTest {
+        // `checkSymlinkDirs` (test -d) classifies a symlink-to-dir as isDirectory=true; it must then
+        // sort in the directory group. Exercises the real classification path (test -d script).
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("ls", "-la"), AdbProcessResult(0,
             "-rw-r--r-- 1 root root 100 2020-01-01 12:00 a_file\n" +
             "lrwxrwxrwx 1 root root 21 2020-01-01 12:00 sdcard -> /storage/self/primary\n" +
             "drwxr-xr-x 2 root root 4096 2020-01-01 12:00 z_dir\n", ""))
+        runner.whenArgsContains(listOf("test", "-d"), AdbProcessResult(0, "1\n", ""))  // sdcard → dir
         val selected = MutableStateFlow<String?>("abc")
         val (repo, vm) = vm(runner, selected, this)
         vm.navigate("/"); advanceUntilIdle()
         val names = vm.entries.value.map { it.name }
         assertEquals(listOf("sdcard", "z_dir", "a_file"), names)
+        val sdcard = vm.entries.value.first { it.name == "sdcard" }
+        assertTrue(sdcard.isDirectory)  // classified as dir via test -d → 🔗📁, clickable, sorts with dirs
         vm.stop(); repo.stop()
     }
 }

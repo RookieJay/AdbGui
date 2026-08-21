@@ -53,7 +53,7 @@ class FileExplorerViewModel(
                 }
             }
         }
-        return parsed.sortedWith(compareByDescending<FileEntry> { it.isDirectory || it.isSymlink }.thenBy { it.name })
+        return parsed.sortedWith(compareByDescending<FileEntry> { it.isDirectory }.thenBy { it.name })
     }
 
     /** Blind-probe known Android subdirs when ls is Permission denied. */
@@ -66,11 +66,6 @@ class FileExplorerViewModel(
             .map { FileEntry(it, isDirectory = true, isSymlink = false, 0, "", "d---------", "") }
             .sortedBy { it.name }
     }
-
-    /** Whether clicking this entry should navigate into it. Directories and symlinks are both
-     *  enterable: `ls -la <path>/` follows the link, so a symlink-to-dir lists its contents even
-     *  when `test -d` classification is unreliable on a device (e.g. TCL Android 6.0). */
-    fun isNavigable(entry: FileEntry): Boolean = entry.isDirectory || entry.isSymlink
 
     fun navigate(path: String) = scope.launch {
         val serial = selectedSerial.value ?: return@launch

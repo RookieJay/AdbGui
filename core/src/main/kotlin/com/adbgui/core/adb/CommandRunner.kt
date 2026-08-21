@@ -206,7 +206,9 @@ class CommandRunner(
         server.ensureStarted()
         val script = paths.joinToString("; ") { p -> "test -d \"$p\" && echo 1 || echo 0" }
         val r = runner.run(adb(), listOf("-s", serial, "shell", script))
-        return r.stdout.lineSequence().map { it.trim() == "1" }.toList()
+        // adb shell (pty) can emit \r\r\n per line (e.g. TCL Android 6.0); lineSequence() then yields
+        // value + empty lines, so filter blanks to keep the boolean list aligned with `paths`.
+        return r.stdout.lineSequence().filter { it.isNotBlank() }.map { it.trim() == "1" }.toList()
     }
 
     suspend fun push(serial: String, localPath: String, devicePath: String) {

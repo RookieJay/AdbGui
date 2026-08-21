@@ -78,7 +78,7 @@ fun FileExplorerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
-                            .clickable { if (vm.isNavigable(entry)) vm.navigate("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}") }
+                            .clickable { if (entry.isDirectory) vm.navigate("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}") }
                             .pointerInput(Unit) {
                                 awaitPointerEventScope {
                                     while (true) {
@@ -94,7 +94,8 @@ fun FileExplorerScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(when {
-                            entry.isSymlink -> "🔗📁"  // symlinks are enterable (navigate follows the link)
+                            entry.isSymlink && entry.isDirectory -> "🔗📁"
+                            entry.isSymlink -> "🔗📄"
                             entry.isDirectory -> "📁"
                             else -> "📄"
                         }, modifier = Modifier.padding(end = 8.dp))
