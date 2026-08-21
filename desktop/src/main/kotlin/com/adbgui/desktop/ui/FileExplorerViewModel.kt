@@ -67,6 +67,11 @@ class FileExplorerViewModel(
             .sortedBy { it.name }
     }
 
+    /** Whether clicking this entry should navigate into it. Directories and symlinks are both
+     *  enterable: `ls -la <path>/` follows the link, so a symlink-to-dir lists its contents even
+     *  when `test -d` classification is unreliable on a device (e.g. TCL Android 6.0). */
+    fun isNavigable(entry: FileEntry): Boolean = entry.isDirectory || entry.isSymlink
+
     fun navigate(path: String) = scope.launch {
         val serial = selectedSerial.value ?: return@launch
         val normPath = path.replace(Regex("/+"), "/").let { if (it.length > 1) it.trimEnd('/') else it }
