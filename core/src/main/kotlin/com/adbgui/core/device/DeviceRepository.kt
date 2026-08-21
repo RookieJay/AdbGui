@@ -66,8 +66,27 @@ class DeviceRepository(
     suspend fun connectWireless(ip: String, port: Int): ConnectResult {
         val r = commands.connect(ip, port)
         if (r.success) {
-            history.upsert(serial = "$ip:$port", type = DeviceType.WIRELESS, wirelessIp = ip, wirelessPort = port)
+            val serial = "$ip:$port"
+            history.upsert(serial = serial, type = DeviceType.WIRELESS, wirelessIp = ip, wirelessPort = port)
             recompute(tracker.devices.value)
+            // Auto-name: fetch brand+model and set alias so the list shows a friendly name
+            // instead of a bare serial. Only when the device has NO existing alias — never
+            // overwrite a user-set name. getprop is best-effort; failures don't break connect.
+            val existing = history.load().firstOrNull { it.serial == serial }?.alias
+            if (existing.isNullOrBlank()) {
+                scope.launch {
+                    runCatching {
+                        val props = commands.deviceProps(serial)
+                        val name = "${props.brand} ${props.model}".trim()
+                        if (name.isNotBlank() && name.lowercase() != "unknown unknown") {
+                            // Re-check alias right before writing — a user may have renamed
+                            // between the check above and the getprop round-trip completing.
+                            val still = history.load().firstOrNull { it.serial == serial }?.alias
+                            if (still.isNullOrBlank()) setAlias(serial, name)
+                        }
+                    }
+                }
+            }
         }
         return r
     }
