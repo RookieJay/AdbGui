@@ -1,0 +1,7 @@
+# device: OnePlus 12 | android: 16 | recorded: 2026-08-21 | cmd: adb pair 10.0.5.221:43849 <code>
+# Captured from a PowerShell interactive session: "Enter pairing code:" is adb's stderr
+# prompt (the typed code is on the same terminal line but NOT part of adb's output — it is
+# stdin echoed by the terminal, redacted here). "Successfully paired to ... [guid=...]" is
+# adb's stdout. Parser receives stdout+stderr combined; this fixture reflects that shape.
+# Pairing code redacted (CLAUDE.md: no sensitive data in fixtures).
+Enter pairing code: Successfully paired to 10.0.5.221:43849 [guid=adb-af199bb4-rY5hPZ]

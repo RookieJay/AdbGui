@@ -1,0 +1,9 @@
+# device: OnePlus 12 | android: 16 | recorded: 2026-08-21 | cmd: adb pair 10.0.5.221:4384 <code>
+# Failure: non-existent/wrong pairing port → adb cannot read the protocol frame and emits
+# "error: protocol fault (couldn't read status message): No error". This is the same error
+# you see when connecting to a pairing port that has already closed after a successful pair.
+# Captured from a PowerShell interactive session; the typed code is redacted (stdin echo,
+# not part of adb's output). "Enter pairing code:" is adb's stderr prompt; the error line
+# is adb's stderr/stdout combined — parser receives both.
+# Pairing code redacted (CLAUDE.md: no sensitive data in fixtures).
+Enter pairing code: error: protocol fault (couldn't read status message): No error
