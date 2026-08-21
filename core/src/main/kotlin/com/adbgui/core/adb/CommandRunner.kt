@@ -34,7 +34,8 @@ class CommandRunner(
         val target = "$ip:$port"
         val cmd = listOf("pair", target, code)
         val r = runner.run(adb(), cmd)
-        logger.debug("adb ${cmd.joinToString(" ")} -> exit=${r.exitCode} out=${r.stdout.take(120)}")
+        // Don't log the pairing code — it's a short-lived secret (CLAUDE.md: no sensitive data in logs).
+        logger.debug("adb pair $target <code-redacted> -> exit=${r.exitCode} out=${r.stdout.take(120)}")
         return PairResultParser.parse(r.stdout, r.stderr, r.exitCode)
     }
 

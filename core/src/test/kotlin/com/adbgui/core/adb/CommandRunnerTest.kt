@@ -219,4 +219,16 @@ class CommandRunnerTest {
         val out = cr.queryProvider("abc", "content://settings/system", "name='setting'")
         assert(out.contains("Row:"))
     }
+
+    @Test
+    fun pair_does_not_log_pairing_code() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pair"), AdbProcessResult(0, "Successfully paired to 192.168.1.50:4321", ""))
+        val logger = com.adbgui.core.log.InMemoryLogger(com.adbgui.core.log.LogLevel.DEBUG) { 0L }
+        val cr = CommandRunner({ adb }, runner, logger, this, CommandRunner.AdbServerStarter{})
+        cr.pair("192.168.1.50", 4321, "483921")
+        // No DEBUG log line may contain the 6-digit pairing code.
+        val leaked = logger.entries.any { it.message.contains("483921") }
+        assert(!leaked) { "pairing code leaked into debug log: ${logger.entries.map { it.message }}" }
+    }
 }
