@@ -78,8 +78,8 @@ Windows 优先的 adb GUI 桌面工具，服务开发/测试人员：快速连�
 
 ### 4. Parser fixture 必须真实录制
 - adb 输出 fixture **不许手写**——必须从真机 `adb shell ... > fixtures/xxx.txt` 录制。手写 fixture 漏了变体（日期格式 `Mon DD` vs `YYYY-MM-DD`、symlink `->` 格式、权限字符差异）→ 跨设备运行时静默丢行。
-- 检查清单：fixture 文件头一行注释标明来源设备 + Android 版本 + 录制日期。
-- **已知未修**：`LsParser` 只覆盖了 VIDAA TV 的 `YYYY-MM-DD` 格式；旧 Android 可能用 `Mon DD HH:MM`。需补充多设备 fixture。
+- 检查清单：fixture 文件头一行注释标明来源设备（型号 + manufacturer + Android 版本 + SDK + build id，若用 busybox 则含 busybox 版本）+ 录制日期 + 目录 + 产生该输出的确切命令（`adb shell` vs `adb exec-out` 等）。新窗口要能凭此重现，不许只写"来自某设备"。
+- **已修（2026-08-21）**：`LsParser` 现已支持 ISO `YYYY-MM-DD HH:MM` 与 `Mon DD HH:MM` / `Mon DD YYYY` 两种格式；fixture `ls_la_output_mon.txt` 录自 TCL Android TV 6.0（busybox v1.19.2，`adb exec-out busybox ls -la /`）。另注：TCL 默认 `ls` 列布局不标准（无 link-count/size 列），现 regex 仍匹配不上——若要支持该设备默认 `ls` 需另开任务。
 
 ## v1 范围边界（非 v1 不做）
 
