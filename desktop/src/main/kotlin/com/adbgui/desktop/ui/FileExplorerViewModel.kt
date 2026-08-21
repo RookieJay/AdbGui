@@ -53,7 +53,7 @@ class FileExplorerViewModel(
                 }
             }
         }
-        return parsed.sortedWith(compareByDescending<FileEntry> { it.isDirectory }.thenBy { it.name })
+        return parsed.sortedWith(compareByDescending<FileEntry> { it.isDirectory }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
     }
 
     /** Blind-probe known Android subdirs when ls is Permission denied. */

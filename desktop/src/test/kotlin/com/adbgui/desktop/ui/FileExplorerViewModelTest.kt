@@ -68,6 +68,21 @@ class FileExplorerViewModelTest {
         vm.stop(); repo.stop()
     }
 
+    @Test fun sort_is_case_insensitive() = runTest {
+        // File names mix case on Android (e.g. `charger` vs `DatabaseBackup`). Sort must be
+        // case-insensitive (like Android Studio / file managers): c < d → charger before DatabaseBackup.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("ls", "-la"), AdbProcessResult(0,
+            "lrwxrwxrwx 1 root root 21 2020-01-01 12:00 DatabaseBackup -> /userdata/DatabaseBackup\n" +
+            "-rw-r--r-- 1 root root 100 2020-01-01 12:00 charger\n", ""))
+        val selected = MutableStateFlow<String?>("abc")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.navigate("/"); advanceUntilIdle()
+        val names = vm.entries.value.map { it.name }
+        assertEquals(listOf("charger", "DatabaseBackup"), names)
+        vm.stop(); repo.stop()
+    }
+
     @Test fun dir_symlink_classified_and_sorted_with_dirs() = runTest {
         // `checkSymlinkDirs` (test -d) classifies a symlink-to-dir as isDirectory=true; it must then
         // sort in the directory group. Exercises the real classification path (test -d script).
