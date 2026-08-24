@@ -7,6 +7,16 @@
 
 按 `docs/superpowers/specs/2026-08-21-gap-analysis-and-roadmap.md` 逐项推进。
 
+### G2 — 系统信息查询页
+- **新独立页「系统信息」**（导航 6→7，加在 System Ops 与 File Explorer 之间）：左侧分组命令列表（应用/显示/系统/网络四组，16 条）+ 右侧 `SelectableText` 输出区（等宽字体）+ 复制 + 导出（`FileDialog`，`sysinfo_<ts>.txt`，复用 DeviceInfo 导出模式）。顶部包名下拉（懒加载 `pm list packages -3`），需选包的命令（`pm path {pkg}` / `dumpsys package {pkg}` / `dumpsys meminfo {pkg}`）在选中包前禁用。命令清单数据驱动（`List<InfoCommand>`，加命令只改数据不改 UI）。
+- **`:core` `CommandRunner.runShellCmd(serial, cmd): String`**：通用 `adb -s <serial> shell <cmd>` 执行器，整个 `cmd` 作为单个 `shell` 参数传给设备 `/system/bin/sh`（管道/重定向由设备 shell 解释，host 不做 shell 解析），返回原始 stdout **不 trim**（spec「原样返回」；与 `adbVersion` 的 `.trim()` 区分），非零退出抛 `AdbCommandException`。无新 Parser（输出给人看，原样返回，同 `deviceDetailReport`）。`DeviceRepository.runShellCmd` 一行透传。
+- **命令模板细节**：grep 命令（`dumpsys package {pkg} | grep ...` / `dumpsys window | grep mCurrentFocus`）与 MAC 命令内嵌 `|| true` / `2>/dev/null`（grep 无匹配 exit 1、`eth0` 可能不存在 → fallback `wlan0` → `|| true` 保 exit 0，避免 `runShellCmd` 抛困惑错误）。
+- **`SystemInfoViewModel`**：状态机 busy/result/error/currentCommand + packages/selectedPackage/packagesBusy/packagesError。`{pkg}` 替换前过 `^[A-Za-z0-9._]+$` 正则守卫防 shell 注入（包名来自设备自身 `pm list packages`，本就合法，守卫为纵深防御）。包列表懒加载（下拉首次展开时），无 collector → 无 `stop()`（守无死代码红线）。错误格式对齐 AppConsole（`AdbCommandException` 折叠 `--- adb stderr ---`）。
+- TDD：`:core` 2 测试（`runShellCmd` 返回原始 stdout 含尾随 `\n` 证明不 trim + 非零抛异常）；`:desktop` InfoCommand 4 数据不变性测试 + SystemInfoViewModel 7 状态机测试（成功/失败含 stderr/需包守卫/替换/非法包名/包加载成败）。
+- i18n：`nav_system_info` + 4 分组标题 + 16 命令名 + 状态串（zh+en）。
+- 子代理驱动开发（SDD）执行：4 任务逐任务实现+审查（每任务 sonnet 实现+审查，opus 终审），终审后一波修复（删 `packagesLoaded` 死字段 + 删未引用 `si_running` key + `loadPackages` catch 对齐 runCommand 折叠 stderr），范围性复审干净。
+- **待办（需真机验证）**：计划 Step 4 的 5 个真机场景（getprop 输出/复制/导出；需包命令未选包显红；选包后替换；MAC fallback；失败命令显红 + adb stderr）未在本会话跑（环境不便），合并前请用户在连接的设备上验证。
+
 ### G3 — adb 版本信息
 - **Settings 页底部显示 adb 客户端版本**：`CommandRunner.adbVersion()`（host 命令 `adb version`，无 `-s serial`、不依赖 adb server）→ `DeviceRepository.adbVersion()` 委托 → `SettingsScreen` 首次组合时 `LaunchedEffect` 拉取，显示版本文本（`SelectableText`）；失败内联红字 + 原因；loading 转圈。i18n key `adb_version` / `adb_version_loading` / `adb_version_unavailable`（zh+en）。
 - TDD：`adbVersion_returns_stdout_trimmed`（stub 用真实 platform-tools 37.0.1 输出）+ `adbVersion_nonzero_throws_adb_command_exception`。
