@@ -243,7 +243,7 @@ fun SettingsScreen(
 
             status?.let {
                 Spacer(Modifier.height(8.dp))
-                Text(it, style = MaterialTheme.typography.caption)
+                SelectableText(it, style = MaterialTheme.typography.caption)
             }
 
             // --- ADB version (read-only, fetched on first composition) ---

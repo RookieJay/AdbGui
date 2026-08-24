@@ -78,7 +78,7 @@ fun ScreenshotScreen(
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 val bytes = image
                 if (bytes == null) {
-                    Text(
+                    SelectableText(
                         error ?: Strings.t("no_screenshot"),
                         style = MaterialTheme.typography.body2,
                     )
@@ -110,7 +110,7 @@ fun ScreenshotScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
-                        Text(
+                        SelectableText(
                             Strings.t("saved_path").format(f.absolutePath),
                             style = MaterialTheme.typography.caption,
                         )
@@ -130,7 +130,7 @@ fun ScreenshotScreen(
                     shape = RoundedCornerShape(4.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(it, style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
+                    SelectableText(it, style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
                 }
             }
 
@@ -141,7 +141,7 @@ fun ScreenshotScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 copyStatus?.let {
-                    Text(it, style = MaterialTheme.typography.caption)
+                    SelectableText(it, style = MaterialTheme.typography.caption)
                     Spacer(Modifier.width(8.dp))
                 }
                 OutlinedButton(

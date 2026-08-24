@@ -142,7 +142,7 @@ fun AppConsoleScreen(
                     shape = RoundedCornerShape(4.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(msg, modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.body2)
+                    SelectableText(msg, modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.body2)
                 }
             }
 
