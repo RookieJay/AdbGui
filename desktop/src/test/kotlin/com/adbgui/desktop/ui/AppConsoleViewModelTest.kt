@@ -31,6 +31,29 @@ class AppConsoleViewModelTest {
         return repo to AppConsoleViewModel(repo, selected, scope)
     }
 
+    @Test fun install_success_sets_message() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("install"), AdbProcessResult(0, "Success\n", ""))
+        runner.whenArgsContains(listOf("pm", "list"), AdbProcessResult(0, "package:com.foo\n", ""))
+        val selected = MutableStateFlow<String?>("abc")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.install("C:/x/test.apk"); advanceUntilIdle()
+        val msg = vm.message.value
+        assertTrue(msg != null && msg.contains("test.apk"), "expected success message with apk name, got: $msg")
+        vm.stop(); repo.stop()
+    }
+
+    @Test fun install_failure_sets_error_and_no_message() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("install"), AdbProcessResult(0, "Failure [INSTALL_FAILED_OLDER_SDK]\n", ""))
+        val selected = MutableStateFlow<String?>("abc")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.install("C:/x/test.apk"); advanceUntilIdle()
+        assertTrue(vm.error.value != null, "expected error on install failure")
+        assertTrue(vm.message.value == null, "no success message on failure")
+        vm.stop(); repo.stop()
+    }
+
     @Test fun load_lists_packages() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("pm", "list"), AdbProcessResult(0, "package:com.foo\npackage:com.bar\n", ""))

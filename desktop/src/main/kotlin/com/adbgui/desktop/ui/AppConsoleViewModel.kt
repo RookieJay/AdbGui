@@ -4,6 +4,7 @@ import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.Extra
 import com.adbgui.core.domain.PackageInfo
+import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +21,8 @@ class AppConsoleViewModel(
     val packages: StateFlow<List<PackageInfo>> = _packages.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
     private val _broadcastResult = MutableStateFlow<String?>(null)
@@ -38,11 +41,18 @@ class AppConsoleViewModel(
 
     fun install(apkPath: String) = scope.launch {
         val serial = selectedSerial.value ?: return@launch
-        _busy.value = true; _error.value = null
-        try { repo.install(serial, apkPath, reinstall = true); load() }
+        _busy.value = true; _error.value = null; _message.value = null
+        try {
+            repo.install(serial, apkPath, reinstall = true)
+            _message.value = Strings.t("install_success").format(java.io.File(apkPath).name)
+            load()
+        }
         catch (e: Exception) { _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error") }
         finally { _busy.value = false }
     }
+
+    /** Clear the ephemeral success message (called by the UI after its auto-clear delay). */
+    fun clearMessage() { _message.value = null }
 
     fun uninstall(pkg: String) = scope.launch {
         val serial = selectedSerial.value

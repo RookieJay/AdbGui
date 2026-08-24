@@ -36,9 +36,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.Extra
@@ -60,6 +62,12 @@ fun AppConsoleScreen(
     val packages by vm.packages.collectAsState()
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
+    val message by vm.message.collectAsState()
+    // Ephemeral success message auto-clears after a few seconds (toast-like); errors persist for
+    // debugging until the next operation.
+    LaunchedEffect(message) {
+        if (message != null) { delay(6000); vm.clearMessage() }
+    }
     val broadcastResult by vm.broadcastResult.collectAsState()
     val providerResult by vm.providerResult.collectAsState()
     var selectedPkg by remember { mutableStateOf<String?>(null) }
@@ -108,7 +116,7 @@ fun AppConsoleScreen(
                 if (busy) CircularProgressIndicator(modifier = Modifier.heightIn(max = 18.dp))
             }
 
-            // --- Inline error (collapsible) ---
+            // --- Inline result: error (collapsible) or success (ephemeral) — never both ---
             error?.let { msg ->
                 Surface(
                     color = Color(0xFFFFCDD2),
@@ -127,6 +135,14 @@ fun AppConsoleScreen(
                             SelectableText(msg, style = MaterialTheme.typography.caption)
                         }
                     }
+                }
+            } ?: message?.let { msg ->
+                Surface(
+                    color = Color(0xFFC8E6C9),
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(msg, modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.body2)
                 }
             }
 
