@@ -35,7 +35,6 @@ class SystemInfoViewModel(
     val packagesBusy: StateFlow<Boolean> = _packagesBusy.asStateFlow()
     private val _packagesError = MutableStateFlow<String?>(null)
     val packagesError: StateFlow<String?> = _packagesError.asStateFlow()
-    private var packagesLoaded = false
 
     fun selectPackage(pkg: String?) { _selectedPackage.value = pkg }
 
@@ -44,10 +43,9 @@ class SystemInfoViewModel(
         _packagesBusy.value = true; _packagesError.value = null
         try {
             _packages.value = repo.listPackages(serial)
-            packagesLoaded = true
         } catch (e: Exception) {
             _packagesError.value = if (e is AdbCommandException)
-                Strings.t("si_packages_failed").format(e.message) else Strings.t("si_packages_failed").format(e.message ?: "")
+                "${e.message}\n--- adb stderr ---\n${e.stderr}" else Strings.t("si_packages_failed").format(e.message ?: "")
         } finally { _packagesBusy.value = false }
     }
 
