@@ -121,6 +121,8 @@ fun AppShell(
                             scrcpyLocator = scrcpyLocator,
                             scrcpyLauncher = scrcpyLauncher,
                             settingsVm = settingsVm,
+                            systemOpsVm = systemOpsVm,
+                            onOpenShell = onOpenShell,
                         )
                     }
                     selected != null && page == NavPage.APP_CONSOLE && appConsoleVm != null -> {
@@ -130,7 +132,7 @@ fun AppShell(
                         LogcatScreen(vm = logcatVm)
                     }
                     selected != null && page == NavPage.SYSTEM_OPS && systemOpsVm != null -> {
-                        SystemOpsScreen(vm = systemOpsVm, selectedSerial = selected, onOpenShell = onOpenShell)
+                        SystemOpsScreen(vm = systemOpsVm, selectedSerial = selected)
                     }
                     selected != null && page == NavPage.FILE_EXPLORER && fileExplorerVm != null -> {
                         FileExplorerScreen(vm = fileExplorerVm, selectedSerial = selected)

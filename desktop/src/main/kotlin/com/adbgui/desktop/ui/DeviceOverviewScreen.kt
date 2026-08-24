@@ -17,6 +17,7 @@ import androidx.compose.material.Button
 import androidx.compose.material.Checkbox
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedButton
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.RadioButton
 import androidx.compose.material.Surface
@@ -58,6 +59,8 @@ fun DeviceOverviewScreen(
     scrcpyLocator: WindowsScrcpyLocator,
     scrcpyLauncher: ScrcpyLauncher,
     settingsVm: SettingsViewModel? = null,
+    systemOpsVm: SystemOpsViewModel? = null,
+    onOpenShell: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
@@ -77,6 +80,29 @@ fun DeviceOverviewScreen(
             Spacer(Modifier.height(8.dp))
             // --- Remote (full width below) ---
             RemoteScreen(vm = remoteVm, selectedSerial = selectedSerial, modifier = Modifier.fillMaxWidth())
+            Divider()
+            // --- Device tools: shell / root / remount (moved here from System Ops per roadmap G5) ---
+            if (systemOpsVm != null) {
+                val opsBusy by systemOpsVm.busy.collectAsState()
+                val opsMessage by systemOpsVm.message.collectAsState()
+                val opsError by systemOpsVm.error.collectAsState()
+                Text(Strings.t("device_tools"), style = MaterialTheme.typography.subtitle1)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = !opsBusy, onClick = { systemOpsVm.root() }) { Text(Strings.t("root_op")) }
+                    OutlinedButton(enabled = !opsBusy, onClick = { systemOpsVm.remount() }) { Text(Strings.t("remount_op")) }
+                    OutlinedButton(enabled = selectedSerial != null, onClick = { selectedSerial?.let { onOpenShell(it) } }) { Text(Strings.t("open_shell")) }
+                }
+                opsMessage?.let { msg ->
+                    Surface(color = Color(0xFFC8E6C9), modifier = Modifier.fillMaxWidth()) {
+                        SelectableText(msg.trim(), style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
+                    }
+                }
+                opsError?.let { msg ->
+                    Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
+                        SelectableText(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
+                    }
+                }
+            }
             Divider()
             // --- scrcpy section ---
             Text(Strings.t("scrcpy"), style = MaterialTheme.typography.subtitle1)

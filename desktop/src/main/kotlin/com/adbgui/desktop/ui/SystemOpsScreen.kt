@@ -32,7 +32,6 @@ fun SystemOpsScreen(
     vm: SystemOpsViewModel,
     selectedSerial: String?,
     modifier: Modifier = Modifier,
-    onOpenShell: (String) -> Unit = {},
 ) {
     val error by vm.error.collectAsState()
     val message by vm.message.collectAsState()
@@ -67,12 +66,8 @@ fun SystemOpsScreen(
                 }
             }
 
-            // Root / remount (no confirm — low risk; production builds fail harmlessly).
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(enabled = !busy, onClick = { vm.root() }) { Text(Strings.t("root_op")) }
-                OutlinedButton(enabled = !busy, onClick = { vm.remount() }) { Text(Strings.t("remount_op")) }
-                OutlinedButton(enabled = selectedSerial != null, onClick = { onOpenShell(selectedSerial!!) }) { Text(Strings.t("open_shell")) }
-            }
+            // Root / remount / shell moved to Device Overview (roadmap G5). System Ops keeps
+            // state-affecting operations only (reboot here; monkey压测 reserved per G4).
 
             message?.let { msg ->
                 Surface(color = Color(0xFFC8E6C9), modifier = Modifier.fillMaxWidth()) {

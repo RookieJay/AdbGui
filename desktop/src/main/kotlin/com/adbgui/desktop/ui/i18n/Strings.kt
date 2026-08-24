@@ -140,6 +140,7 @@ object Strings {
         "reboot_sideload" to "重启到侧载",
         "root_op" to "Root",
         "remount_op" to "Remount",
+        "device_tools" to "设备工具",
         "reboot_confirm_title" to "确认重启？",
         "reboot_confirm_body" to "将重启到 %s，设备会短暂断连。",
         // Wireless Pairing
@@ -373,6 +374,7 @@ object Strings {
         "reboot_sideload" to "Reboot to Sideload",
         "root_op" to "Root",
         "remount_op" to "Remount",
+        "device_tools" to "Device tools",
         "reboot_confirm_title" to "Confirm Reboot?",
         "reboot_confirm_body" to "Will reboot to %s; the device disconnects briefly.",
         // Wireless Pairing
