@@ -45,8 +45,6 @@ import com.adbgui.core.domain.Extra
 import com.adbgui.core.domain.ExtraType
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.desktop.ui.i18n.Strings
-import java.awt.FileDialog
-import java.awt.Frame
 
 /**
  * App Console screen: upper package list (selectable) + lower operation panel with
@@ -98,17 +96,14 @@ fun AppConsoleScreen(
                 Button(
                     enabled = !busy,
                     onClick = {
-                        val dialog = FileDialog(Frame(), Strings.t("select_apk"), FileDialog.LOAD)
-                        dialog.isMultipleMode = false
-                        dialog.setFile("*.apk")
-                        dialog.isVisible = true
-                        val sel = dialog.file
-                        if (sel != null) {
-                            val chosen = java.io.File(dialog.directory, sel).absolutePath
-                            vm.install(chosen)
-                        }
+                        val chosen = com.adbgui.desktop.platform.FileDialogs.pickFile(
+                            title = Strings.t("select_apk"),
+                            currentPath = null,
+                            filePattern = "*.apk",
+                        )
+                        if (chosen != null) vm.install(chosen)
                     },
-                ) { Text(Strings.t("select_apk")) }
+                ) { Text(Strings.t("install_apk")) }
                 Spacer(Modifier.width(8.dp))
                 if (busy) CircularProgressIndicator(modifier = Modifier.heightIn(max = 18.dp))
             }

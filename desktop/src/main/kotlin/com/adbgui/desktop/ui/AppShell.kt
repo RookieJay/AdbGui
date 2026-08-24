@@ -45,6 +45,7 @@ fun AppShell(
     selectedSerial: MutableStateFlow<String?>? = null,
     onOpenShell: (String) -> Unit = {},
     repo: com.adbgui.core.device.DeviceRepository? = null,
+    adbLocator: com.adbgui.core.adb.AdbLocator? = null,
     rightContent: @Composable () -> Unit = { DefaultRightPane() },
 ) {
     var showSettings by remember { mutableStateOf(false) }
@@ -107,7 +108,7 @@ fun AppShell(
             Surface(modifier = Modifier.fillMaxSize()) {
                 when {
                     showSettings && settingsVm != null && configDir != null -> {
-                        SettingsScreen(vm = settingsVm, configDir = configDir, scrcpyLocator = scrcpyLocator, repo = repo)
+                        SettingsScreen(vm = settingsVm, configDir = configDir, scrcpyLocator = scrcpyLocator, repo = repo, adbLocator = adbLocator)
                     }
                     selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null && scrcpyInstaller != null && scrcpyLocator != null && scrcpyLauncher != null -> {
                         DeviceOverviewScreen(

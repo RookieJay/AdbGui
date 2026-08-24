@@ -105,6 +105,7 @@ fun main() = application {
                     }
                 },
                 repo = root.repository,
+                adbLocator = root.locator,
             )
         }
     }

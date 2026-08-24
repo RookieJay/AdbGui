@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
@@ -28,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.adbgui.core.adb.AdbLocator
 import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.log.LogLevel
 import com.adbgui.desktop.ui.i18n.Locale
@@ -35,7 +38,6 @@ import com.adbgui.desktop.ui.i18n.Strings
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
-import javax.swing.JFileChooser
 import java.io.File
 import java.nio.file.Path
 import java.util.zip.ZipEntry
@@ -52,6 +54,7 @@ fun SettingsScreen(
     vm: SettingsViewModel,
     configDir: Path,
     scrcpyLocator: com.adbgui.desktop.platform.ScrcpyLocator? = null,
+    adbLocator: AdbLocator? = null,
     repo: DeviceRepository? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -70,7 +73,7 @@ fun SettingsScreen(
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(Strings.t("settings"), style = MaterialTheme.typography.h6)
@@ -104,14 +107,11 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = {
-                    val parent = Frame()
-                    val dialog = FileDialog(parent, Strings.t("select_adb_binary"), FileDialog.LOAD)
-                    dialog.isMultipleMode = false
-                    dialog.isVisible = true
-                    val sel = dialog.file
-                    if (sel != null) {
-                        val dir = dialog.directory
-                        val chosen = File(dir, sel).absolutePath
+                    val chosen = com.adbgui.desktop.platform.FileDialogs.pickFile(
+                        title = Strings.t("select_adb_binary"),
+                        currentPath = adbDraft,
+                    )
+                    if (chosen != null) {
                         adbDraft = chosen
                         vm.setAdbPath(chosen)
                         status = Strings.t("status_adb_path_set").format(chosen)
@@ -130,6 +130,21 @@ fun SettingsScreen(
                     status = Strings.t("status_adb_cleared")
                 }) { Text(Strings.t("clear")) }
             }
+            // The adb binary actually in use (override > bundled > system PATH), recomputed when the
+            // override changes so Apply gives immediate feedback, and the default is visible.
+            var activeAdbPath by remember { mutableStateOf<String?>(null) }
+            var adbNotFound by remember { mutableStateOf(false) }
+            LaunchedEffect(adbLocator, settings.adbPathOverride) {
+                if (adbLocator == null) { activeAdbPath = null; adbNotFound = false }
+                else runCatching { adbLocator.locate() }
+                    .onSuccess { activeAdbPath = it.path; adbNotFound = false }
+                    .onFailure { activeAdbPath = null; adbNotFound = true }
+            }
+            Text(
+                if (adbNotFound) Strings.t("adb_not_found")
+                else Strings.t("current").format(activeAdbPath ?: ""),
+                style = MaterialTheme.typography.caption,
+            )
 
             Divider()
 
@@ -146,13 +161,11 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = {
-                    // JFileChooser (not AWT FileDialog): its "File name" field accepts a pasted
-                    // full path + Enter, so users can paste a copied scrcpy.exe path directly.
-                    val chooser = JFileChooser()
-                    chooser.isAcceptAllFileFilterUsed = false
-                    chooser.dialogTitle = Strings.t("select_scrcpy_binary")
-                    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                        val chosen = chooser.selectedFile.absolutePath
+                    val chosen = com.adbgui.desktop.platform.FileDialogs.pickFile(
+                        title = Strings.t("select_scrcpy_binary"),
+                        currentPath = scrcpyDraft,
+                    )
+                    if (chosen != null) {
                         scrcpyDraft = chosen
                         vm.setScrcpyPath(chosen)
                         status = Strings.t("status_scrcpy_path_set").format(chosen)
