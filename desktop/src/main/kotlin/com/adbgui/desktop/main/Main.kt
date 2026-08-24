@@ -20,6 +20,7 @@ import com.adbgui.desktop.ui.SettingsViewModel
 import com.adbgui.desktop.ui.ScreenshotViewModel
 import com.adbgui.desktop.ui.RemoteViewModel
 import com.adbgui.desktop.ui.SystemOpsViewModel
+import com.adbgui.desktop.ui.SystemInfoViewModel
 import com.adbgui.desktop.ui.i18n.Locale
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.core.domain.DeviceStatus
@@ -60,6 +61,7 @@ fun main() = application {
     val logcatController = remember { com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope) }
     val logcatVm = remember { LogcatViewModel(logcatController, selectedSerial, root.scope) }
     val systemOpsVm = remember { SystemOpsViewModel(root.repository, selectedSerial, root.scope) }
+    val systemInfoVm = remember { SystemInfoViewModel(root.repository, selectedSerial, root.scope) }
     val remoteVm = remember { RemoteViewModel(root.repository, selectedSerial, root.settings, root.scope) }
     val fileExplorerVm = remember { FileExplorerViewModel(root.repository, selectedSerial, root.scope) }
     val shellLauncher = remember { com.adbgui.desktop.platform.WindowsShellLauncher() }
@@ -96,6 +98,7 @@ fun main() = application {
                 appConsoleVm = appConsoleVm,
                 logcatVm = logcatVm,
                 systemOpsVm = systemOpsVm,
+                systemInfoVm = systemInfoVm,
                 fileExplorerVm = fileExplorerVm,
                 selectedSerial = selectedSerial,
                 onOpenShell = { serial ->
