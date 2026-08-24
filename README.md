@@ -1,5 +1,7 @@
 # ADB GUI
 
+**English** | [中文](README.zh-CN.md)
+
 A Windows-first Compose Multiplatform desktop GUI for the Android Debug Bridge (`adb`), aimed at developers and testers who want the common adb workflows — connect devices, manage apps, inspect device info, grab screenshots — without a terminal. Built as a Kotlin Multiplatform project (`:core` pure-Kotlin logic + `:desktop` Compose Desktop UI) targeting the JVM.
 
 **Status: v1 complete.** Subsequent features (shell, logcat, file push/pull, scrcpy, debug/system ops) are deferred — see "Next steps" below.
