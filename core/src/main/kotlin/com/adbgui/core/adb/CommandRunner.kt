@@ -176,6 +176,13 @@ class CommandRunner(
         runCmd(serial, listOf("shell", "input", "keyevent", keycode.toString()))
     }
 
+    /** `adb shell input text <text>` — types text into the focused field on the device. The text is
+     *  passed as a single argv element so spaces survive (adb's modern shell protocol sends the argv
+     *  array without `sh -c` re-parsing, so the string reaches the device `input` binary intact). */
+    suspend fun inputText(serial: String, text: String) {
+        runCmd(serial, listOf("shell", "input", "text", text))
+    }
+
     suspend fun forceStop(serial: String, pkg: String): String {
         return runCmd(serial, listOf("shell", "am", "force-stop", pkg)).stdout
     }

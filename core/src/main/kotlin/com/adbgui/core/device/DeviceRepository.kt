@@ -120,6 +120,7 @@ class DeviceRepository(
     suspend fun root(serial: String): String = commands.root(serial)
     suspend fun remount(serial: String): String = commands.remount(serial)
     suspend fun inputKey(serial: String, keycode: Int) = commands.inputKey(serial, keycode)
+    suspend fun inputText(serial: String, text: String) = commands.inputText(serial, text)
     suspend fun forceStop(serial: String, pkg: String): String = commands.forceStop(serial, pkg)
     suspend fun startApp(serial: String, pkg: String): String = commands.startApp(serial, pkg)
     suspend fun startAppActivity(serial: String, pkg: String, activity: String): String = commands.startAppActivity(serial, pkg, activity)

@@ -37,6 +37,24 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun inputText_sends_text_as_single_arg() = runTest {
+        // Spaces in the text must survive as ONE argv element — if split into "hello" + "world",
+        // the "hello world" keyword wouldn't be a substring of any single arg → default exit 1 → throws.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("input", "text", "hello world"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.inputText("abc", "hello world")
+    }
+
+    @Test
+    fun inputText_failure_throws_adb_command_exception() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("input", "text"), AdbProcessResult(1, "", "error"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.inputText("abc", "x") }
+    }
+
+    @Test
     fun connect_success_returns_parsed_result() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 192.168.1.50:5555", ""))
