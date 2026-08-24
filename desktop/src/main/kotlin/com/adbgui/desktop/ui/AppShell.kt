@@ -44,6 +44,7 @@ fun AppShell(
     fileExplorerVm: FileExplorerViewModel? = null,
     selectedSerial: MutableStateFlow<String?>? = null,
     onOpenShell: (String) -> Unit = {},
+    repo: com.adbgui.core.device.DeviceRepository? = null,
     rightContent: @Composable () -> Unit = { DefaultRightPane() },
 ) {
     var showSettings by remember { mutableStateOf(false) }
@@ -106,7 +107,7 @@ fun AppShell(
             Surface(modifier = Modifier.fillMaxSize()) {
                 when {
                     showSettings && settingsVm != null && configDir != null -> {
-                        SettingsScreen(vm = settingsVm, configDir = configDir, scrcpyLocator = scrcpyLocator)
+                        SettingsScreen(vm = settingsVm, configDir = configDir, scrcpyLocator = scrcpyLocator, repo = repo)
                     }
                     selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null && scrcpyInstaller != null && scrcpyLocator != null && scrcpyLauncher != null -> {
                         DeviceOverviewScreen(

@@ -19,6 +19,7 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.log.LogLevel
 import com.adbgui.desktop.ui.i18n.Locale
 import com.adbgui.desktop.ui.i18n.Strings
@@ -50,6 +52,7 @@ fun SettingsScreen(
     vm: SettingsViewModel,
     configDir: Path,
     scrcpyLocator: com.adbgui.desktop.platform.ScrcpyLocator? = null,
+    repo: DeviceRepository? = null,
     modifier: Modifier = Modifier,
 ) {
     val settings by vm.settings.collectAsState()
@@ -228,6 +231,28 @@ fun SettingsScreen(
             status?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = MaterialTheme.typography.caption)
+            }
+
+            // --- ADB version (read-only, fetched on first composition) ---
+            Divider()
+            var adbVersion by remember { mutableStateOf<String?>(null) }
+            var adbVersionErr by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(repo) {
+                if (repo == null) return@LaunchedEffect
+                adbVersion = null; adbVersionErr = null
+                runCatching { repo.adbVersion() }
+                    .onSuccess { adbVersion = it.trim() }
+                    .onFailure { adbVersionErr = it.message ?: it.toString() }
+            }
+            Text(Strings.t("adb_version"), style = MaterialTheme.typography.subtitle1)
+            when {
+                adbVersionErr != null -> SelectableText(
+                    Strings.t("adb_version_unavailable").format(adbVersionErr),
+                    style = MaterialTheme.typography.caption,
+                )
+                adbVersion != null -> SelectableText(adbVersion!!, style = MaterialTheme.typography.caption)
+                repo != null -> Text(Strings.t("adb_version_loading"), style = MaterialTheme.typography.caption)
+                else -> {}
             }
         }
     }

@@ -104,6 +104,7 @@ fun main() = application {
                         shellLauncher.open(adb.path, serial)
                     }
                 },
+                repo = root.repository,
             )
         }
     }

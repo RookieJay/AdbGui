@@ -3,6 +3,15 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — gap-analysis roadmap (2026-08-24)
+
+按 `docs/superpowers/specs/2026-08-21-gap-analysis-and-roadmap.md` 逐项推进。
+
+### G3 — adb 版本信息
+- **Settings 页底部显示 adb 客户端版本**：`CommandRunner.adbVersion()`（host 命令 `adb version`，无 `-s serial`、不依赖 adb server）→ `DeviceRepository.adbVersion()` 委托 → `SettingsScreen` 首次组合时 `LaunchedEffect` 拉取，显示版本文本（`SelectableText`）；失败内联红字 + 原因；loading 转圈。i18n key `adb_version` / `adb_version_loading` / `adb_version_unavailable`（zh+en）。
+- TDD：`adbVersion_returns_stdout_trimmed`（stub 用真实 platform-tools 37.0.1 输出）+ `adbVersion_nonzero_throws_adb_command_exception`。
+- 期间发现并修复：上周一次中断会话直接改文件回退了一批已提交修复（LsParser Mon DD/reTcl、pair 配对码脱敏、test-d `\r\r\n` 过滤、大小写不敏感排序）+ 起了 G3 头但漏写 `CommandRunner.adbVersion()` 致 `:core` 编译不过。已 `git stash` 隔离那批乱改，干净重做 G3（HEAD 全部修复保留不动）。
+
 ## v2 — adb pair 完善 (2026-08-21)
 
 `adb pair`（Android 11+ 无线调试配对）功能已存在，但有多处缺口，本轮修复：
