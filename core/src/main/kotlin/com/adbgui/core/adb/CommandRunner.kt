@@ -55,6 +55,15 @@ class CommandRunner(
         return r.stdout.trim()
     }
 
+    /** Run an arbitrary device-shell command string and return raw stdout.
+     *  The whole `cmd` is passed as a single `shell` argument so the device's /system/bin/sh
+     *  interprets pipes/redirects. No Parser — output is for humans, returned verbatim.
+     *  Throws AdbCommandException on non-zero exit (commands where non-zero is expected,
+     *  e.g. grep-no-match, should append `|| true` in their template). */
+    suspend fun runShellCmd(serial: String, cmd: String): String {
+        return runCmd(serial, listOf("shell", cmd)).stdout
+    }
+
     suspend fun listPackages(serial: String): List<PackageInfo> {
         val r = runCmd(serial, listOf("shell", "pm", "list", "packages", "-3"))
         return PackageListParser.parse(r.stdout, thirdPartyOnly = true)

@@ -261,6 +261,27 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun runShellCmd_passes_shell_command_and_returns_stdout() = runTest {
+        // runShellCmd runs an arbitrary device-shell command string (pipes/grep handled by device sh).
+        // The whole `cmd` is passed as a single arg after `shell` so the device's /system/bin/sh
+        // interprets metacharacters (|, ||, 2>/dev/null) — the host does no shell parsing.
+        // Returns raw stdout UNTRIMMED (spec §2.2.1 "原样返回"; adbVersion trims, this does not).
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("shell", "getprop"), AdbProcessResult(0, "ro.build.fingerprint=foo\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val out = cr.runShellCmd("ABC123", "getprop")
+        assertEquals("ro.build.fingerprint=foo\n", out)  // trailing newline preserved — proves no trim
+    }
+
+    @Test
+    fun runShellCmd_nonzero_throws_adb_command_exception() = runTest {
+        val runner = FakeAdbProcessRunner()
+        // no script -> FakeAdbProcessRunner default = AdbProcessResult(1, "", "no script matched")
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.runShellCmd("ABC123", "getprop") }
+    }
+
+    @Test
     fun pair_does_not_log_pairing_code() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("pair"), AdbProcessResult(0, "Successfully paired to 192.168.1.50:4321", ""))
