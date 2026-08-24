@@ -63,6 +63,25 @@ fun RemoteScreen(
                 OutlinedButton(onClick = { vm.sendKey(3) }, enabled = !busy) { Text(Strings.t("home")) }
                 OutlinedButton(onClick = { vm.sendKey(82) }, enabled = !busy) { Text(Strings.t("menu")) }
             }
+            // Text input — types into the device's focused field (adb shell input text).
+            var textDraft by remember { mutableStateOf("") }
+            val sendText = { if (textDraft.isNotBlank()) { vm.sendText(textDraft); textDraft = "" } }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = textDraft,
+                    onValueChange = { textDraft = it },
+                    label = { Text(Strings.t("text_input_label")) },
+                    placeholder = { Text(Strings.t("text_input_placeholder")) },
+                    singleLine = true,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Send,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { sendText() }),
+                )
+                Button(onClick = { sendText() }, enabled = !busy && textDraft.isNotBlank()) { Text(Strings.t("send_text")) }
+            }
             // Custom buttons — simple Column of Rows (no LazyGrid, works inside scroll)
             if (customButtons.isNotEmpty()) {
                 Text(Strings.t("custom_buttons"), style = MaterialTheme.typography.caption)

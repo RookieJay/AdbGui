@@ -34,6 +34,16 @@ class RemoteViewModel(
         finally { _busy.value = false }
     }
 
+    /** `adb shell input text <text>` — types text into the device's focused field. */
+    fun sendText(text: String) = scope.launch {
+        val serial = selectedSerial.value ?: return@launch
+        if (text.isEmpty()) { _error.value = null; return@launch }
+        _error.value = null; _busy.value = true
+        try { repo.inputText(serial, text) }
+        catch (e: Exception) { _error.value = e.message ?: "unknown error" }
+        finally { _busy.value = false }
+    }
+
     fun addButton(label: String, keycode: Int) = scope.launch {
         val existing = settingsStore.load().remoteButtons
         if (existing.any { it.keycode == keycode }) {
