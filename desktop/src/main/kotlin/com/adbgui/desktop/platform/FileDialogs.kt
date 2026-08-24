@@ -22,18 +22,33 @@ object FileDialogs {
      * Open the native file-open dialog, auto-navigated to the directory of [currentPath] (its parent
      * if it points at a file). Returns the chosen absolute path, or `null` if the user cancelled.
      *
+     * Tries the modern `IFileOpenDialog` first (real Explorer window with a typeable breadcrumb
+     * address bar — AWT's `FileDialog` only gives the old "Look in:" dropdown). On ANY failure
+     * (COM interop is hand-written vtable dispatch; if the unverified offsets are wrong we want to
+     * degrade, not crash) it logs to stderr and falls back to the legacy AWT FileDialog so the app
+     * never breaks — worst case the user sees the old dialog + a log line we can diagnose.
+     *
      * @param title dialog title.
      * @param currentPath a path the dialog should open at (e.g. the value currently in the text
      *   field); its directory is used. Blank/null → OS default location.
-     * @param filePattern optional Win32 filter pattern e.g. `"*.apk"` to restrict to APK files.
+     * @param filePattern optional filter pattern e.g. `"*.apk"`. Only honored by the legacy
+     *   fallback (the modern dialog would need SetFileTypes, not yet wired). Modern dialog shows
+     *   all files; a wrong pick surfaces an inline install error.
      */
     fun pickFile(title: String, currentPath: String?, filePattern: String? = null): String? {
+        // Distinguish "modern dialog succeeded (returns a path OR null if user cancelled)" from
+        // "modern dialog threw" — only the latter falls back, else a cancel would re-open legacy.
+        val result = runCatching { WindowsFilePicker.pickFile(title, currentPath) }
+        if (result.isSuccess) return result.getOrNull()
+        System.err.println("[FileDialogs] modern picker failed, falling back to legacy: ${result.exceptionOrNull()?.message}")
+        return pickFileLegacy(title, currentPath, filePattern)
+    }
+
+    private fun pickFileLegacy(title: String, currentPath: String?, filePattern: String?): String? {
         val dlg = FileDialog(Frame(), title, FileDialog.LOAD)
         parentDirOf(currentPath)?.let { dlg.directory = it }
         if (filePattern != null) dlg.file = filePattern
         dlg.isVisible = true
-        // dlg.file is null when the user cancelled; otherwise it's the chosen file name (the pattern
-        // set above is only the initial filter, replaced by the actual selection on OK).
         val sel = dlg.file ?: return null
         return File(dlg.directory, sel).absolutePath
     }
