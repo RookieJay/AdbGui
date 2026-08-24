@@ -96,6 +96,7 @@ class DeviceRepository(
     }
 
     suspend fun disconnect(target: String): Boolean = commands.disconnect(target)
+    suspend fun adbVersion(): String = commands.adbVersion()
     suspend fun listPackages(serial: String): List<PackageInfo> = commands.listPackages(serial)
     suspend fun install(serial: String, apkPath: String, reinstall: Boolean): InstallResult =
         commands.install(serial, apkPath, reinstall)

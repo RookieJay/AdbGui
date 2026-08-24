@@ -15,6 +15,28 @@ class CommandRunnerTest {
     private val adb = AdbBinary("adb", AdbSource.PATH)
 
     @Test
+    fun adbVersion_returns_stdout_trimmed() = runTest {
+        // `adb version` is a host command (no -s serial, no adb server). Real output recorded from
+        // platform-tools 37.0.1 on Windows. adbVersion has no Parser — returns raw stdout for display.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("version"), AdbProcessResult(0,
+            "Android Debug Bridge version 1.0.41\nVersion 37.0.1-15733141\nInstalled as C:\\adb.exe\nRunning on Windows 10.0.26200\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val out = cr.adbVersion()
+        assertTrue(out.startsWith("Android Debug Bridge version"))
+        assertTrue(out.contains("37.0.1-15733141"))
+        assertTrue(!out.endsWith("\n"))  // trimmed
+    }
+
+    @Test
+    fun adbVersion_nonzero_throws_adb_command_exception() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("version"), AdbProcessResult(1, "", "adb: not found"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.adbVersion() }
+    }
+
+    @Test
     fun connect_success_returns_parsed_result() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 192.168.1.50:5555", ""))

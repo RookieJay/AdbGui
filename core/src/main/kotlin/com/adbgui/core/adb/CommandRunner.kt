@@ -45,6 +45,16 @@ class CommandRunner(
         return r.exitCode == 0
     }
 
+    /** `adb version` — host command (no -s serial, no adb server): reports the client binary version.
+     *  No Parser: returns raw stdout for the Settings page to display. */
+    suspend fun adbVersion(): String {
+        val cmd = listOf("version")
+        val r = runner.run(adb(), cmd)
+        logger.debug("adb ${cmd.joinToString(" ")} -> exit=${r.exitCode} out=${r.stdout.take(120)}")
+        if (r.exitCode != 0) throw AdbCommandException(command = "adb version", exitCode = r.exitCode, stderr = r.stderr)
+        return r.stdout.trim()
+    }
+
     suspend fun listPackages(serial: String): List<PackageInfo> {
         val r = runCmd(serial, listOf("shell", "pm", "list", "packages", "-3"))
         return PackageListParser.parse(r.stdout, thirdPartyOnly = true)
