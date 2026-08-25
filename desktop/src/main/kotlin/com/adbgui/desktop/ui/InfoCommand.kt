@@ -43,7 +43,7 @@ val systemInfoCommands: List<InfoCommand> = listOf(
     InfoCommand("si_group_system", "si_cmd_meminfo_pkg",
         "dumpsys meminfo {pkg}", needsPackage = true),
     InfoCommand("si_group_system", "si_cmd_top",
-        "top -n 1", needsPackage = false),
+        "top -b -n 1", needsPackage = false),
     InfoCommand("si_group_system", "si_cmd_cpuinfo",
         "cat /proc/cpuinfo", needsPackage = false),
     InfoCommand("si_group_system", "si_cmd_uptime",

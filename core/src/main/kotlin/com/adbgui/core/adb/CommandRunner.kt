@@ -64,7 +64,34 @@ class CommandRunner(
      *  tofu in Compose monospace fonts.) Throws AdbCommandException on non-zero exit
      *  (commands where non-zero is expected, e.g. grep-no-match, should append `|| true`). */
     suspend fun runShellCmd(serial: String, cmd: String): String {
-        return runCmd(serial, listOf("shell", cmd)).stdout.replace("\r", "")
+        return sanitizeShellOutput(runCmd(serial, listOf("shell", cmd)).stdout)
+    }
+
+    /** Normalize device-shell stdout for display:
+     *  - strip ANSI escape sequences (CSI: `ESC[...letter`) — interactive commands like
+     *    `top` emit these under the pty; ESC has no glyph in Compose fonts -> tofu;
+     *  - drop `\r` (pty ONLCR turns \n into \r\n — transport artifact);
+     *  - replace other control chars (< 0x20 except \n, and 0x7F) with space — e.g. `\t`
+     *    (cpuinfo field separator) has no glyph in Compose monospace -> tofu;
+     *  - keep `\n`, printable ASCII, and high-byte UTF-8 (CJK etc.) intact. */
+    private fun sanitizeShellOutput(raw: String): String {
+        val stripped = ANSI_CSI.replace(raw) { "" }
+        val sb = StringBuilder(stripped.length)
+        for (c in stripped) {
+            val code = c.code
+            when {
+                code == 0x0A -> sb.append(c)                        // \n preserved
+                code == 0x0D || code == 0x7F -> { }                 // \r / DEL dropped (pty artifact)
+                code < 0x20 -> sb.append(' ')                       // other control chars -> space (\t etc.)
+                else -> sb.append(c)                                // printable ASCII + UTF-8
+            }
+        }
+        return sb.toString()
+    }
+
+    private companion object {
+        // CSI sequences: ESC [ ... (params) final-byte. Covers cursor moves, colors, erase, etc.
+        val ANSI_CSI = Regex("\\[[0-9;?]*[A-Za-z]")
     }
 
     suspend fun listPackages(serial: String): List<PackageInfo> {

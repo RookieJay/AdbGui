@@ -296,6 +296,28 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun runShellCmd_strips_ansi_escape_sequences() = runTest {
+        // adb shell under a pty makes interactive commands (top) emit ANSI CSI escape codes
+        // (cursor moves); ESC (0x1B) has no glyph in Compose fonts -> tofu. Strip them.
+        val runner = FakeAdbProcessRunner()
+        val esc = 0x1b.toChar()
+        runner.whenArgsContains(listOf("shell", "top"), AdbProcessResult(0, "${esc}[999CTasks: 913${esc}[H${esc}[J\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val out = cr.runShellCmd("ABC123", "top -n 1")
+        assertEquals("Tasks: 913\n", out)
+    }
+
+    @Test
+    fun runShellCmd_replaces_tab_with_space() = runTest {
+        // cpuinfo uses \t to separate fields; \t has no glyph in Compose monospace -> tofu.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("shell", "cat"), AdbProcessResult(0, "processor\t: 0\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val out = cr.runShellCmd("ABC123", "cat /proc/cpuinfo")
+        assertEquals("processor : 0\n", out)
+    }
+
+    @Test
     fun pair_does_not_log_pairing_code() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("pair"), AdbProcessResult(0, "Successfully paired to 192.168.1.50:4321", ""))
