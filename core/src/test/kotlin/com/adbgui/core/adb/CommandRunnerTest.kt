@@ -282,6 +282,20 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun runShellCmd_strips_pty_carriage_returns() = runTest {
+        // adb shell runs under a pty whose termios has ONLCR set, so every \n in device output
+        // arrives as \r\n. The \r is a pty transport artifact, not part of the command's output;
+        // runShellCmd returns clean command text, so the pty-introduced \r must be stripped.
+        // (A bare \r renders as tofu in Compose monospace fonts — the "mystery ?" boxes on the
+        // System Info page. Real device cpuinfo bytes are pure \n, no \r — confirmed via od -c.)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("shell", "getprop"), AdbProcessResult(0, "a\r\nb\r\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val out = cr.runShellCmd("ABC123", "getprop")
+        assertEquals("a\nb\n", out)
+    }
+
+    @Test
     fun pair_does_not_log_pairing_code() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("pair"), AdbProcessResult(0, "Successfully paired to 192.168.1.50:4321", ""))

@@ -57,11 +57,14 @@ class CommandRunner(
 
     /** Run an arbitrary device-shell command string and return raw stdout.
      *  The whole `cmd` is passed as a single `shell` argument so the device's /system/bin/sh
-     *  interprets pipes/redirects. No Parser — output is for humans, returned verbatim.
-     *  Throws AdbCommandException on non-zero exit (commands where non-zero is expected,
-     *  e.g. grep-no-match, should append `|| true` in their template). */
+     *  interprets pipes/redirects. No Parser — output is for humans, returned verbatim
+     *  except the pty's carriage returns: `adb shell` runs under a pty with ONLCR, so every
+     *  `\n` arrives as `\r\n`; the `\r` is a transport artifact (not command output) and is
+     *  stripped here, so callers see clean `\n`-terminated lines. (A bare `\r` renders as
+     *  tofu in Compose monospace fonts.) Throws AdbCommandException on non-zero exit
+     *  (commands where non-zero is expected, e.g. grep-no-match, should append `|| true`). */
     suspend fun runShellCmd(serial: String, cmd: String): String {
-        return runCmd(serial, listOf("shell", cmd)).stdout
+        return runCmd(serial, listOf("shell", cmd)).stdout.replace("\r", "")
     }
 
     suspend fun listPackages(serial: String): List<PackageInfo> {

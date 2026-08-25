@@ -18,8 +18,11 @@ import java.nio.charset.StandardCharsets
 class JvmAdbProcessRunner : AdbProcessRunner {
     override suspend fun run(adb: AdbBinary, args: List<String>, timeoutMs: Long?): AdbProcessResult = withContext(Dispatchers.IO) {
         val proc = ProcessBuilder(listOf(adb.path) + args).redirectErrorStream(false).start()
-        val stdout = proc.inputStream.bufferedReader().readText()
-        val stderr = proc.errorStream.bufferedReader().readText()
+        // adb output is UTF-8 (Android is UTF-8); decode explicitly — the JVM default charset
+        // is MS936/GBK on Chinese Windows, which mangles non-ASCII (box-drawing, CJK process
+        // names) into "?". Matches startStream below, which already uses UTF_8.
+        val stdout = proc.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
+        val stderr = proc.errorStream.bufferedReader(StandardCharsets.UTF_8).readText()
         val finished = if (timeoutMs != null) withTimeoutOrNull(timeoutMs) { proc.waitFor() } else proc.waitFor()
         if (finished == null) { proc.destroyForcibly(); throw RuntimeException("adb timeout: ${args.joinToString(" ")}") }
         AdbProcessResult(proc.exitValue(), stdout, stderr)
