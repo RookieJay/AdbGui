@@ -25,6 +25,10 @@ class SettingsViewModel(private val store: SettingsStore, private val scope: Cor
         refresh()
         Strings.set(locale)
     }
+    fun setTheme(code: String) = scope.launch {
+        store.update { it.copy(theme = code) }
+        refresh()
+    }
     fun setScrcpyLaunch(profile: ScrcpyLaunchProfile) = scope.launch {
         store.update { it.copy(scrcpyLaunch = profile) }
         refresh()

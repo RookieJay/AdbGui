@@ -35,6 +35,7 @@ import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.log.LogLevel
 import com.adbgui.desktop.ui.i18n.Locale
 import com.adbgui.desktop.ui.i18n.Strings
+import com.adbgui.desktop.ui.theme.ThemePref
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
@@ -86,6 +87,20 @@ fun SettingsScreen(
                         Text(
                             text = locale.display,
                             color = if (settings.locale == locale.code) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface,
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
+            }
+
+            // --- Theme ---
+            Text(Strings.t("theme"), style = MaterialTheme.typography.subtitle1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ThemePref.entries.forEach { pref ->
+                    TextButton(onClick = { vm.setTheme(pref.code) }) {
+                        Text(
+                            text = Strings.t("theme_" + pref.code),
+                            color = if (settings.theme == pref.code) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface,
                         )
                     }
                     Spacer(Modifier.width(4.dp))

@@ -78,4 +78,15 @@ class SettingsViewModelTest {
         assertEquals("EMBEDDED", vm.settings.value.scrcpyMode)
         assertEquals("EMBEDDED", store.load().scrcpyMode)
     }
+
+    @Test
+    fun setTheme_persists_and_updates_state() = runTest {
+        val dir = Files.createTempDirectory("theme")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = SettingsViewModel(store, this)
+        vm.setTheme("dark")
+        advanceUntilIdle()
+        assertEquals("dark", vm.settings.value.theme)
+        assertEquals("dark", store.load().theme)
+    }
 }
