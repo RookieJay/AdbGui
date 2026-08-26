@@ -1,6 +1,5 @@
 package com.adbgui.desktop.main
 
-import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,6 +22,7 @@ import com.adbgui.desktop.ui.SystemOpsViewModel
 import com.adbgui.desktop.ui.SystemInfoViewModel
 import com.adbgui.desktop.ui.i18n.Locale
 import com.adbgui.desktop.ui.i18n.Strings
+import com.adbgui.desktop.ui.theme.AdbGuiTheme
 import com.adbgui.core.domain.DeviceStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -79,7 +79,8 @@ fun main() = application {
         }
     }
     Window(onCloseRequest = ::exitApplication, title = Strings.t("app_title")) {
-        MaterialTheme {
+        val settings by settingsVm.settings.collectAsState()
+        AdbGuiTheme(settings.theme) {
             AppShell(
                 vm = vm,
                 settingsVm = settingsVm,
@@ -115,6 +116,7 @@ fun main() = application {
     // Independent screenshot window — opened on demand from Device Overview so the
     // preview does not occupy the overview page. One-shot: closing discards state.
     if (showScreenshot) {
-        ScreenshotWindow(vm = screenshotVm, onClose = { showScreenshot = false })
+        val settings by settingsVm.settings.collectAsState()
+        ScreenshotWindow(vm = screenshotVm, themeCode = settings.theme, onClose = { showScreenshot = false })
     }
 }
