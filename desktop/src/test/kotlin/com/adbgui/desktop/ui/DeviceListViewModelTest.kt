@@ -122,6 +122,8 @@ class DeviceListViewModelTest {
         assertEquals(ConnectFailureReason.PORT_STALE, result?.reason)
         val err = vm.error.value
         assertNotNull(err)
+        // target ip:port prefixed so the user can tell WHICH device failed
+        assertTrue(err.contains("1.2.3.4:5555"), "expected target ip:port, got: $err")
         // actionable hint present + raw adb text preserved (not silently swallowed)
         assertTrue(err.contains("端口可能已变"), "expected hint, got: $err")
         assertTrue(err.contains("Connection refused"), "expected raw adb text, got: $err")

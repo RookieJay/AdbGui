@@ -37,7 +37,7 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
             try {
                 val r = repo.connectWireless(ip, port)
                 if (r.success) _dismissConnect.tryEmit(Unit)
-                else _error.value = formatConnectError(r)
+                else _error.value = formatConnectError(r, ip, port)
                 onResult(r)
             } finally { _busy.value = false }
         }
@@ -50,7 +50,7 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
             _busy.value = true
             try {
                 val r = repo.connectWireless(ip, port)
-                if (!r.success) _error.value = formatConnectError(r)
+                if (!r.success) _error.value = formatConnectError(r, ip, port)
             } finally { _busy.value = false }
         }
     }
@@ -58,14 +58,19 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
     /**
      * Port-stale / unreachable failures get an actionable hint (the wireless-debugging port
      * randomizes on reboot/re-enable, so a stored ip:port is often just stale — not a real
-     * error). Raw adb text is preserved in the hint so nothing is silently swallowed.
+     * error). Raw adb text is preserved in the hint so nothing is silently swallowed. The
+     * target ip:port is prefixed so the user can tell WHICH device failed when several are
+     * tried in a row.
      */
-    private fun formatConnectError(r: ConnectResult): String =
-        if (r.reason == ConnectFailureReason.PORT_STALE || r.reason == ConnectFailureReason.UNREACHABLE) {
+    private fun formatConnectError(r: ConnectResult, ip: String, port: Int): String {
+        val prefix = "$ip:$port\n"
+        val body = if (r.reason == ConnectFailureReason.PORT_STALE || r.reason == ConnectFailureReason.UNREACHABLE) {
             Strings.t("wireless_connect_hint_unreachable").format(r.message)
         } else {
             r.message
         }
+        return prefix + body
+    }
 
     fun setAlias(serial: String, alias: String?) { scope.launch { repo.setAlias(serial, alias) } }
     fun forget(serial: String) { scope.launch { repo.forgetDevice(serial) } }
