@@ -62,9 +62,9 @@ fun AppShell(
     onOpenShell: (String) -> Unit = {},
     repo: com.adbgui.core.device.DeviceRepository? = null,
     adbLocator: com.adbgui.core.adb.AdbLocator? = null,
-    rightContent: @Composable () -> Unit = { DefaultRightPane() },
 ) {
     var page by remember { mutableStateOf(NavPage.DEVICE_OVERVIEW) }
+    var showConnect by remember { mutableStateOf(false) }
     val serialFlow = selectedSerial ?: remember { MutableStateFlow<String?>(null) }
     val selected by serialFlow.collectAsState()
 
@@ -79,6 +79,7 @@ fun AppShell(
                 selected = selected,
                 onSelect = { device -> selectedSerial?.value = device.serial },
                 onReconnect = { ip, port -> vm.reconnect(ip, port) },
+                onOpenConnect = { showConnect = true },
             )
             Divider()
 
@@ -148,9 +149,19 @@ fun AppShell(
                 selected != null && page == NavPage.FILE_EXPLORER && fileExplorerVm != null -> {
                     FileExplorerScreen(vm = fileExplorerVm, selectedSerial = selected)
                 }
-                else -> rightContent()
+                else -> EmptyState(
+                    title = Strings.t("no_device_selected"),
+                    hint = Strings.t("no_device_hint"),
+                    icon = Icons.Filled.Devices,
+                    actionLabel = Strings.t("connect_first_device"),
+                    onAction = { showConnect = true },
+                )
             }
         }
+    }
+
+    if (showConnect) {
+        ConnectDialog(vm = vm, onDismiss = { showConnect = false })
     }
 }
 
@@ -198,9 +209,4 @@ private fun NavItem(
             Text(label, color = contentColor, style = MaterialTheme.typography.body2)
         }
     }
-}
-
-@Composable
-private fun DefaultRightPane() {
-    Text(Strings.t("no_device_selected"))
 }

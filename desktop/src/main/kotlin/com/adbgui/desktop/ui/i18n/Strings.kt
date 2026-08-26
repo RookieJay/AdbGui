@@ -26,6 +26,8 @@ object Strings {
         "nav_system_info" to "系统信息",
         // Common
         "no_device_selected" to "未选择设备",
+        "no_device_hint" to "连接一台设备以开始",
+        "connect_first_device" to "连接设备",
         "ok" to "确定",
         "cancel" to "取消",
         "save" to "保存",
@@ -296,6 +298,8 @@ object Strings {
         "nav_system_info" to "System info",
         // Common
         "no_device_selected" to "No device selected",
+        "no_device_hint" to "Connect a device to get started",
+        "connect_first_device" to "Connect a device",
         "ok" to "OK",
         "cancel" to "Cancel",
         "save" to "Save",

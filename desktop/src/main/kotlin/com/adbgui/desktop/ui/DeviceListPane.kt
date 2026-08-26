@@ -60,8 +60,8 @@ fun DeviceListPane(
     selected: String? = null,
     onSelect: (DeviceView) -> Unit = {},
     onReconnect: (String, Int) -> Unit = { _, _ -> },
+    onOpenConnect: () -> Unit = {},
 ) {
-    var showConnect by remember { mutableStateOf(false) }
     var showPair by remember { mutableStateOf(false) }
     val devices by vm.devices.collectAsState()
     val error by vm.error.collectAsState()
@@ -77,7 +77,7 @@ fun DeviceListPane(
                 Text(Strings.t("devices"), style = MaterialTheme.typography.subtitle1)
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { showPair = true }) { Text(Strings.t("pair")) }
-                IconButton(onClick = { showConnect = true }) {
+                IconButton(onClick = onOpenConnect) {
                     Icon(Icons.Filled.Add, contentDescription = Strings.t("connect"))
                 }
             }
@@ -110,13 +110,6 @@ fun DeviceListPane(
             // the next connect/reconnect attempt.
             error?.let { InlineMessageBanner(it, MessageKind.Error, onDismiss = { vm.clearError() }) }
         }
-    }
-
-    if (showConnect) {
-        ConnectDialog(
-            vm = vm,
-            onDismiss = { showConnect = false },
-        )
     }
 
     if (showPair) {
