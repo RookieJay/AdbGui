@@ -16,6 +16,7 @@ import com.adbgui.core.log.NoopLogger
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.i18n.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
@@ -37,6 +38,8 @@ class DeviceListViewModelTest {
         val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
         val vm = DeviceListViewModel(repo, this)
         var result: ConnectResult? = null
+        var dismissed = false
+        val dismissJob = launch { vm.dismissConnect.collect { dismissed = true } }
         vm.connect("1.2.3.4", 5555) { result = it }
         // DeviceHistoryStore.upsert/load switch to Dispatchers.IO (real threads); the connect
         // callback only fires after chained IO rounds complete and dispatch back to the test
@@ -49,6 +52,10 @@ class DeviceListViewModelTest {
             Thread.sleep(50)
         }
         assertTrue(result?.success == true)
+        // Successful connect must also emit the dismiss signal the ConnectDialog collects to
+        // close itself — regression guard for the "dialog didn't dismiss" bug.
+        assertTrue(dismissed, "connect success should emit dismissConnect")
+        dismissJob.cancel()
         repo.stop()         // cancel the dangling collectLatest collector
     }
 

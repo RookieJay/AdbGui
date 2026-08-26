@@ -101,12 +101,24 @@ fun DeviceListPane(
                 }
             }
 
-            // Inline error
+            // Inline error — dismissible so a stale-port hint (which can be long) doesn't
+            // permanently block the list. Cleared via vm.clearError(); also auto-cleared on
+            // the next connect/reconnect attempt.
             if (error != null) {
-                Box(
+                Row(
                     modifier = Modifier.fillMaxWidth().background(Color(0xFFB00020)).padding(8.dp),
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    SelectableText(error ?: "", color = Color.White, style = MaterialTheme.typography.caption)
+                    SelectableText(
+                        error ?: "",
+                        color = Color.White,
+                        style = MaterialTheme.typography.caption,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(onClick = { vm.clearError() }, modifier = Modifier.size(24.dp)) {
+                        Text("×", color = Color.White, style = MaterialTheme.typography.h6)
+                    }
                 }
             }
         }

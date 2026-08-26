@@ -15,6 +15,7 @@ import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,12 @@ fun ConnectDialog(
     var port by remember { mutableStateOf("5555") }
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
+
+    // Dismiss on successful connect. The VM emits dismissConnect from its background scope;
+    // collect it here (LaunchedEffect runs on the Compose UI thread) so the dialog-close
+    // state mutation happens on the UI thread — reliable recomposition. The connect button
+    // no longer drives dismissal via a captured callback.
+    LaunchedEffect(Unit) { vm.dismissConnect.collect { onDismiss() } }
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
@@ -83,9 +90,7 @@ fun ConnectDialog(
                 Button(
                     onClick = {
                         val p = port.toIntOrNull() ?: 5555
-                        vm.connect(ip.ifBlank { "127.0.0.1" }, p) { r ->
-                            if (r.success) onDismiss()
-                        }
+                        vm.connect(ip.ifBlank { "127.0.0.1" }, p)
                     },
                     enabled = !busy,
                 ) { Text(Strings.t("connect")) }

@@ -7,8 +7,11 @@ import com.adbgui.core.domain.DeviceView
 import com.adbgui.core.domain.PairResult
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -19,13 +22,22 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
+    // One-shot "close the connect dialog" signal. Emitted from the VM's background scope on
+    // successful connect and collected in ConnectDialog's LaunchedEffect (which runs on the
+    // Compose UI thread). Routing dismissal through a flow — the same pattern _busy/_error
+    // already use — avoids mutating plain Compose `mutableStateOf` from a background thread,
+    // which does not reliably trigger recomposition. (The VM scope is Dispatchers.Default.)
+    private val _dismissConnect = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val dismissConnect: SharedFlow<Unit> = _dismissConnect.asSharedFlow()
+
     fun connect(ip: String, port: Int, onResult: (ConnectResult) -> Unit = {}) {
         scope.launch {
             _error.value = null
             _busy.value = true
             try {
                 val r = repo.connectWireless(ip, port)
-                if (!r.success) _error.value = formatConnectError(r)
+                if (r.success) _dismissConnect.tryEmit(Unit)
+                else _error.value = formatConnectError(r)
                 onResult(r)
             } finally { _busy.value = false }
         }
