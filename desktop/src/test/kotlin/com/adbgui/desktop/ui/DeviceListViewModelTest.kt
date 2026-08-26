@@ -8,16 +8,21 @@ import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.device.IDeviceTracker
 import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbSource
+import com.adbgui.core.domain.ConnectFailureReason
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceSnapshot
 import com.adbgui.core.domain.PairResult
 import com.adbgui.core.log.NoopLogger
+import com.adbgui.desktop.ui.i18n.Strings
+import com.adbgui.desktop.ui.i18n.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class DeviceListViewModelTest {
     @Test
@@ -78,6 +83,41 @@ class DeviceListViewModelTest {
         assertTrue(pairResult?.success == true)
         assertTrue(vm.error.value == null)
         assertTrue(!vm.busy.value)
+        repo.stop()
+    }
+
+    @Test
+    fun connect_failure_port_stale_shows_actionable_hint_with_raw_message() = runTest {
+        // adb connect to a stale port (device rebooted, wireless-debugging port randomized)
+        // fails with "Connection refused" → the VM should surface an actionable hint that
+        // names the cause + preserves the raw adb text, not a bare "Connection refused".
+        Strings.set(Locale.ZH)
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(emptyList<DeviceSnapshot>())
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("stale"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(
+            listOf("connect"),
+            AdbProcessResult(1, "failed to connect to 1.2.3.4:5555", "cannot connect to 1.2.3.4:5555: Connection refused"),
+        )
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val vm = DeviceListViewModel(repo, this)
+        var result: ConnectResult? = null
+        vm.connect("1.2.3.4", 5555) { result = it }
+        val deadline = System.currentTimeMillis() + 5_000
+        while (result == null && System.currentTimeMillis() < deadline) {
+            advanceUntilIdle()
+            if (result != null) break
+            Thread.sleep(50)
+        }
+        assertEquals(ConnectFailureReason.PORT_STALE, result?.reason)
+        val err = vm.error.value
+        assertNotNull(err)
+        // actionable hint present + raw adb text preserved (not silently swallowed)
+        assertTrue(err.contains("端口可能已变"), "expected hint, got: $err")
+        assertTrue(err.contains("Connection refused"), "expected raw adb text, got: $err")
         repo.stop()
     }
 }

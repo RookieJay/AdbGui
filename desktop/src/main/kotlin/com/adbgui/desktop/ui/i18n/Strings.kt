@@ -44,6 +44,7 @@ object Strings {
         // Device list
         "devices" to "设备",
         "reconnect" to "重新连接",
+        "wireless_connect_hint_unreachable" to "端口可能已变或设备不可达。请在手机「无线调试」主屏查看新端口后重连，或直接打开无线调试让设备自动出现。\nadb: %s",
         "rename" to "重命名",
         "disconnect" to "断开连接",
         "forget" to "移除",
@@ -308,6 +309,7 @@ object Strings {
         // Device list
         "devices" to "Devices",
         "reconnect" to "Reconnect",
+        "wireless_connect_hint_unreachable" to "The port may have changed or the device is unreachable. Check the new port on the phone's \"Wireless debugging\" screen and reconnect, or just open wireless debugging and let the device appear automatically.\nadb: %s",
         "rename" to "Rename",
         "disconnect" to "Disconnect",
         "forget" to "Forget",

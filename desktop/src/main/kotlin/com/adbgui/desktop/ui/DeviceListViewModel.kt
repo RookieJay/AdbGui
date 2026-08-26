@@ -1,9 +1,11 @@
 package com.adbgui.desktop.ui
 
 import com.adbgui.core.device.DeviceRepository
+import com.adbgui.core.domain.ConnectFailureReason
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceView
 import com.adbgui.core.domain.PairResult
+import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,7 +25,7 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
             _busy.value = true
             try {
                 val r = repo.connectWireless(ip, port)
-                if (!r.success) _error.value = r.message
+                if (!r.success) _error.value = formatConnectError(r)
                 onResult(r)
             } finally { _busy.value = false }
         }
@@ -36,10 +38,22 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
             _busy.value = true
             try {
                 val r = repo.connectWireless(ip, port)
-                if (!r.success) _error.value = r.message
+                if (!r.success) _error.value = formatConnectError(r)
             } finally { _busy.value = false }
         }
     }
+
+    /**
+     * Port-stale / unreachable failures get an actionable hint (the wireless-debugging port
+     * randomizes on reboot/re-enable, so a stored ip:port is often just stale — not a real
+     * error). Raw adb text is preserved in the hint so nothing is silently swallowed.
+     */
+    private fun formatConnectError(r: ConnectResult): String =
+        if (r.reason == ConnectFailureReason.PORT_STALE || r.reason == ConnectFailureReason.UNREACHABLE) {
+            Strings.t("wireless_connect_hint_unreachable").format(r.message)
+        } else {
+            r.message
+        }
 
     fun setAlias(serial: String, alias: String?) { scope.launch { repo.setAlias(serial, alias) } }
     fun forget(serial: String) { scope.launch { repo.forgetDevice(serial) } }
