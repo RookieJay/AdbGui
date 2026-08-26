@@ -1,6 +1,5 @@
 package com.adbgui.desktop.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,7 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -51,11 +49,7 @@ fun FileExplorerScreen(
                 if (busy) CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp))
                 OutlinedButton(onClick = { vm.refresh() }) { Text(Strings.t("refresh")) }
             }
-            error?.let { e ->
-                Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
-                    SelectableText(e, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
-                }
-            }
+            error?.let { e -> InlineMessageBanner(e, MessageKind.Error) }
             savedFile?.let { f ->
                 Surface(color = MaterialTheme.colors.background, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {

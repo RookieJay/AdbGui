@@ -17,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
 
@@ -52,11 +51,7 @@ fun ShellScreen(
                     error = null
                     runCatching { onOpenShell(selectedSerial) }.onFailure { error = it.message }
                 }) { Text(Strings.t("open_shell")) }
-                error?.let { msg ->
-                    Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
-                        SelectableText(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
-                    }
-                }
+                error?.let { msg -> InlineMessageBanner(msg, MessageKind.Error) }
             }
         }
     }

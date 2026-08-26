@@ -103,30 +103,8 @@ fun DeviceListPane(
 
             // Inline error — dismissible so a stale-port hint (which can be long) doesn't
             // permanently block the list. Cleared via vm.clearError(); also auto-cleared on
-            // the next connect/reconnect attempt. Layout: weight(1f) must sit on a DIRECT
-            // child of Row (a Box) — SelectableText wraps its Text in a SelectionContainer,
-            // so a modifier passed to SelectableText lands on the inner Text and the long
-            // error string would otherwise push the dismiss button off-screen.
-            if (error != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(Color(0xFFB00020)).padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        SelectableText(
-                            error ?: "",
-                            color = Color.White,
-                            style = MaterialTheme.typography.caption,
-                        )
-                    }
-                    TextButton(
-                        onClick = { vm.clearError() },
-                        modifier = Modifier.padding(start = 8.dp).width(40.dp),
-                    ) {
-                        Text("×", color = Color.White, style = MaterialTheme.typography.h6)
-                    }
-                }
-            }
+            // the next connect/reconnect attempt.
+            error?.let { InlineMessageBanner(it, MessageKind.Error, onDismiss = { vm.clearError() }) }
         }
     }
 

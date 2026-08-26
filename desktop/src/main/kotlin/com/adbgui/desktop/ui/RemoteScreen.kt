@@ -117,7 +117,7 @@ fun RemoteScreen(
                     kotlinx.coroutines.delay(3000)
                     vm.clearError()
                 }
-                SelectableText(msg, color = androidx.compose.ui.graphics.Color(0xFFC62828), modifier = Modifier.padding(4.dp))
+                InlineMessageBanner(msg, MessageKind.Error)
             }
         }
     }

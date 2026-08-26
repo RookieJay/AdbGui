@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -124,15 +123,7 @@ fun ScreenshotScreen(
             }
 
             // Inline save error.
-            saveError?.let {
-                Surface(
-                    color = Color(0xFFFFCDD2),
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    SelectableText(it, style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
-                }
-            }
+            saveError?.let { InlineMessageBanner(it, MessageKind.Error) }
 
             // Bottom-right actions: copy, save (default focus).
             Row(

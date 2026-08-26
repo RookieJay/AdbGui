@@ -22,7 +22,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.RebootMode
 import com.adbgui.desktop.ui.i18n.Strings
@@ -69,17 +68,8 @@ fun SystemOpsScreen(
             // Root / remount / shell moved to Device Overview (roadmap G5). System Ops keeps
             // state-affecting operations only (reboot here; monkey压测 reserved per G4).
 
-            message?.let { msg ->
-                Surface(color = Color(0xFFC8E6C9), modifier = Modifier.fillMaxWidth()) {
-                    SelectableText(msg.trim(), style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
-                }
-            }
-
-            error?.let { msg ->
-                Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
-                    SelectableText(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
-                }
-            }
+            message?.let { msg -> InlineMessageBanner(msg.trim(), MessageKind.Success) }
+            error?.let { msg -> InlineMessageBanner(msg, MessageKind.Error) }
         }
     }
 

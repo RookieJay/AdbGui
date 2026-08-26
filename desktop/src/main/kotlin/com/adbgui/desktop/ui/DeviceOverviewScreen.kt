@@ -33,7 +33,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.ScrcpyMode
 import com.adbgui.core.domain.ScrcpyOptions
@@ -92,16 +91,8 @@ fun DeviceOverviewScreen(
                     OutlinedButton(enabled = !opsBusy, onClick = { systemOpsVm.remount() }) { Text(Strings.t("remount_op")) }
                     OutlinedButton(enabled = selectedSerial != null, onClick = { selectedSerial?.let { onOpenShell(it) } }) { Text(Strings.t("open_shell")) }
                 }
-                opsMessage?.let { msg ->
-                    Surface(color = Color(0xFFC8E6C9), modifier = Modifier.fillMaxWidth()) {
-                        SelectableText(msg.trim(), style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
-                    }
-                }
-                opsError?.let { msg ->
-                    Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
-                        SelectableText(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
-                    }
-                }
+                opsMessage?.let { msg -> InlineMessageBanner(msg.trim(), MessageKind.Success) }
+                opsError?.let { msg -> InlineMessageBanner(msg, MessageKind.Error) }
             }
             Divider()
             // --- scrcpy section ---
@@ -155,16 +146,10 @@ fun DeviceOverviewScreen(
             when (scrcpyStatus.value) {
                 "installed" -> {
                     Text(Strings.t("scrcpy_status_installed"))
-                    // Launch/run errors surface here (red, top of section) so they're not
-                    // buried below the buttons in black text.
+                    // Launch/run errors surface here (top of section) so they're not buried
+                    // below the buttons in black text.
                     scrcpyError.value?.let { msg ->
-                        Surface(
-                            color = Color(0xFFFFCDD2),
-                            shape = RoundedCornerShape(4.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            SelectableText(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(8.dp))
-                        }
+                        InlineMessageBanner(msg, MessageKind.Error)
                     }
                     // Mode toggle. EXTERNAL works; EMBEDDED (JNA reparent) is reserved —
                     // disabled pending implementation, slot kept so users know it's planned.

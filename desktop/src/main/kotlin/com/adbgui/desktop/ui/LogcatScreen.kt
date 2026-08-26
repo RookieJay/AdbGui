@@ -16,6 +16,7 @@ import com.adbgui.core.device.LogcatFilters
 import com.adbgui.core.device.LogcatStatus
 import com.adbgui.core.domain.LogcatLevel
 import com.adbgui.desktop.ui.i18n.Strings
+import com.adbgui.desktop.ui.theme.AppColors
 import kotlinx.coroutines.launch
 import java.awt.FileDialog
 import java.awt.Frame
@@ -100,11 +101,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                     Text(Strings.t("reconnecting_logcat"), Modifier.padding(6.dp), style = MaterialTheme.typography.caption)
                 }
             }
-            error?.let { e ->
-                Surface(color = Color(0xFFFFCDD2), modifier = Modifier.fillMaxWidth()) {
-                    SelectableText(e, Modifier.padding(6.dp), style = MaterialTheme.typography.caption)
-                }
-            }
+            error?.let { e -> InlineMessageBanner(e, MessageKind.Error) }
             savedFile?.let { f ->
                 Surface(color = MaterialTheme.colors.background, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -116,11 +113,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 }
             }
 
-            exportError?.let { msg ->
-                Surface(color = Color(0xFFFFCDD2), shape = RoundedCornerShape(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    SelectableText(msg, style = MaterialTheme.typography.caption, modifier = Modifier.padding(6.dp))
-                }
-            }
+            exportError?.let { msg -> InlineMessageBanner(msg, MessageKind.Error) }
 
             Divider()
             // Log list with auto-scroll-to-bottom
@@ -154,11 +147,16 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     }
 }
 
-private fun levelColor(l: LogcatLevel): Color = when (l) {
-    LogcatLevel.V, LogcatLevel.D -> Color.Gray
-    LogcatLevel.I -> Color.Black
-    LogcatLevel.W -> Color(0xFFE65100)
-    LogcatLevel.E, LogcatLevel.F -> Color(0xFFC62828)
+@Composable
+private fun levelColor(l: LogcatLevel): Color {
+    val c = AppColors.current
+    return when (l) {
+        LogcatLevel.V -> c.logVerbose
+        LogcatLevel.D -> c.logDebug
+        LogcatLevel.I -> c.logInfo
+        LogcatLevel.W -> c.logWarn
+        LogcatLevel.E, LogcatLevel.F -> c.logError
+    }
 }
 
 private fun levelLabel(levelSet: Set<LogcatLevel>): String =

@@ -26,7 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
 import java.awt.FileDialog
@@ -51,7 +50,6 @@ fun DeviceInfoScreen(
     val report by vm.report.collectAsState()
     val exportBusy by vm.exportBusy.collectAsState()
     var busy by remember { mutableStateOf(false) }
-    var errorExpanded by remember { mutableStateOf(true) }
     var savedFile by remember { mutableStateOf<File?>(null) }
     var saveError by remember { mutableStateOf<String?>(null) }
 
@@ -131,24 +129,12 @@ fun DeviceInfoScreen(
 
             val saveOrErr = error ?: saveError
             saveOrErr?.let { msg ->
-                Surface(
-                    color = Color(0xFFFFCDD2),
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(Strings.t("adb_error"), style = MaterialTheme.typography.subtitle2)
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { errorExpanded = !errorExpanded }) {
-                                Text(if (errorExpanded) Strings.t("collapse") else Strings.t("expand"))
-                            }
-                        }
-                        if (errorExpanded) {
-                            SelectableText(msg, style = MaterialTheme.typography.caption)
-                        }
-                    }
-                }
+                InlineMessageBanner(
+                    Strings.t("adb_error"),
+                    MessageKind.Error,
+                    details = msg,
+                    initiallyExpanded = true,
+                )
             }
 
             Divider()

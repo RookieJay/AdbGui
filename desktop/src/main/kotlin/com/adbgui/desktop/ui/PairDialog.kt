@@ -109,11 +109,7 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
                 }
                 if (error != null) {
                     Spacer(Modifier.padding(top = 8.dp))
-                    SelectableText(
-                        error ?: "",
-                        color = MaterialTheme.colors.error,
-                        style = MaterialTheme.typography.caption,
-                    )
+                    InlineMessageBanner(error ?: "", MessageKind.Error)
                 }
             }
         },

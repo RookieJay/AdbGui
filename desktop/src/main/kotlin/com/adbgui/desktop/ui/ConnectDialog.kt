@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
@@ -68,11 +67,7 @@ fun ConnectDialog(
                 )
                 if (error != null) {
                     Spacer(Modifier.padding(top = 8.dp))
-                    Text(
-                        text = error ?: "",
-                        color = MaterialTheme.colors.error,
-                        style = MaterialTheme.typography.caption,
-                    )
+                    InlineMessageBanner(error ?: "", MessageKind.Error)
                 }
             }
         },

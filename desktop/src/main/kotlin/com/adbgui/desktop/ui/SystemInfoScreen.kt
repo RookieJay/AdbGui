@@ -87,13 +87,7 @@ fun SystemInfoScreen(
                     }
                 }
             }
-            packagesError?.let {
-                SelectableText(
-                    it,
-                    style = MaterialTheme.typography.caption,
-                    color = MaterialTheme.colors.error,
-                )
-            }
+            packagesError?.let { InlineMessageBanner(it, MessageKind.Error) }
             Divider(Modifier.padding(vertical = 8.dp))
             LazyColumn(Modifier.fillMaxSize()) {
                 groups.forEach { (groupKey, cmds) ->

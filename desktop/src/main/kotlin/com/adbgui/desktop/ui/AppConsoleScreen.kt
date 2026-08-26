@@ -72,7 +72,6 @@ fun AppConsoleScreen(
     val providerResult by vm.providerResult.collectAsState()
     var selectedPkg by remember { mutableStateOf<String?>(null) }
     var search by remember { mutableStateOf("") }
-    var errorExpanded by remember { mutableStateOf(true) }
     var advancedOpen by remember { mutableStateOf(false) }
     var confirmUninstall by remember { mutableStateOf<String?>(null) }
 
@@ -118,32 +117,14 @@ fun AppConsoleScreen(
 
             // --- Inline result: error (collapsible) or success (ephemeral) — never both ---
             error?.let { msg ->
-                Surface(
-                    color = Color(0xFFFFCDD2),
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(Strings.t("adb_error"), style = MaterialTheme.typography.subtitle2)
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { errorExpanded = !errorExpanded }) {
-                                Text(if (errorExpanded) Strings.t("collapse") else Strings.t("expand"))
-                            }
-                        }
-                        if (errorExpanded) {
-                            SelectableText(msg, style = MaterialTheme.typography.caption)
-                        }
-                    }
-                }
+                InlineMessageBanner(
+                    Strings.t("adb_error"),
+                    MessageKind.Error,
+                    details = msg,
+                    initiallyExpanded = true,
+                )
             } ?: message?.let { msg ->
-                Surface(
-                    color = Color(0xFFC8E6C9),
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    SelectableText(msg, modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.body2)
-                }
+                InlineMessageBanner(msg, MessageKind.Success)
             }
 
             Divider()
