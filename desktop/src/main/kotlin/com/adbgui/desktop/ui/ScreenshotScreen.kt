@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.MaterialTheme
@@ -103,23 +102,12 @@ fun ScreenshotScreen(
 
             // Post-save links: open the image and its folder.
             savedFile?.let { f ->
-                Surface(
-                    color = MaterialTheme.colors.background,
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        SelectableText(
-                            Strings.t("saved_path").format(f.absolutePath),
-                            style = MaterialTheme.typography.caption,
-                        )
-                        Row {
-                            TextButton(onClick = { openFile(f) }) { Text(Strings.t("open_image")) }
-                            Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = { revealFile(f) }) { Text(Strings.t("open_folder")) }
-                        }
-                    }
-                }
+                SavedFileBanner(
+                    path = f.absolutePath,
+                    onOpen = { openFile(f) },
+                    onReveal = { revealFile(f) },
+                    openLabel = Strings.t("open_image"),
+                )
             }
 
             // Inline save error.

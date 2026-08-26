@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
@@ -309,23 +308,7 @@ fun DeviceOverviewScreen(
                     // After stopping, show the recorded file's path with open/reveal links.
                     lastRecordFile.value?.let { path ->
                         val f = File(path)
-                        Surface(
-                            color = MaterialTheme.colors.background,
-                            shape = RoundedCornerShape(4.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text(
-                                    Strings.t("saved_path").format(path),
-                                    style = MaterialTheme.typography.caption,
-                                )
-                                Row {
-                                    TextButton(onClick = { openFile(f) }) { Text(Strings.t("open")) }
-                                    Spacer(Modifier.width(8.dp))
-                                    TextButton(onClick = { revealFile(f) }) { Text(Strings.t("open_folder")) }
-                                }
-                            }
-                        }
+                        SavedFileBanner(path = path, onOpen = { openFile(f) }, onReveal = { revealFile(f) })
                     }
                     // --- Shortcuts dialog ---
                     if (showShortcuts.value) {

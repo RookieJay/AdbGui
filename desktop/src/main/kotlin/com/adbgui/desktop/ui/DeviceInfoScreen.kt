@@ -116,12 +116,7 @@ fun DeviceInfoScreen(
                         }
                         savedFile?.let { f ->
                             Spacer(Modifier.width(8.dp))
-                            Text(Strings.t("saved_path").format(f.absolutePath), style = MaterialTheme.typography.caption)
-                            Row {
-                                TextButton(onClick = { openFile(f) }) { Text(Strings.t("open")) }
-                                Spacer(Modifier.width(8.dp))
-                                TextButton(onClick = { revealFile(f) }) { Text(Strings.t("open_folder")) }
-                            }
+                            SavedFileBanner(path = f.absolutePath, onOpen = { openFile(f) }, onReveal = { revealFile(f) })
                         }
                     }
                 }

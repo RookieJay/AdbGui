@@ -105,14 +105,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
             }
             error?.let { e -> InlineMessageBanner(e, MessageKind.Error) }
             savedFile?.let { f ->
-                Surface(color = MaterialTheme.colors.background, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(Strings.t("saved_path").format(f.absolutePath), style = MaterialTheme.typography.caption)
-                        Spacer(Modifier.width(8.dp))
-                        TextButton(onClick = { openFile(f) }) { Text(Strings.t("open")) }
-                        TextButton(onClick = { revealFile(f) }) { Text(Strings.t("open_folder")) }
-                    }
-                }
+                SavedFileBanner(path = f.absolutePath, onOpen = { openFile(f) }, onReveal = { revealFile(f) })
             }
 
             exportError?.let { msg -> InlineMessageBanner(msg, MessageKind.Error) }
