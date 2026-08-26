@@ -1,14 +1,20 @@
 package com.adbgui.desktop.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import com.adbgui.desktop.platform.SystemThemeDetector
+import kotlinx.coroutines.delay
 
 /**
  * Semantic color slots that Material 2's [androidx.compose.material.Colors] does not provide:
@@ -102,24 +108,35 @@ enum class ThemePref(val code: String) {
     }
 }
 
-/** Resolve a persisted theme code (light/dark/system) to a concrete dark-or-not value. */
-@Composable
-fun resolveIsDark(themeCode: String): Boolean = when (ThemePref.fromCode(themeCode)) {
-    ThemePref.LIGHT -> false
-    ThemePref.DARK -> true
-    ThemePref.SYSTEM -> isSystemInDarkTheme()
-}
-
 /**
  * App-wide theme: provides Material 2 [MaterialTheme] colors (light/dark) plus [ExtendedColors]
  * via [LocalExtendedColors]. Must wrap every top-level Window so dark mode is consistent.
+ *
+ * For "system" mode, polls [SystemThemeDetector] every 2s rather than calling
+ * `isSystemInDarkTheme()`, which snapshots the AWT theme at JVM startup and does not refresh
+ * when the user switches the OS dark/light mode at runtime. The registry read is live.
  */
 @Composable
 fun AdbGuiTheme(
     themeCode: String,
     content: @Composable () -> Unit,
 ) {
-    val isDark = resolveIsDark(themeCode)
+    val pref = ThemePref.fromCode(themeCode)
+    val isDark = when (pref) {
+        ThemePref.LIGHT -> false
+        ThemePref.DARK -> true
+        ThemePref.SYSTEM -> {
+            // Live-poll the registry so OS theme changes at runtime are picked up without restart.
+            val state = remember { mutableStateOf(SystemThemeDetector.isDark()) }
+            LaunchedEffect(Unit) {
+                while (true) {
+                    delay(2000)
+                    state.value = SystemThemeDetector.isDark()
+                }
+            }
+            state.value
+        }
+    }
     val colors = if (isDark) DarkColors else LightColors
     val extended = if (isDark) DarkExtendedColors else LightExtendedColors
     CompositionLocalProvider(LocalExtendedColors provides extended) {

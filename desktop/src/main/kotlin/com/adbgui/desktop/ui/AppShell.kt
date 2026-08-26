@@ -1,5 +1,6 @@
 package com.adbgui.desktop.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Divider
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
@@ -54,7 +56,10 @@ fun AppShell(
     val selected by serialFlow.collectAsState()
 
     Row(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.width(280.dp).fillMaxHeight()) {
+        Column(
+            modifier = Modifier.width(280.dp).fillMaxHeight()
+                .background(MaterialTheme.colors.surface),
+        ) {
             DeviceListPane(
                 vm = vm,
                 modifier = Modifier.fillMaxWidth().weight(1f),
