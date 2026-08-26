@@ -1,6 +1,8 @@
 package com.adbgui.desktop.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,19 +10,31 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Divider
+import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.filled.Subject
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,7 +64,6 @@ fun AppShell(
     adbLocator: com.adbgui.core.adb.AdbLocator? = null,
     rightContent: @Composable () -> Unit = { DefaultRightPane() },
 ) {
-    var showSettings by remember { mutableStateOf(false) }
     var page by remember { mutableStateOf(NavPage.DEVICE_OVERVIEW) }
     val serialFlow = selectedSerial ?: remember { MutableStateFlow<String?>(null) }
     val selected by serialFlow.collectAsState()
@@ -68,56 +81,41 @@ fun AppShell(
                 onReconnect = { ip, port -> vm.reconnect(ip, port) },
             )
             Divider()
-            if (deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null) {
-                TextButton(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                    onClick = { showSettings = false; page = NavPage.DEVICE_OVERVIEW },
-                ) { Text(if (page == NavPage.DEVICE_OVERVIEW && !showSettings) "${Strings.t("nav_device_overview")} *" else Strings.t("nav_device_overview")) }
+
+            // Feature nav items — only render the ones whose VM is wired.
+            val navItems: List<NavItemSpec> = buildList {
+                if (deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null) {
+                    add(NavItemSpec(NavPage.DEVICE_OVERVIEW, "nav_device_overview", Icons.Filled.Devices))
+                }
+                if (appConsoleVm != null) add(NavItemSpec(NavPage.APP_CONSOLE, "nav_app_console", Icons.Filled.Apps))
+                if (logcatVm != null) add(NavItemSpec(NavPage.LOGCAT, "nav_logcat", Icons.AutoMirrored.Filled.Subject))
+                if (systemOpsVm != null) add(NavItemSpec(NavPage.SYSTEM_OPS, "nav_system_ops", Icons.Filled.PowerSettingsNew))
+                if (systemInfoVm != null) add(NavItemSpec(NavPage.SYSTEM_INFO, "nav_system_info", Icons.Filled.Memory))
+                if (fileExplorerVm != null) add(NavItemSpec(NavPage.FILE_EXPLORER, "nav_file_explorer", Icons.Filled.FolderOpen))
             }
-            if (appConsoleVm != null) {
-                TextButton(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                    onClick = { showSettings = false; page = NavPage.APP_CONSOLE },
-                ) { Text(if (page == NavPage.APP_CONSOLE && !showSettings) "${Strings.t("nav_app_console")} *" else Strings.t("nav_app_console")) }
+            navItems.forEach { (navPage, key, icon) ->
+                NavItem(
+                    label = Strings.t(key),
+                    icon = icon,
+                    selected = page == navPage,
+                    onClick = { page = navPage },
+                )
             }
-            if (logcatVm != null) {
-                TextButton(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                    onClick = { showSettings = false; page = NavPage.LOGCAT },
-                ) { Text(if (page == NavPage.LOGCAT && !showSettings) "${Strings.t("nav_logcat")} *" else Strings.t("nav_logcat")) }
-            }
-            if (systemOpsVm != null) {
-                TextButton(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                    onClick = { showSettings = false; page = NavPage.SYSTEM_OPS },
-                ) { Text(if (page == NavPage.SYSTEM_OPS && !showSettings) "${Strings.t("nav_system_ops")} *" else Strings.t("nav_system_ops")) }
-            }
-            if (systemInfoVm != null) {
-                TextButton(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                    onClick = { showSettings = false; page = NavPage.SYSTEM_INFO },
-                ) { Text(if (page == NavPage.SYSTEM_INFO && !showSettings) "${Strings.t("nav_system_info")} *" else Strings.t("nav_system_info")) }
-            }
-            if (fileExplorerVm != null) {
-                TextButton(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                    onClick = { showSettings = false; page = NavPage.FILE_EXPLORER },
-                ) { Text(if (page == NavPage.FILE_EXPLORER && !showSettings) "${Strings.t("nav_file_explorer")} *" else Strings.t("nav_file_explorer")) }
-            }
+
             if (settingsVm != null && configDir != null) {
                 Divider()
-                TextButton(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                    onClick = { showSettings = !showSettings },
-                ) {
-                    Text(if (showSettings) Strings.t("nav_back_to_devices") else Strings.t("nav_settings"))
-                }
+                NavItem(
+                    label = Strings.t("nav_settings"),
+                    icon = Icons.Filled.Settings,
+                    selected = page == NavPage.SETTINGS,
+                    onClick = { page = NavPage.SETTINGS },
+                )
             }
         }
         Divider(modifier = Modifier.fillMaxHeight().width(1.dp))
         Surface(modifier = Modifier.fillMaxSize()) {
             when {
-                showSettings && settingsVm != null && configDir != null -> {
+                page == NavPage.SETTINGS && settingsVm != null && configDir != null -> {
                     SettingsScreen(vm = settingsVm, configDir = configDir, scrcpyLocator = scrcpyLocator, repo = repo, adbLocator = adbLocator)
                 }
                 selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null && scrcpyInstaller != null && scrcpyLocator != null && scrcpyLauncher != null -> {
@@ -156,7 +154,51 @@ fun AppShell(
     }
 }
 
-private enum class NavPage { DEVICE_OVERVIEW, APP_CONSOLE, LOGCAT, SYSTEM_OPS, SYSTEM_INFO, FILE_EXPLORER }
+private enum class NavPage { DEVICE_OVERVIEW, APP_CONSOLE, LOGCAT, SYSTEM_OPS, SYSTEM_INFO, FILE_EXPLORER, SETTINGS }
+
+private data class NavItemSpec(val page: NavPage, val labelKey: String, val icon: ImageVector)
+
+/**
+ * Sidebar nav row with a real selected state: primary-tinted background + a 3dp left indicator
+ * bar + primary-colored icon/label. Replaces the old "append ' *' to the label" hack.
+ * 44dp tall to meet the desktop touch-target floor.
+ */
+@Composable
+private fun NavItem(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val backgroundColor = if (selected) MaterialTheme.colors.primary.copy(alpha = 0.14f) else Color.Transparent
+    val contentColor = if (selected) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .background(backgroundColor)
+            .clickable(onClick = onClick),
+    ) {
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(3.dp)
+                    .background(MaterialTheme.colors.primary)
+                    .align(Alignment.CenterStart),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = label, tint = contentColor)
+            Spacer(Modifier.width(12.dp))
+            Text(label, color = contentColor, style = MaterialTheme.typography.body2)
+        }
+    }
+}
 
 @Composable
 private fun DefaultRightPane() {

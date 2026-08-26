@@ -22,7 +22,6 @@ object Strings {
         "nav_device_info" to "设备信息",
         "nav_screenshot" to "截图",
         "nav_app_manager" to "应用管理",
-        "nav_back_to_devices" to "返回设备列表",
         "nav_settings" to "设置",
         "nav_system_info" to "系统信息",
         // Common
@@ -291,7 +290,6 @@ object Strings {
         "nav_device_info" to "Device Info",
         "nav_screenshot" to "Screenshot",
         "nav_app_manager" to "App Manager",
-        "nav_back_to_devices" to "Back to devices",
         "nav_settings" to "Settings",
         "nav_system_info" to "System info",
         // Common
