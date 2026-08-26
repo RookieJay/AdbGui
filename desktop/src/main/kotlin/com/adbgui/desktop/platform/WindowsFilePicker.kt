@@ -72,6 +72,7 @@ internal object WindowsFilePicker {
     private const val FOS_NOCHANGEDIR = 0x00000008
     private const val FOS_FILEMUSTEXIST = 0x00001000
     private const val FOS_PATHMUSTEXIST = 0x00000800
+    private const val FOS_PICKFOLDERS = 0x00000020
     private const val SIGDN_FILESYSPATH = 0x80058000
 
     /**
@@ -79,7 +80,16 @@ internal object WindowsFilePicker {
      * modern dialog isn't usable (caller falls back). Throws on COM failure so the caller's
      * try/catch can route to the legacy picker + log.
      */
-    fun pickFile(title: String, currentPath: String?): String? {
+    fun pickFile(title: String, currentPath: String?): String? = pick(title, currentPath, pickFolders = false)
+
+    /**
+     * Open the modern folder-picker dialog (same IFileOpenDialog with `FOS_PICKFOLDERS`).
+     * Same return contract as [pickFile]. Reuses the verified vtable slots — only the options
+     * flag differs, no new COM offsets.
+     */
+    fun pickDirectory(title: String, currentPath: String?): String? = pick(title, currentPath, pickFolders = true)
+
+    private fun pick(title: String, currentPath: String?, pickFolders: Boolean): String? {
         var pUnk: Pointer? = null
         var pFolderItem: Pointer? = null
         var pResultItem: Pointer? = null
@@ -94,10 +104,12 @@ internal object WindowsFilePicker {
             if (hr.toInt() != S_OK) error("CoCreateInstance hr=0x${hr.toInt().toString(16)}")
             pUnk = ppv.value ?: error("CoCreateInstance returned null")
 
-            // Set options: add NOCHANGEDIR | FILEMUSTEXIST | PATHMUSTEXIST to whatever's current.
+            // Set options: NOCHANGEDIR | PATHMUSTEXIST, plus FILEMUSTEXIST (file pick) or
+            // PICKFOLDERS (folder pick) — the two modes are mutually exclusive on the flag bits.
             val opts = IntByReference()
             checkHr(pUnk, SLOT_GET_OPTIONS, invokeHr(pUnk, SLOT_GET_OPTIONS, arrayOf(opts)), "GetOptions")
-            val newOpts = opts.value or FOS_NOCHANGEDIR or FOS_FILEMUSTEXIST or FOS_PATHMUSTEXIST
+            val modeFlag = if (pickFolders) FOS_PICKFOLDERS else FOS_FILEMUSTEXIST
+            val newOpts = opts.value or FOS_NOCHANGEDIR or FOS_PATHMUSTEXIST or modeFlag
             checkHr(pUnk, SLOT_SET_OPTIONS, invokeHr(pUnk, SLOT_SET_OPTIONS, arrayOf(WinDef.DWORD(newOpts.toLong()))), "SetOptions")
 
             // Title.

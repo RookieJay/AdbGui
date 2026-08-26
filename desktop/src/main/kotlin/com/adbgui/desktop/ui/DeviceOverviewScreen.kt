@@ -45,7 +45,6 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import javax.swing.JFileChooser
 
 @Composable
 fun DeviceOverviewScreen(
@@ -222,14 +221,11 @@ fun DeviceOverviewScreen(
                             )
                             Spacer(Modifier.width(8.dp))
                             Button(onClick = {
-                                val chooser = JFileChooser()
-                                chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-                                chooser.isAcceptAllFileFilterUsed = false
-                                chooser.dialogTitle = Strings.t("scrcpy_record")
-                                chooser.approveButtonText = Strings.t("select_folder")
-                                if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                                    optRecordPath.value = chooser.selectedFile.absolutePath
-                                }
+                                val chosen = com.adbgui.desktop.platform.FileDialogs.pickDirectory(
+                                    title = Strings.t("scrcpy_record"),
+                                    currentPath = optRecordPath.value,
+                                )
+                                if (chosen != null) optRecordPath.value = chosen
                             }) { Text(Strings.t("browse")) }
                         }
                     }

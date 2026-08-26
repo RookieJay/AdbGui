@@ -44,6 +44,34 @@ object FileDialogs {
         return pickFileLegacy(title, currentPath, filePattern)
     }
 
+    /**
+     * Open the native folder picker, auto-navigated to [currentPath]. Returns the chosen absolute
+     * path, or `null` if the user cancelled.
+     *
+     * Uses the modern `IFileOpenDialog` with `FOS_PICKFOLDERS` (real Explorer window). On COM
+     * failure, falls back to Swing `JFileChooser` in DIRECTORIES_ONLY mode — AWT `FileDialog`
+     * has no native folder-only mode, so JFileChooser is the only JDK fallback. The fallback
+     * lives here in the platform layer (not in UI code) so the UI never touches Swing directly.
+     */
+    fun pickDirectory(title: String, currentPath: String?): String? {
+        val result = runCatching { WindowsFilePicker.pickDirectory(title, currentPath) }
+        if (result.isSuccess) return result.getOrNull()
+        System.err.println("[FileDialogs] modern folder picker failed, falling back to JFileChooser: ${result.exceptionOrNull()?.message}")
+        return pickDirectoryLegacy(title, currentPath)
+    }
+
+    private fun pickDirectoryLegacy(title: String, currentPath: String?): String? {
+        val chooser = javax.swing.JFileChooser()
+        chooser.fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
+        chooser.isAcceptAllFileFilterUsed = false
+        chooser.dialogTitle = title
+        chooser.approveButtonText = "Select folder"
+        parentDirOf(currentPath)?.let { chooser.currentDirectory = java.io.File(it) }
+        return if (chooser.showOpenDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION) {
+            chooser.selectedFile.absolutePath
+        } else null
+    }
+
     private fun pickFileLegacy(title: String, currentPath: String?, filePattern: String?): String? {
         val dlg = FileDialog(Frame(), title, FileDialog.LOAD)
         parentDirOf(currentPath)?.let { dlg.directory = it }
