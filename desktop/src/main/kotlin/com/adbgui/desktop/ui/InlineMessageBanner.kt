@@ -8,10 +8,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -85,7 +88,7 @@ fun InlineMessageBanner(
                             onClick = onDismiss,
                             modifier = Modifier.padding(start = 4.dp).width(40.dp),
                         ) {
-                            Text("×", color = onContainer, style = MaterialTheme.typography.h6)
+                            Icon(Icons.Filled.Close, contentDescription = Strings.t("clear"))
                         }
                     }
                 }

@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -44,7 +46,9 @@ fun FileExplorerScreen(
         Column(Modifier.fillMaxSize().padding(8.dp)) {
             // Breadcrumb: back + path + refresh
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { vm.back() }) { Text("←") }
+                OutlinedButton(onClick = { vm.back() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Strings.t("back"))
+                }
                 Text(currentPath, style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
                 if (busy) CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp))
                 OutlinedButton(onClick = { vm.refresh() }) { Text(Strings.t("refresh")) }

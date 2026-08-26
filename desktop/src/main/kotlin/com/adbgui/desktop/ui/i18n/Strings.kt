@@ -37,6 +37,7 @@ object Strings {
         "export" to "导出",
         "open" to "打开",
         "open_folder" to "打开文件夹",
+        "more" to "更多",
         "collapse" to "折叠",
         "expand" to "展开",
         "adb_error" to "adb 错误",
@@ -133,6 +134,7 @@ object Strings {
         "resume" to "恢复",
         "copy" to "复制",
         "reconnecting_logcat" to "正在重连 logcat…",
+        "scroll_to_latest" to "跳到最新",
         "no_device_selected_logcat" to "未选择设备",
         "save_logcat_title" to "导出 logcat",
         // System Ops
@@ -305,6 +307,7 @@ object Strings {
         "export" to "Export",
         "open" to "Open",
         "open_folder" to "Open folder",
+        "more" to "More",
         "collapse" to "Collapse",
         "expand" to "Expand",
         "adb_error" to "adb error",
@@ -401,6 +404,7 @@ object Strings {
         "resume" to "Resume",
         "copy" to "Copy",
         "reconnecting_logcat" to "Reconnecting logcat…",
+        "scroll_to_latest" to "Jump to latest",
         "no_device_selected_logcat" to "No device selected",
         "save_logcat_title" to "Export logcat",
         // System Ops

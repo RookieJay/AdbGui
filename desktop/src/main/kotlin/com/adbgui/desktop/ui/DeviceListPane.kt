@@ -20,12 +20,16 @@ import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.AlertDialog
+import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.TextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -74,7 +78,7 @@ fun DeviceListPane(
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { showPair = true }) { Text(Strings.t("pair")) }
                 IconButton(onClick = { showConnect = true }) {
-                    Text("+", style = MaterialTheme.typography.h6)
+                    Icon(Icons.Filled.Add, contentDescription = Strings.t("connect"))
                 }
             }
             Divider()
@@ -204,7 +208,7 @@ private fun DeviceRow(
             }
             Box {
                 IconButton(onClick = { menuOpen = true }) {
-                    Text("⋮", style = MaterialTheme.typography.h6)
+                    Icon(Icons.Filled.MoreVert, contentDescription = Strings.t("more"))
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     if (device.wirelessIp != null && device.wirelessPort != null) {

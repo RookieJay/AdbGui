@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -140,7 +142,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                     OutlinedButton(
                         onClick = { scrollScope.launch { listState.animateScrollToItem(lines.size - 1) } },
                         modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-                    ) { Text("↓") }
+                    ) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = Strings.t("scroll_to_latest")) }
                 }
             }
         }
