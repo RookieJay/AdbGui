@@ -56,7 +56,10 @@ class DeviceTracker(
                 // A failed poll may mean the adb server died; drop the cached "started"
                 // flag so the next loop re-runs start-server (self-heal within ~2s).
                 server.invalidate()
-                logger.warn("devices poll error: ${t.message}")
+                // Log the full throwable (not just t.message, which for NoClassDefFoundError
+                // is only a class name and hides the real init cause). This is the primary
+                // diagnostic for tracker failures — keep it WARN, not DEBUG.
+                logger.warn("devices poll error: ${t.message}", t)
                 if (consecutiveFailures >= 3) {
                     _status.value = TrackerStatus.FAILED
                     logger.warn("devices poll failed 3x; continuing with backoff")

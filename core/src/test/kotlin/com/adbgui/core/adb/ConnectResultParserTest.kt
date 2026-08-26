@@ -54,4 +54,20 @@ class ConnectResultParserTest {
         assertEquals(ConnectFailureReason.OTHER, r.reason)
         assertTrue(r.message.contains("protocol fault"))
     }
+
+    @Test
+    fun failure_windows_chinese_refused_classified_port_stale() {
+        // Real output from a Chinese-locale Windows: the OS socket error is localized to
+        // "由于目标计算机积极拒绝，无法连接。 (10061)" — there is no English "Connection
+        // refused" substring to match. The Winsock code 10061 (WSAECONNREFUSED) is
+        // locale-independent and must be recognized as a stale-port failure.
+        val r = ConnectResultParser.parse(
+            "failed to connect to 192.168.1.50:5555",
+            "cannot connect to 192.168.1.50:5555: 由于目标计算机积极拒绝，无法连接。 (10061)",
+            1,
+        )
+        assertFalse(r.success)
+        assertEquals(ConnectFailureReason.PORT_STALE, r.reason)
+        assertTrue(r.message.contains("10061"))
+    }
 }

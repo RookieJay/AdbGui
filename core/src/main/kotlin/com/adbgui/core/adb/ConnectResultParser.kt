@@ -18,11 +18,17 @@ object ConnectResultParser {
                 // "Connection refused" / "Connection reset" → host is up but nothing is
                 // listening on that port: the wireless-debugging connect port changed
                 // (reboot / re-enable randomizes it), so the stored ip:port is stale.
-                lc.contains("connection refused") || lc.contains("connection reset") ->
+                // Winsock code 10061 (WSAECONNREFUSED) is the same case on Windows and is
+                // locale-independent — the OS error text is localized (e.g. Chinese
+                // "由于目标计算机积极拒绝"), so the English substring alone isn't reliable.
+                lc.contains("connection refused") || lc.contains("connection reset") ||
+                    lc.contains("10061") || lc.contains("积极拒绝") ->
                     ConnectFailureReason.PORT_STALE
                 // "timed out" / "network is unreachable" / "host unreachable" → the device
-                // itself is off or the IP is wrong, not just a stale port.
-                lc.contains("timed out") || lc.contains("unreachable") ->
+                // itself is off or the IP is wrong, not just a stale port. Winsock codes:
+                // 10060 (WSAETIMEDOUT), 10051 (WSAENETUNREACH), 10065 (WSAEHOSTUNREACH).
+                lc.contains("timed out") || lc.contains("unreachable") ||
+                    lc.contains("10060") || lc.contains("10051") || lc.contains("10065") ->
                     ConnectFailureReason.UNREACHABLE
                 else -> ConnectFailureReason.OTHER
             }
