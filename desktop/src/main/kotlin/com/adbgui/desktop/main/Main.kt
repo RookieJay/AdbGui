@@ -25,6 +25,7 @@ import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AdbGuiTheme
 import com.adbgui.core.domain.DeviceStatus
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 fun main() = application {
@@ -103,7 +104,9 @@ fun main() = application {
                 fileExplorerVm = fileExplorerVm,
                 selectedSerial = selectedSerial,
                 onOpenShell = { serial ->
-                    kotlinx.coroutines.runBlocking {
+                    // locate() is suspend + may probe the filesystem / spawn adb; run it on the
+                    // background scope so the click doesn't block the UI thread (was runBlocking).
+                    root.scope.launch {
                         val adb = root.locator.locate()
                         shellLauncher.open(adb.path, serial)
                     }
