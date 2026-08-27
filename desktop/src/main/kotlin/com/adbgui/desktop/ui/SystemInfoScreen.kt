@@ -127,16 +127,22 @@ fun SystemInfoScreen(
                     style = MaterialTheme.typography.h6,
                     modifier = Modifier.weight(1f),
                 )
-                if (result != null) {
-                    OutlinedButton(onClick = {
+                OutlinedButton(
+                    enabled = result != null,
+                    onClick = {
+                        val r = result ?: return@OutlinedButton
                         runCatching {
                             Toolkit.getDefaultToolkit().systemClipboard
-                                .setContents(StringSelection(result!!), null)
+                                .setContents(StringSelection(r), null)
                         }.onSuccess { savedFile = null; saveError = Strings.t("copied") }
                             .onFailure { saveError = Strings.t("copy_failed") }
-                    }) { Text(Strings.t("copy")) }
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = {
+                    },
+                ) { Text(Strings.t("copy")) }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(
+                    enabled = result != null,
+                    onClick = {
+                        val r = result ?: return@OutlinedButton
                         val dialog = FileDialog(Frame(), Strings.t("si_export_title"), FileDialog.SAVE)
                         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                         dialog.file = "sysinfo_$stamp.txt"
@@ -144,12 +150,12 @@ fun SystemInfoScreen(
                         val sel = dialog.file
                         if (sel != null) {
                             val target = File(dialog.directory, sel)
-                            runCatching { target.writeText(result!!) }
+                            runCatching { target.writeText(r) }
                                 .onSuccess { savedFile = target; saveError = null }
                                 .onFailure { saveError = Strings.t("status_save_failed").format(it.message) }
                         }
-                    }) { Text(Strings.t("save")) }
-                }
+                    },
+                ) { Text(Strings.t("save")) }
             }
             // Status line (copied / saved path / save error)
             savedFile?.let { Text(it.absolutePath, style = MaterialTheme.typography.caption) }
