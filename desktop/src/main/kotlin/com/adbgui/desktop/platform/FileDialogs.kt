@@ -28,6 +28,20 @@ object FileDialogs {
     }
 
     /**
+     * Open the native save dialog, auto-navigated to the directory of [currentPath] (its
+     * parent if it points at a file), with [defaultName] pre-filled as the filename. Returns
+     * the chosen absolute path, or `null` if the user cancelled.
+     */
+    fun saveFile(title: String, defaultName: String? = null, currentPath: String? = null): String? {
+        val dlg = FileDialog(Frame(), title, FileDialog.SAVE)
+        parentDirOf(currentPath)?.let { dlg.directory = it }
+        if (defaultName != null) dlg.file = defaultName
+        dlg.isVisible = true
+        val sel = dlg.file ?: return null
+        return File(dlg.directory, sel).absolutePath
+    }
+
+    /**
      * Open the native folder picker. AWT's [FileDialog] has no folder-only mode, so Swing
      * [javax.swing.JFileChooser] in DIRECTORIES_ONLY is the only JDK option — kept here in the
      * platform layer so the UI never touches Swing directly. Auto-navigates to [currentPath].

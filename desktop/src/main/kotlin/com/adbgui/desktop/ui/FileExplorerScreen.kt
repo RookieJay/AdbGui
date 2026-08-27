@@ -24,10 +24,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.FileEntry
 import com.adbgui.desktop.ui.i18n.Strings
-import java.awt.FileDialog
-import java.awt.Frame
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
+import java.io.File
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -108,20 +107,22 @@ fun FileExplorerScreen(
                         ) {
                             DropdownMenuItem(onClick = {
                                 menuOpen = false
-                                val dlg = FileDialog(Frame(), Strings.t("upload"), FileDialog.LOAD)
-                                dlg.isVisible = true
-                                if (dlg.file != null) {
-                                    val localPath = "${dlg.directory}${dlg.file}"
-                                    val target = "${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${dlg.file}"
+                                val localPath = com.adbgui.desktop.platform.FileDialogs.pickFile(title = Strings.t("upload"), currentPath = null)
+                                if (localPath != null) {
+                                    val name = localPath.substringAfterLast(File.separator)
+                                    val target = "${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}$name"
                                     pendingPush = localPath to target
                                 }
                             }) { Text(Strings.t("upload")) }
                             DropdownMenuItem(onClick = {
                                 menuOpen = false
-                                val dlg = FileDialog(Frame(), "Save", FileDialog.SAVE)
-                                dlg.file = entry.name
-                                dlg.isVisible = true
-                                if (dlg.file != null) vm.pull("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}", "${dlg.directory}${dlg.file}")
+                                val saved = com.adbgui.desktop.platform.FileDialogs.saveFile(
+                                    title = Strings.t("save_file"),
+                                    defaultName = entry.name,
+                                )
+                                if (saved != null) {
+                                    vm.pull("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}", saved)
+                                }
                             }) { Text(Strings.t("save_file")) }
                             DropdownMenuItem(onClick = {
                                 menuOpen = false
