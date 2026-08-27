@@ -34,6 +34,12 @@ data class ExtendedColors(
     val logInfo: Color,
     val logWarn: Color,
     val logError: Color,
+    // Structural tokens M2's Colors lacks. `divider` replaces the default
+    // `onSurface.copy(alpha = 0.12)` Divider, which is nearly invisible in dark mode;
+    // `surfaceVariant` is a step above `surface` for inset/sub-cards so embedded blocks
+    // read as raised (not sunken) in both themes.
+    val divider: Color,
+    val surfaceVariant: Color,
 )
 
 val LightExtendedColors = ExtendedColors(
@@ -48,6 +54,8 @@ val LightExtendedColors = ExtendedColors(
     logInfo = Color(0xFF1B1B1B),
     logWarn = Color(0xFFE65100),
     logError = Color(0xFFC62828),
+    divider = Color(0x1A000000),
+    surfaceVariant = Color(0xFFEFF1F3),
 )
 
 val DarkExtendedColors = ExtendedColors(
@@ -62,6 +70,8 @@ val DarkExtendedColors = ExtendedColors(
     logInfo = Color(0xFFE0E0E0),
     logWarn = Color(0xFFFFB74D),
     logError = Color(0xFFEF9A9A),
+    divider = Color(0x33FFFFFF),
+    surfaceVariant = Color(0xFF23262B),
 )
 
 val LocalExtendedColors = compositionLocalOf<ExtendedColors> {
