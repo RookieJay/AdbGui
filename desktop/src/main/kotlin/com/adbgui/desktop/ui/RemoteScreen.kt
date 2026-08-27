@@ -44,15 +44,16 @@ fun RemoteScreen(
     var showAdd by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<RemoteButton?>(null) }
 
-    Surface(modifier = modifier.wrapContentHeight(), color = MaterialTheme.colors.surface) {
-        if (selectedSerial == null) {
-            Box(Modifier.height(100.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text(Strings.t("no_device_selected"), style = MaterialTheme.typography.body2)
-            }
-            return@Surface
+    // Content-only (no Surface/padding/title of its own): always hosted in a SectionCard in
+    // DeviceOverview, which supplies the card surface + padding + header. Avoids double-padding
+    // and a duplicate "遥控" header.
+    if (selectedSerial == null) {
+        Box(Modifier.height(100.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Text(Strings.t("no_device_selected"), style = MaterialTheme.typography.body2)
         }
-        Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(Strings.t("remote"), style = MaterialTheme.typography.subtitle1)
+        return
+    }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (busy) {
                 Spacer(Modifier.width(8.dp))
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -126,7 +127,6 @@ fun RemoteScreen(
                 InlineMessageBanner(msg, MessageKind.Error, onDismiss = { vm.clearError() })
             }
         }
-    }
 
     if (showAdd) {
         ButtonEditDialog(

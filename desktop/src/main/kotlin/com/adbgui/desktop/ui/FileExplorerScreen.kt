@@ -54,7 +54,7 @@ fun FileExplorerScreen(
             )
             return@Surface
         }
-        Column(Modifier.fillMaxSize().padding(8.dp)) {
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
             // Breadcrumb: back + path + refresh
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { vm.back() }) {

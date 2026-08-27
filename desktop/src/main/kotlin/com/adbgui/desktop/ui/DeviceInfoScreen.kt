@@ -64,11 +64,12 @@ fun DeviceInfoScreen(
     var savedFile by remember { mutableStateOf<File?>(null) }
     var saveError by remember { mutableStateOf<String?>(null) }
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    // Content-only (no Surface/padding of its own): always hosted in a SectionCard in
+    // DeviceOverview, which supplies the card surface + padding. Hosting both would double-pad.
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(Strings.t("device_info"), style = MaterialTheme.typography.h6)
                 Spacer(Modifier.width(12.dp))
@@ -181,7 +182,6 @@ fun DeviceInfoScreen(
             }
         }
     }
-}
 
 @Composable
 private fun PropRow(label: String, value: String) {

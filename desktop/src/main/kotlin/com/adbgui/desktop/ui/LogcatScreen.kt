@@ -47,7 +47,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     var confirmClear by remember { mutableStateOf(false) }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
-        Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             // Filter bar (AS-style: level dropdown + one text input + controls)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 // Level dropdown (multi-select)
