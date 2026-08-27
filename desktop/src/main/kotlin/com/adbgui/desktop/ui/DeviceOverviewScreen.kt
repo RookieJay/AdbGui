@@ -8,12 +8,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.Checkbox
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
@@ -315,7 +317,11 @@ fun DeviceOverviewScreen(
                         ScrcpyShortcutsDialog(onDismiss = { showShortcuts.value = false })
                     }
                 }
-                "installing" -> Text(Strings.t("scrcpy_status_installing"))
+                "installing" -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(Strings.t("scrcpy_status_installing"))
+                }
                 "failed" -> {
                     Text(Strings.t("scrcpy_status_failed"))
                     scrcpyError.value?.let { SelectableText(it) }
