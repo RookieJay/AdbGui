@@ -86,6 +86,7 @@ fun AppConsoleScreen(
     var search by remember { mutableStateOf("") }
     var advancedOpen by remember { mutableStateOf(false) }
     var confirmUninstall by remember { mutableStateOf<String?>(null) }
+    var confirmClearData by remember { mutableStateOf<String?>(null) }
     var dragOver by remember { mutableStateOf(false) }
 
     // Drop APK files anywhere on the console to install — the modern path the button-picker
@@ -247,7 +248,7 @@ fun AppConsoleScreen(
                         Button(enabled = !busy, onClick = { vm.startApp(sel) }) { Text(Strings.t("start_app")) }
                         Button(enabled = !busy, onClick = { vm.forceStop(sel) }) { Text(Strings.t("force_stop")) }
                         Button(enabled = !busy, onClick = { vm.restart(sel) }) { Text(Strings.t("restart_app")) }
-                        OutlinedButton(enabled = !busy, onClick = { vm.clearData(sel) }) { Text(Strings.t("clear")) }
+                        OutlinedButton(enabled = !busy, onClick = { confirmClearData = sel }) { Text(Strings.t("clear")) }
                         OutlinedButton(enabled = !busy, onClick = { confirmUninstall = sel }) {
                             Text(Strings.t("uninstall"))
                         }
@@ -285,6 +286,21 @@ fun AppConsoleScreen(
                 TextButton(onClick = { vm.uninstall(pkg); confirmUninstall = null }) { Text(Strings.t("uninstall")) }
             },
             dismissButton = { TextButton(onClick = { confirmUninstall = null }) { Text(Strings.t("cancel")) } },
+        )
+    }
+
+    // Clear-data confirmation
+    confirmClearData?.let { pkg ->
+        AlertDialog(
+            onDismissRequest = { confirmClearData = null },
+            title = { Text(Strings.t("clear_data_confirm_title")) },
+            text = { Text(Strings.t("clear_data_confirm_body").format(pkg)) },
+            confirmButton = {
+                TextButton(onClick = { vm.clearData(pkg); confirmClearData = null }) { Text(Strings.t("clear")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearData = null }) { Text(Strings.t("cancel")) }
+            },
         )
     }
 }
