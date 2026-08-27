@@ -1,6 +1,7 @@
 package com.adbgui.desktop.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +18,8 @@ import androidx.compose.material.Button
 import androidx.compose.material.Checkbox
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.OutlinedTextField
@@ -35,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.adbgui.core.domain.RebootMode
 import com.adbgui.core.domain.ScrcpyMode
 import com.adbgui.core.domain.ScrcpyOptions
 import com.adbgui.core.domain.ScrcpyLaunchProfile
@@ -76,24 +80,48 @@ fun DeviceOverviewScreen(
                 onOpenScreenshot = onOpenScreenshot,
                 screenshotLoading = screenshotLoading,
             )
-            Spacer(Modifier.height(8.dp))
-            // --- Remote (full width below) ---
-            RemoteScreen(vm = remoteVm, selectedSerial = selectedSerial, modifier = Modifier.fillMaxWidth())
-            Divider()
-            // --- Device tools: shell / root / remount (moved here from System Ops per roadmap G5) ---
+            // --- Device tools (top): root / remount / shell / reboot ---
             if (systemOpsVm != null) {
                 val opsBusy by systemOpsVm.busy.collectAsState()
                 val opsMessage by systemOpsVm.message.collectAsState()
                 val opsError by systemOpsVm.error.collectAsState()
+                var rebootMenuOpen by remember { mutableStateOf(false) }
+                var pendingReboot by remember { mutableStateOf<RebootMode?>(null) }
                 Text(Strings.t("device_tools"), style = MaterialTheme.typography.subtitle1)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(enabled = !opsBusy, onClick = { systemOpsVm.root() }) { Text(Strings.t("root_op")) }
                     OutlinedButton(enabled = !opsBusy, onClick = { systemOpsVm.remount() }) { Text(Strings.t("remount_op")) }
                     OutlinedButton(enabled = selectedSerial != null, onClick = { selectedSerial?.let { onOpenShell(it) } }) { Text(Strings.t("open_shell")) }
+                    Box {
+                        OutlinedButton(enabled = !opsBusy, onClick = { rebootMenuOpen = true }) { Text(Strings.t("reboot")) }
+                        DropdownMenu(expanded = rebootMenuOpen, onDismissRequest = { rebootMenuOpen = false }) {
+                            RebootMode.entries.forEach { mode ->
+                                DropdownMenuItem(onClick = { rebootMenuOpen = false; pendingReboot = mode }) {
+                                    Text(rebootLabel(mode))
+                                }
+                            }
+                        }
+                    }
                 }
                 opsMessage?.let { msg -> InlineMessageBanner(msg.trim(), MessageKind.Success) }
                 opsError?.let { msg -> InlineMessageBanner(msg, MessageKind.Error) }
+                pendingReboot?.let { mode ->
+                    AlertDialog(
+                        onDismissRequest = { pendingReboot = null },
+                        title = { Text(Strings.t("reboot_confirm_title")) },
+                        text = { Text(Strings.t("reboot_confirm_body").format(rebootLabel(mode))) },
+                        confirmButton = {
+                            TextButton(onClick = { pendingReboot = null; systemOpsVm.reboot(mode) }) { Text(Strings.t("reboot")) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingReboot = null }) { Text(Strings.t("cancel")) }
+                        },
+                    )
+                }
             }
+            Divider()
+            // --- Remote (full width) ---
+            RemoteScreen(vm = remoteVm, selectedSerial = selectedSerial, modifier = Modifier.fillMaxWidth())
             Divider()
             // --- scrcpy section ---
             Text(Strings.t("scrcpy"), style = MaterialTheme.typography.subtitle1)
@@ -403,4 +431,11 @@ private fun ScrcpyShortcutsDialog(onDismiss: () -> Unit) {
             Button(onClick = onDismiss) { Text(Strings.t("ok")) }
         },
     )
+}
+
+private fun rebootLabel(mode: RebootMode): String = when (mode) {
+    RebootMode.NORMAL -> Strings.t("reboot_normal")
+    RebootMode.RECOVERY -> Strings.t("reboot_recovery")
+    RebootMode.BOOTLOADER -> Strings.t("reboot_bootloader")
+    RebootMode.SIDELOAD -> Strings.t("reboot_sideload")
 }
