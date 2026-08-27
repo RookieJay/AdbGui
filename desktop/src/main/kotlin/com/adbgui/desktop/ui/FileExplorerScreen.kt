@@ -1,17 +1,23 @@
 package com.adbgui.desktop.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -84,12 +90,7 @@ fun FileExplorerScreen(
                             },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(when {
-                            entry.isSymlink && entry.isDirectory -> "🔗📁"
-                            entry.isSymlink -> "🔗📄"
-                            entry.isDirectory -> "📁"
-                            else -> "📄"
-                        }, modifier = Modifier.padding(end = 8.dp))
+                        FileEntryIcon(entry, modifier = Modifier.padding(end = 8.dp))
                         Text(entry.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.body2)
                         Text(formatSize(entry.size), style = MaterialTheme.typography.caption, modifier = Modifier.padding(end = 8.dp))
                         Text(entry.date, style = MaterialTheme.typography.caption)
@@ -136,4 +137,26 @@ private fun formatSize(bytes: Long): String {
     val mb = kb / 1024.0
     if (mb < 1024) return "%.1f MB".format(mb)
     return "%.1f GB".format(mb / 1024.0)
+}
+
+/**
+ * Folder/file row icon. Folder → [Icons.Filled.Folder], file → [Icons.Filled.InsertDriveFile].
+ * Symlinks get a small primary-colored link badge in the bottom-right corner on a surface circle
+ * so the link semantics are clear without the font-dependent emoji combos ("🔗📁") that were here.
+ */
+@Composable
+private fun FileEntryIcon(entry: FileEntry, modifier: Modifier = Modifier) {
+    val baseIcon: ImageVector = if (entry.isDirectory) Icons.Filled.Folder else Icons.Filled.InsertDriveFile
+    Box(modifier = modifier.size(20.dp), contentAlignment = Alignment.Center) {
+        Icon(baseIcon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colors.onSurface)
+        if (entry.isSymlink) {
+            Box(
+                modifier = Modifier.align(Alignment.BottomEnd).size(11.dp)
+                    .background(MaterialTheme.colors.surface, shape = CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Link, contentDescription = null, modifier = Modifier.size(9.dp), tint = MaterialTheme.colors.primary)
+            }
+        }
+    }
 }

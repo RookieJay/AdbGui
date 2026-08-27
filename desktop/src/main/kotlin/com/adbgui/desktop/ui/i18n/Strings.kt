@@ -188,7 +188,7 @@ object Strings {
         "open_shell" to "打开 Shell",
         // File Explorer
         "file_explorer" to "文件浏览",
-        "nav_file_explorer" to "文件",
+        "nav_file_explorer" to "文件浏览器",
         "upload" to "上传",
         "save_file" to "保存",
         "copy_path" to "复制路径",
@@ -460,7 +460,7 @@ object Strings {
         "open_shell" to "Open Shell",
         // File Explorer
         "file_explorer" to "File Explorer",
-        "nav_file_explorer" to "Files",
+        "nav_file_explorer" to "File Browser",
         "upload" to "Upload",
         "save_file" to "Save",
         "copy_path" to "Copy path",
