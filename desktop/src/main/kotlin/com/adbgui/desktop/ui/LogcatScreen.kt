@@ -41,6 +41,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     var levelMenuOpen by remember { mutableStateOf(false) }
     var savedFile by remember { mutableStateOf<File?>(null) }
     var exportError by remember { mutableStateOf<String?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
         Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -78,7 +79,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 OutlinedButton(onClick = { if (paused) vm.resume() else vm.pause() }) {
                     Text(if (paused) Strings.t("resume") else Strings.t("pause"))
                 }
-                OutlinedButton(onClick = { vm.clear() }) { Text(Strings.t("clear")) }
+                OutlinedButton(onClick = { confirmClear = true }) { Text(Strings.t("clear")) }
                 OutlinedButton(onClick = {
                     val dlg = FileDialog(Frame(), Strings.t("save_logcat_title"), FileDialog.SAVE)
                     val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
@@ -139,6 +140,20 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 }
             }
         }
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text(Strings.t("clear_logcat_confirm_title")) },
+            text = { Text(Strings.t("clear_logcat_confirm_body")) },
+            confirmButton = {
+                TextButton(onClick = { vm.clear(); confirmClear = false }) { Text(Strings.t("clear")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text(Strings.t("cancel")) }
+            },
+        )
     }
 }
 

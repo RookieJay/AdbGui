@@ -22,8 +22,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import com.adbgui.desktop.ui.i18n.Strings
 
@@ -36,6 +40,16 @@ fun ConnectDialog(
     var port by remember { mutableStateOf("5555") }
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
+
+    val ipFocus = remember { FocusRequester() }
+    val portFocus = remember { FocusRequester() }
+    val submitConnect = {
+        if (!busy) {
+            val p = port.toIntOrNull() ?: 5555
+            vm.connect(ip.ifBlank { "127.0.0.1" }, p)
+        }
+    }
+    LaunchedEffect(Unit) { ipFocus.requestFocus() }
 
     // Dismiss on successful connect. The VM emits dismissConnect from its background scope;
     // collect it here (LaunchedEffect runs on the Compose UI thread) so the dialog-close
@@ -53,8 +67,9 @@ fun ConnectDialog(
                     onValueChange = { ip = it },
                     label = { Text(Strings.t("ip_address")) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    modifier = Modifier.fillMaxWidth().focusRequester(ipFocus),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { portFocus.requestFocus() }),
                 )
                 Spacer(Modifier.padding(8.dp))
                 OutlinedTextField(
@@ -62,8 +77,9 @@ fun ConnectDialog(
                     onValueChange = { port = it.filter { c -> c.isDigit() }.take(5) },
                     label = { Text(Strings.t("port")) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().focusRequester(portFocus),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { submitConnect() }),
                 )
                 if (error != null) {
                     Spacer(Modifier.padding(top = 8.dp))
@@ -83,10 +99,7 @@ fun ConnectDialog(
                 TextButton(onClick = onDismiss, enabled = !busy) { Text(Strings.t("cancel")) }
                 Spacer(Modifier.width(8.dp))
                 Button(
-                    onClick = {
-                        val p = port.toIntOrNull() ?: 5555
-                        vm.connect(ip.ifBlank { "127.0.0.1" }, p)
-                    },
+                    onClick = submitConnect,
                     enabled = !busy,
                 ) { Text(Strings.t("connect")) }
             }

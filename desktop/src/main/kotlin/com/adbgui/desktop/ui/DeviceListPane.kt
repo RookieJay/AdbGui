@@ -21,6 +21,7 @@ import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.AlertDialog
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -77,6 +78,12 @@ fun DeviceListPane(
             ) {
                 Text(Strings.t("devices"), style = MaterialTheme.typography.subtitle1)
                 Spacer(Modifier.weight(1f))
+                if (busy) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp).padding(end = 8.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
                 TextButton(onClick = { showPair = true }) { Text(Strings.t("pair")) }
                 IconButton(onClick = onOpenConnect) {
                     Icon(Icons.Filled.Add, contentDescription = Strings.t("connect"))
@@ -85,24 +92,37 @@ fun DeviceListPane(
             Divider()
 
             // Device list
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(vertical = 4.dp),
-            ) {
-                items(devices, key = { it.serial }) { device ->
-                    DeviceRow(
-                        device = device,
-                        selected = selected,
-                        onRename = { newAlias ->
-                            // simple inline rename prompt: for now, set alias directly to serial-as-alias placeholder
-                            // (real rename dialog deferred to a later task)
-                            vm.setAlias(device.serial, newAlias)
-                        },
-                        onForget = { vm.forget(device.serial) },
-                        onDisconnect = { vm.disconnect(device.serial) },
-                        onSelect = { onSelect(device) },
-                        onReconnect = onReconnect,
+            // Device list (or empty-state guidance card when no devices)
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                if (devices.isEmpty()) {
+                    EmptyState(
+                        title = Strings.t("no_device_hint"),
+                        actionLabel = Strings.t("connect_first_device"),
+                        onAction = onOpenConnect,
+                        secondaryActionLabel = Strings.t("pair"),
+                        onSecondaryAction = { showPair = true },
                     )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 4.dp),
+                    ) {
+                        items(devices, key = { it.serial }) { device ->
+                            DeviceRow(
+                                device = device,
+                                selected = selected,
+                                onRename = { newAlias ->
+                                    // simple inline rename prompt: for now, set alias directly to serial-as-alias placeholder
+                                    // (real rename dialog deferred to a later task)
+                                    vm.setAlias(device.serial, newAlias)
+                                },
+                                onForget = { vm.forget(device.serial) },
+                                onDisconnect = { vm.disconnect(device.serial) },
+                                onSelect = { onSelect(device) },
+                                onReconnect = onReconnect,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -173,11 +193,18 @@ private fun DeviceRow(
                         modifier = Modifier.widthIn(max = 180.dp)
                             .focusRequester(focusRequester)
                             .onPreviewKeyEvent { e ->
-                                if (e.key == Key.Enter || e.key == Key.NumPadEnter) {
-                                    onRename(aliasDraft.ifBlank { null })
-                                    renaming = false
-                                    true
-                                } else false
+                                when (e.key) {
+                                    Key.Enter, Key.NumPadEnter -> {
+                                        onRename(aliasDraft.ifBlank { null })
+                                        renaming = false
+                                        true
+                                    }
+                                    Key.Escape -> {
+                                        renaming = false
+                                        true
+                                    }
+                                    else -> false
+                                }
                             },
                         singleLine = true,
                     )
