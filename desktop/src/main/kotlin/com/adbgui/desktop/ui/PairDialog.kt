@@ -15,6 +15,7 @@ import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,8 +23,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import com.adbgui.desktop.ui.i18n.Strings
 
@@ -42,6 +47,28 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
 
+    val pairIpFocus = remember { FocusRequester() }
+    val pairPortFocus = remember { FocusRequester() }
+    val codeFocus = remember { FocusRequester() }
+    val connectIpFocus = remember { FocusRequester() }
+    val connectPortFocus = remember { FocusRequester() }
+    val submitPair = {
+        if (!busy && pairIp.isNotBlank() && pairPort.isNotBlank() && code.isNotBlank()) {
+            connectIp = pairIp
+            vm.pair(pairIp, pairPort.toIntOrNull() ?: 0, code) { r ->
+                if (r.success) { paired = true; vm.clearError() }
+            }
+        }
+    }
+    val submitConnectPhase2 = {
+        if (!busy && connectIp.isNotBlank() && connectPort.isNotBlank()) {
+            vm.connect(connectIp, connectPort.toIntOrNull() ?: 0) { r -> if (r.success) onDismiss() }
+        }
+    }
+    LaunchedEffect(paired) {
+        if (!paired) pairIpFocus.requestFocus() else connectIpFocus.requestFocus()
+    }
+
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(Strings.t("pair_title")) },
@@ -56,8 +83,9 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
                         onValueChange = { pairIp = it; if (paired) connectIp = it },
                         label = { Text(Strings.t("ip_address")) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                        modifier = Modifier.fillMaxWidth().focusRequester(pairIpFocus),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { pairPortFocus.requestFocus() }),
                     )
                     Spacer(Modifier.padding(8.dp))
                     OutlinedTextField(
@@ -65,8 +93,9 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
                         onValueChange = { pairPort = it.filter { c -> c.isDigit() }.take(5) },
                         label = { Text(Strings.t("pair_port")) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().focusRequester(pairPortFocus),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { codeFocus.requestFocus() }),
                     )
                     Spacer(Modifier.padding(8.dp))
                     OutlinedTextField(
@@ -74,8 +103,9 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
                         onValueChange = { code = it.filter { c -> c.isDigit() }.take(6) },
                         label = { Text(Strings.t("pairing_code")) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().focusRequester(codeFocus),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { submitPair() }),
                     )
                     if (busy) {
                         Spacer(Modifier.padding(top = 8.dp))
@@ -90,8 +120,9 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
                         onValueChange = { connectIp = it },
                         label = { Text(Strings.t("ip_address")) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                        modifier = Modifier.fillMaxWidth().focusRequester(connectIpFocus),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { connectPortFocus.requestFocus() }),
                     )
                     Spacer(Modifier.padding(8.dp))
                     OutlinedTextField(
@@ -99,8 +130,9 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
                         onValueChange = { connectPort = it.filter { c -> c.isDigit() }.take(5) },
                         label = { Text(Strings.t("connect_port")) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().focusRequester(connectPortFocus),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { submitConnectPhase2() }),
                     )
                     if (busy) {
                         Spacer(Modifier.padding(top = 8.dp))
@@ -127,24 +159,12 @@ fun PairDialog(vm: DeviceListViewModel, onDismiss: () -> Unit) {
                 if (!paired) {
                     Button(
                         enabled = !busy && pairIp.isNotBlank() && pairPort.isNotBlank() && code.isNotBlank(),
-                        onClick = {
-                            connectIp = pairIp  // seed phase-2 IP; user can adjust after seeing device screen
-                            vm.pair(pairIp, pairPort.toIntOrNull() ?: 0, code) { r ->
-                                if (r.success) {
-                                    paired = true
-                                    vm.clearError()
-                                }
-                            }
-                        },
+                        onClick = submitPair,
                     ) { Text(Strings.t("pair")) }
                 } else {
                     Button(
                         enabled = !busy && connectIp.isNotBlank() && connectPort.isNotBlank(),
-                        onClick = {
-                            vm.connect(connectIp, connectPort.toIntOrNull() ?: 0) { r ->
-                                if (r.success) onDismiss()
-                            }
-                        },
+                        onClick = submitConnectPhase2,
                     ) { Text(Strings.t("connect")) }
                 }
             }
