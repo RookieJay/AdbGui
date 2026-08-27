@@ -36,6 +36,8 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.Icon
@@ -262,7 +264,12 @@ fun AppConsoleScreen(
                     // --- Advanced (collapsible) ---
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { advancedOpen = !advancedOpen }) {
-                            Text(if (advancedOpen) "▼ ${Strings.t("advanced_ops")}" else "▶ ${Strings.t("advanced_ops")}")
+                            Icon(
+                                if (advancedOpen) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                                contentDescription = null,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(Strings.t("advanced_ops"))
                         }
                     }
                     if (advancedOpen) {
