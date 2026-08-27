@@ -24,6 +24,7 @@ object Strings {
         "nav_app_manager" to "应用管理",
         "nav_settings" to "设置",
         "nav_system_info" to "系统信息",
+        "nav_section_features" to "功能",
         // Common
         "no_device_selected" to "未选择设备",
         "no_device_hint" to "连接一台设备以开始",
@@ -309,6 +310,7 @@ object Strings {
         "nav_app_manager" to "App Manager",
         "nav_settings" to "Settings",
         "nav_system_info" to "System info",
+        "nav_section_features" to "Features",
         // Common
         "no_device_selected" to "No device selected",
         "no_device_hint" to "Connect a device to get started",
