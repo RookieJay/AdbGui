@@ -32,8 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
-import java.awt.FileDialog
-import java.awt.Frame
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.io.File
@@ -143,15 +141,15 @@ fun SystemInfoScreen(
                     enabled = result != null,
                     onClick = {
                         val r = result ?: return@OutlinedButton
-                        val dialog = FileDialog(Frame(), Strings.t("si_export_title"), FileDialog.SAVE)
                         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-                        dialog.file = "sysinfo_$stamp.txt"
-                        dialog.isVisible = true
-                        val sel = dialog.file
-                        if (sel != null) {
-                            val target = File(dialog.directory, sel)
-                            runCatching { target.writeText(r) }
-                                .onSuccess { savedFile = target; saveError = null }
+                        val target = com.adbgui.desktop.platform.FileDialogs.saveFile(
+                            title = Strings.t("si_export_title"),
+                            defaultName = "sysinfo_$stamp.txt",
+                        )
+                        if (target != null) {
+                            val f = File(target)
+                            runCatching { f.writeText(r) }
+                                .onSuccess { savedFile = f; saveError = null }
                                 .onFailure { saveError = Strings.t("status_save_failed").format(it.message) }
                         }
                     },

@@ -36,8 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
-import java.awt.FileDialog
-import java.awt.Frame
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.io.File
@@ -111,15 +109,15 @@ fun DeviceInfoScreen(
                         )
                         Row {
                             OutlinedButton(onClick = {
-                                val dialog = FileDialog(Frame(), Strings.t("export_device_info_title"), FileDialog.SAVE)
                                 val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-                                dialog.file = "deviceinfo_$stamp.txt"
-                                dialog.isVisible = true
-                                val sel = dialog.file
-                                if (sel != null) {
-                                    val target = File(dialog.directory, sel)
-                                    runCatching { target.writeText(reportText) }
-                                        .onSuccess { savedFile = target; saveError = null }
+                                val target = com.adbgui.desktop.platform.FileDialogs.saveFile(
+                                    title = Strings.t("export_device_info_title"),
+                                    defaultName = "deviceinfo_$stamp.txt",
+                                )
+                                if (target != null) {
+                                    val f = File(target)
+                                    runCatching { f.writeText(reportText) }
+                                        .onSuccess { savedFile = f; saveError = null }
                                         .onFailure { saveError = Strings.t("status_save_failed").format(it.message) }
                                 }
                             }) { Text(Strings.t("save")) }
