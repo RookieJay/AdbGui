@@ -46,7 +46,7 @@ fun ConnectDialog(
     val submitConnect = {
         if (!busy) {
             val p = port.toIntOrNull() ?: 5555
-            vm.connect(ip.ifBlank { "127.0.0.1" }, p)
+            vm.connect(ip, p)
         }
     }
     LaunchedEffect(Unit) { ipFocus.requestFocus() }
@@ -100,7 +100,7 @@ fun ConnectDialog(
                 Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = submitConnect,
-                    enabled = !busy,
+                    enabled = !busy && ip.isNotBlank() && port.isNotBlank(),
                 ) { Text(Strings.t("connect")) }
             }
         },
