@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.Subject
 import androidx.compose.runtime.Composable
@@ -97,7 +96,6 @@ fun AppShell(
                 }
                 if (appConsoleVm != null) add(NavItemSpec(NavPage.APP_CONSOLE, "nav_app_console", Icons.Filled.Apps))
                 if (logcatVm != null) add(NavItemSpec(NavPage.LOGCAT, "nav_logcat", Icons.AutoMirrored.Filled.Subject))
-                if (systemOpsVm != null) add(NavItemSpec(NavPage.SYSTEM_OPS, "nav_system_ops", Icons.Filled.PowerSettingsNew))
                 if (systemInfoVm != null) add(NavItemSpec(NavPage.SYSTEM_INFO, "nav_system_info", Icons.Filled.Memory))
                 if (fileExplorerVm != null) add(NavItemSpec(NavPage.FILE_EXPLORER, "nav_file_explorer", Icons.Filled.FolderOpen))
             }
@@ -147,9 +145,6 @@ fun AppShell(
                 selected != null && page == NavPage.LOGCAT && logcatVm != null -> {
                     LogcatScreen(vm = logcatVm)
                 }
-                selected != null && page == NavPage.SYSTEM_OPS && systemOpsVm != null -> {
-                    SystemOpsScreen(vm = systemOpsVm, selectedSerial = selected, onOpenConnect = { showConnect = true })
-                }
                 selected != null && page == NavPage.SYSTEM_INFO && systemInfoVm != null -> {
                     SystemInfoScreen(vm = systemInfoVm, selectedSerial = selected)
                 }
@@ -172,7 +167,7 @@ fun AppShell(
     }
 }
 
-private enum class NavPage { DEVICE_OVERVIEW, APP_CONSOLE, LOGCAT, SYSTEM_OPS, SYSTEM_INFO, FILE_EXPLORER, SETTINGS }
+private enum class NavPage { DEVICE_OVERVIEW, APP_CONSOLE, LOGCAT, SYSTEM_INFO, FILE_EXPLORER, SETTINGS }
 
 private data class NavItemSpec(val page: NavPage, val labelKey: String, val icon: ImageVector)
 
