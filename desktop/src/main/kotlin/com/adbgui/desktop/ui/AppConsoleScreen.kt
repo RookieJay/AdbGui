@@ -1,7 +1,9 @@
 package com.adbgui.desktop.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -30,6 +33,9 @@ import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,19 +46,25 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.awtTransferable
+import androidx.compose.ui.unit.dp
+import java.awt.datatransfer.DataFlavor
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.Extra
 import com.adbgui.core.domain.ExtraType
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.desktop.ui.i18n.Strings
+import java.io.File
 
 /**
  * App Console screen: upper package list (selectable) + lower operation panel with
  * Start/Stop/Restart/Clear/Uninstall and a collapsible "Advanced" section hosting
  * `am start`, broadcast, and provider query. Errors/results shown via [SelectableText].
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun AppConsoleScreen(
     vm: AppConsoleViewModel,
@@ -74,8 +86,36 @@ fun AppConsoleScreen(
     var search by remember { mutableStateOf("") }
     var advancedOpen by remember { mutableStateOf(false) }
     var confirmUninstall by remember { mutableStateOf<String?>(null) }
+    var dragOver by remember { mutableStateOf(false) }
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
+    // Drop APK files anywhere on the console to install — the modern path the button-picker
+    // can't reliably be (the hand-rolled COM picker was removed). onEntered/Exited drive the
+    // drop-zone highlight; onDrop filters to .apk files and installs each.
+    val dropTarget = remember {
+        object : DragAndDropTarget {
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                val transferable = event.awtTransferable
+                val apks = runCatching {
+                    (transferable.getTransferData(DataFlavor.javaFileListFlavor) as? List<*>)
+                        ?.filterIsInstance<File>()
+                }.getOrNull().orEmpty().filter { it.extension.equals("apk", ignoreCase = true) }
+                if (apks.isEmpty()) return false
+                apks.forEach { vm.install(it.absolutePath) }
+                return true
+            }
+            override fun onEntered(event: DragAndDropEvent) { dragOver = true }
+            override fun onExited(event: DragAndDropEvent) { dragOver = false }
+            override fun onEnded(event: DragAndDropEvent) { dragOver = false }
+        }
+    }
+
+    Surface(
+        modifier = modifier.fillMaxSize().dragAndDropTarget(
+            shouldStartDragAndDrop = { true },
+            target = dropTarget,
+        ),
+        color = MaterialTheme.colors.surface,
+    ) {
         if (selectedSerial == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(Strings.t("no_device_selected"), style = MaterialTheme.typography.body2)
@@ -113,6 +153,35 @@ fun AppConsoleScreen(
                 ) { Text(Strings.t("install_apk")) }
                 Spacer(Modifier.width(8.dp))
                 if (busy) CircularProgressIndicator(modifier = Modifier.heightIn(max = 18.dp))
+            }
+
+            // Drop zone: visible affordance that the whole screen accepts APK drops.
+            Box(
+                modifier = Modifier.fillMaxWidth().height(56.dp)
+                    .border(
+                        width = if (dragOver) 2.dp else 1.dp,
+                        color = if (dragOver) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface.copy(alpha = 0.25f),
+                        shape = RoundedCornerShape(8.dp),
+                    )
+                    .background(
+                        if (dragOver) MaterialTheme.colors.primary.copy(alpha = 0.08f) else Color.Transparent,
+                        shape = RoundedCornerShape(8.dp),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Download,
+                        contentDescription = null,
+                        tint = if (dragOver) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (dragOver) Strings.t("drop_apk_to_install") else Strings.t("drop_apk_hint"),
+                        style = MaterialTheme.typography.body2,
+                        color = if (dragOver) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                    )
+                }
             }
 
             // --- Inline result: error (collapsible) or success (ephemeral) — never both ---
