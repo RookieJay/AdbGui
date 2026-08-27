@@ -1,5 +1,6 @@
 package com.adbgui.desktop.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,8 @@ import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -148,14 +151,33 @@ fun DeviceInfoScreen(
                     Text(Strings.t("no_device_selected_refresh"), style = MaterialTheme.typography.body2)
                 }
             } else {
-                PropRow(Strings.t("prop_brand"), p.brand)
-                PropRow(Strings.t("prop_manufacturer"), p.manufacturer)
-                PropRow(Strings.t("prop_model"), p.model)
-                PropRow(Strings.t("prop_android_version"), p.androidVersion)
-                PropRow(Strings.t("prop_sdk"), p.sdkInt.toString())
-                PropRow(Strings.t("prop_serial"), p.serial)
-                PropRow(Strings.t("prop_resolution"), p.resolution)
-                PropRow(Strings.t("prop_abi"), p.abi)
+                var infoExpanded by remember { mutableStateOf(false) }
+                // Collapsed: one-line summary (progressive disclosure — the full table is a click away).
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { infoExpanded = !infoExpanded }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        if (infoExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "${p.brand} ${p.model} · Android ${p.androidVersion} · ${p.serial}",
+                        style = MaterialTheme.typography.body1,
+                    )
+                }
+                if (infoExpanded) {
+                    PropRow(Strings.t("prop_brand"), p.brand)
+                    PropRow(Strings.t("prop_manufacturer"), p.manufacturer)
+                    PropRow(Strings.t("prop_model"), p.model)
+                    PropRow(Strings.t("prop_android_version"), p.androidVersion)
+                    PropRow(Strings.t("prop_sdk"), p.sdkInt.toString())
+                    PropRow(Strings.t("prop_serial"), p.serial)
+                    PropRow(Strings.t("prop_resolution"), p.resolution)
+                    PropRow(Strings.t("prop_abi"), p.abi)
+                }
             }
         }
     }
