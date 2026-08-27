@@ -239,7 +239,7 @@ fun AppConsoleScreen(
             val sel = selectedPkg
             if (sel == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(Strings.t("no_packages"), style = MaterialTheme.typography.body2)
+                    Text(Strings.t("no_package_selected"), style = MaterialTheme.typography.body2)
                 }
             } else {
                 Column(

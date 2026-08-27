@@ -102,6 +102,7 @@ object Strings {
         "drop_apk_to_install" to "松开以安装 APK",
         "install_success" to "已安装：%s",
         "no_packages" to "没有应用。请按刷新。",
+        "no_package_selected" to "未选择应用",
         "system" to "系统",
         "uninstall" to "卸载",
         // Device Info
@@ -384,6 +385,7 @@ object Strings {
         "drop_apk_to_install" to "Release to install APK",
         "install_success" to "Installed: %s",
         "no_packages" to "No packages. Press Refresh.",
+        "no_package_selected" to "No app selected",
         "system" to "system",
         "uninstall" to "Uninstall",
         // Device Info
