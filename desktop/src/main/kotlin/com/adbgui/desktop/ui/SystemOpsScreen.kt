@@ -1,7 +1,6 @@
 package com.adbgui.desktop.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +30,7 @@ fun SystemOpsScreen(
     vm: SystemOpsViewModel,
     selectedSerial: String?,
     modifier: Modifier = Modifier,
+    onOpenConnect: () -> Unit = {},
 ) {
     val error by vm.error.collectAsState()
     val message by vm.message.collectAsState()
@@ -39,9 +39,12 @@ fun SystemOpsScreen(
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
         if (selectedSerial == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(Strings.t("no_device_selected"), style = MaterialTheme.typography.body2)
-            }
+            EmptyState(
+                title = Strings.t("no_device_selected"),
+                hint = Strings.t("no_device_hint"),
+                actionLabel = Strings.t("connect_first_device"),
+                onAction = onOpenConnect,
+            )
             return@Surface
         }
         Column(

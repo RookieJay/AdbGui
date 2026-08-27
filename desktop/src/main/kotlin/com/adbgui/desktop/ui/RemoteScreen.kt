@@ -11,6 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.*
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
@@ -49,13 +54,13 @@ fun RemoteScreen(
             Text(Strings.t("remote"), style = MaterialTheme.typography.subtitle1)
             // D-pad
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button(onClick = { vm.sendKey(19) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Text("↑") }
+                Button(onClick = { vm.sendKey(19) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null) }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Button(onClick = { vm.sendKey(21) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Text("←") }
+                    Button(onClick = { vm.sendKey(21) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = null) }
                     Button(onClick = { vm.sendKey(23) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Text("OK") }
-                    Button(onClick = { vm.sendKey(22) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Text("→") }
+                    Button(onClick = { vm.sendKey(22) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
                 }
-                Button(onClick = { vm.sendKey(20) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Text("↓") }
+                Button(onClick = { vm.sendKey(20) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) }
             }
             // Nav buttons
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
