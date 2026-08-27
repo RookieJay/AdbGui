@@ -148,7 +148,7 @@ fun RemoteScreen(
             onDismissRequest = { confirmDelete = null },
             title = { Text(Strings.t("remove")) },
             text = { Text("${btn.label} (keycode: ${btn.keycode})?") },
-            confirmButton = { TextButton(onClick = { vm.removeButton(btn.id); confirmDelete = null }) { Text(Strings.t("ok")) } },
+            confirmButton = { TextButton(onClick = { vm.removeButton(btn.id); confirmDelete = null }) { Text(Strings.t("remove")) } },
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(Strings.t("cancel")) } },
         )
     }
