@@ -25,8 +25,6 @@ import com.adbgui.core.domain.LogcatLevel
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AppColors
 import kotlinx.coroutines.launch
-import java.awt.FileDialog
-import java.awt.Frame
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.io.File
@@ -95,13 +93,13 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                     Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
                 }) { Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy")) }
                 Button(onClick = {
-                    val dlg = FileDialog(Frame(), Strings.t("save_logcat_title"), FileDialog.SAVE)
                     val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-                    dlg.file = "logcat_$stamp.txt"
-                    dlg.isVisible = true
-                    val sel = dlg.file
-                    if (sel != null) {
-                        val t = File(dlg.directory, sel)
+                    val target = com.adbgui.desktop.platform.FileDialogs.saveFile(
+                        title = Strings.t("save_logcat_title"),
+                        defaultName = "logcat_$stamp.txt",
+                    )
+                    if (target != null) {
+                        val t = File(target)
                         runCatching { t.writeText(vm.export()) }
                             .onSuccess { savedFile = t; exportError = null }
                             .onFailure { exportError = Strings.t("status_save_failed").format(it.message) }

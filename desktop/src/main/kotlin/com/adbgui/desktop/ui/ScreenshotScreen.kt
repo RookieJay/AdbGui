@@ -35,8 +35,6 @@ import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.delay
 import org.jetbrains.skia.Image
-import java.awt.FileDialog
-import java.awt.Frame
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -155,15 +153,15 @@ fun ScreenshotScreen(
                     enabled = image != null,
                     onClick = {
                         image?.let { bytes ->
-                            val dialog = FileDialog(Frame(), Strings.t("save_screenshot_title"), FileDialog.SAVE)
                             val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-                            dialog.file = "screenshot_$stamp.png"
-                            dialog.isVisible = true
-                            val sel = dialog.file
-                            if (sel != null) {
-                                val target = File(dialog.directory, sel)
-                                runCatching { target.writeBytes(bytes) }
-                                    .onSuccess { savedFile = target; saveError = null }
+                            val target = com.adbgui.desktop.platform.FileDialogs.saveFile(
+                                title = Strings.t("save_screenshot_title"),
+                                defaultName = "screenshot_$stamp.png",
+                            )
+                            if (target != null) {
+                                val f = File(target)
+                                runCatching { f.writeBytes(bytes) }
+                                    .onSuccess { savedFile = f; saveError = null }
                                     .onFailure { saveError = Strings.t("status_save_failed").format(it.message) }
                             }
                         }
