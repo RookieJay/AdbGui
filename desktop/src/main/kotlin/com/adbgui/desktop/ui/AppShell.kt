@@ -1,7 +1,10 @@
 package com.adbgui.desktop.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.material.Divider
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
@@ -35,6 +39,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -184,12 +191,21 @@ private fun NavItem(
 ) {
     val backgroundColor = if (selected) MaterialTheme.colors.primary.copy(alpha = 0.14f) else Color.Transparent
     val contentColor = if (selected) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val focusBorder = if (focused) Modifier.border(1.5.dp, MaterialTheme.colors.primary) else Modifier
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(44.dp)
             .background(backgroundColor)
-            .clickable(onClick = onClick),
+            .then(focusBorder)
+            .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
+            .onPreviewKeyEvent { e ->
+                if (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.Spacebar) {
+                    onClick(); true
+                } else false
+            },
     ) {
         if (selected) {
             Box(
