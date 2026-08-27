@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -266,16 +265,4 @@ private fun DeviceRow(
             dismissButton = { TextButton(onClick = { showForgetConfirm = false }) { Text(Strings.t("cancel")) } },
         )
     }
-}
-
-@Composable
-private fun StatusDot(isLive: Boolean) {
-    // Green = online, gray = offline. The dot is color-coded but the device's serial/alias text
-    // sits right beside it, so the status is never conveyed by color alone (color-not-only).
-    val color = if (isLive) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
-    Box(
-        modifier = Modifier
-            .size(10.dp)
-            .background(color, shape = CircleShape),
-    )
 }
