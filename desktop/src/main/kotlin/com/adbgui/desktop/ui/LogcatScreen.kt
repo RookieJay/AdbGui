@@ -8,7 +8,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,11 +81,20 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 )
                 Spacer(Modifier.weight(1f))
                 val paused = status == LogcatStatus.PAUSED
-                OutlinedButton(onClick = { if (paused) vm.resume() else vm.pause() }) {
-                    Text(if (paused) Strings.t("resume") else Strings.t("pause"))
+                IconButton(onClick = { if (paused) vm.resume() else vm.pause() }) {
+                    Icon(
+                        if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                        contentDescription = Strings.t(if (paused) "resume" else "pause"),
+                    )
                 }
-                OutlinedButton(onClick = { confirmClear = true }) { Text(Strings.t("clear")) }
-                OutlinedButton(onClick = {
+                IconButton(onClick = { confirmClear = true }) {
+                    Icon(Icons.Filled.Delete, contentDescription = Strings.t("clear"))
+                }
+                IconButton(onClick = {
+                    val sel = StringSelection(lines.joinToString("\n") { it.raw })
+                    Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
+                }) { Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy")) }
+                Button(onClick = {
                     val dlg = FileDialog(Frame(), Strings.t("save_logcat_title"), FileDialog.SAVE)
                     val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                     dlg.file = "logcat_$stamp.txt"
@@ -92,11 +106,11 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                             .onSuccess { savedFile = t; exportError = null }
                             .onFailure { exportError = Strings.t("status_save_failed").format(it.message) }
                     }
-                }) { Text(Strings.t("export")) }
-                OutlinedButton(onClick = {
-                    val sel = StringSelection(lines.joinToString("\n") { it.raw })
-                    Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
-                }) { Text(Strings.t("copy")) }
+                }) {
+                    Icon(Icons.Filled.Download, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(Strings.t("export"))
+                }
             }
 
             if (status == LogcatStatus.RECONNECTING || status == LogcatStatus.FAILED) {
