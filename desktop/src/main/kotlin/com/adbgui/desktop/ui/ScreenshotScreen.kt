@@ -30,6 +30,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.delay
@@ -52,9 +53,11 @@ fun ScreenshotScreen(
 ) {
     val image by vm.image.collectAsState()
     val error by vm.error.collectAsState()
+    val captureDone by vm.captureDone.collectAsState()
     var savedFile by remember { mutableStateOf<File?>(null) }
     var saveError by remember { mutableStateOf<String?>(null) }
     var copyStatus by remember { mutableStateOf<String?>(null) }
+    var capturing by remember { mutableStateOf(false) }
     val saveFocus = remember { FocusRequester() }
 
     // Default focus to Save so Enter saves immediately.
@@ -65,6 +68,10 @@ fun ScreenshotScreen(
             delay(2000)
             copyStatus = null
         }
+    }
+    // Recapture finishes when the VM's captureDone counter bumps.
+    LaunchedEffect(captureDone) {
+        if (captureDone > 0L) capturing = false
     }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
@@ -113,7 +120,7 @@ fun ScreenshotScreen(
             // Inline save error.
             saveError?.let { InlineMessageBanner(it, MessageKind.Error) }
 
-            // Bottom-right actions: copy, save (default focus).
+            // Bottom-right actions: recapture, copy, save (default focus).
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -123,6 +130,17 @@ fun ScreenshotScreen(
                     SelectableText(it, style = MaterialTheme.typography.caption)
                     Spacer(Modifier.width(8.dp))
                 }
+                OutlinedButton(
+                    enabled = !capturing,
+                    onClick = { capturing = true; vm.capture() },
+                ) {
+                    if (capturing) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(Strings.t("screenshot_recapture"))
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
                 OutlinedButton(
                     enabled = image != null,
                     onClick = {
