@@ -173,11 +173,18 @@ private fun DeviceRow(
                         modifier = Modifier.widthIn(max = 180.dp)
                             .focusRequester(focusRequester)
                             .onPreviewKeyEvent { e ->
-                                if (e.key == Key.Enter || e.key == Key.NumPadEnter) {
-                                    onRename(aliasDraft.ifBlank { null })
-                                    renaming = false
-                                    true
-                                } else false
+                                when (e.key) {
+                                    Key.Enter, Key.NumPadEnter -> {
+                                        onRename(aliasDraft.ifBlank { null })
+                                        renaming = false
+                                        true
+                                    }
+                                    Key.Escape -> {
+                                        renaming = false
+                                        true
+                                    }
+                                    else -> false
+                                }
                             },
                         singleLine = true,
                     )
