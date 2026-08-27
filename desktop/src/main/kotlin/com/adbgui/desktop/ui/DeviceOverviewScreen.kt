@@ -188,12 +188,17 @@ fun DeviceOverviewScreen(
                         Text(Strings.t("scrcpy_no_audio"))
                     }
                     // Numeric + record fields
+                    val maxSizeN = optMaxSize.value.toIntOrNull()
+                    val maxFpsN = optMaxFps.value.toIntOrNull()
+                    val maxSizeErr = maxSizeN != null && maxSizeN != 0 && (maxSizeN < 16 || maxSizeN > 8192)
+                    val maxFpsErr = maxFpsN != null && maxFpsN != 0 && (maxFpsN < 1 || maxFpsN > 120)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = optMaxSize.value,
                             onValueChange = { optMaxSize.value = it.filter { c -> c.isDigit() } },
                             label = { Text(Strings.t("scrcpy_max_size")) },
                             singleLine = true,
+                            isError = maxSizeErr,
                             modifier = Modifier.width(140.dp),
                         )
                         Spacer(Modifier.width(12.dp))
@@ -202,7 +207,15 @@ fun DeviceOverviewScreen(
                             onValueChange = { optMaxFps.value = it.filter { c -> c.isDigit() } },
                             label = { Text(Strings.t("scrcpy_max_fps")) },
                             singleLine = true,
+                            isError = maxFpsErr,
                             modifier = Modifier.width(140.dp),
+                        )
+                    }
+                    if (maxSizeErr || maxFpsErr) {
+                        Text(
+                            if (maxSizeErr) Strings.t("scrcpy_max_size_err") else Strings.t("scrcpy_max_fps_err"),
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.error,
                         )
                     }
                     // Recording is explicit: only when checked do we pass --record.
@@ -233,7 +246,7 @@ fun DeviceOverviewScreen(
                     // --- Buttons row ---
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Button(
-                            enabled = selectedSerial != null && !scrcpyRunning.value,
+                            enabled = selectedSerial != null && !scrcpyRunning.value && !maxSizeErr && !maxFpsErr,
                             onClick = {
                                 val path = scrcpyPath.value ?: return@Button
                                 val serial = selectedSerial ?: return@Button

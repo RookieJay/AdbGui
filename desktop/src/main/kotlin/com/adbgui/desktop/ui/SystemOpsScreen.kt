@@ -3,11 +3,15 @@ package com.adbgui.desktop.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Surface
@@ -52,6 +56,10 @@ fun SystemOpsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(Strings.t("system_ops"), style = MaterialTheme.typography.h6)
+            if (busy) {
+                Spacer(Modifier.width(12.dp))
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            }
 
             // Reboot buttons (with confirm).
             Text(Strings.t("reboot"), style = MaterialTheme.typography.subtitle2)
