@@ -141,13 +141,13 @@ fun AppShell(
                     LogcatScreen(vm = logcatVm)
                 }
                 selected != null && page == NavPage.SYSTEM_OPS && systemOpsVm != null -> {
-                    SystemOpsScreen(vm = systemOpsVm, selectedSerial = selected)
+                    SystemOpsScreen(vm = systemOpsVm, selectedSerial = selected, onOpenConnect = { showConnect = true })
                 }
                 selected != null && page == NavPage.SYSTEM_INFO && systemInfoVm != null -> {
                     SystemInfoScreen(vm = systemInfoVm, selectedSerial = selected)
                 }
                 selected != null && page == NavPage.FILE_EXPLORER && fileExplorerVm != null -> {
-                    FileExplorerScreen(vm = fileExplorerVm, selectedSerial = selected)
+                    FileExplorerScreen(vm = fileExplorerVm, selectedSerial = selected, onOpenConnect = { showConnect = true })
                 }
                 else -> EmptyState(
                     title = Strings.t("no_device_selected"),

@@ -35,6 +35,7 @@ fun FileExplorerScreen(
     vm: FileExplorerViewModel,
     selectedSerial: String?,
     modifier: Modifier = Modifier,
+    onOpenConnect: () -> Unit = {},
 ) {
     val currentPath by vm.currentPath.collectAsState()
     val entries by vm.entries.collectAsState()
@@ -45,9 +46,13 @@ fun FileExplorerScreen(
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
         if (selectedSerial == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(Strings.t("no_device_selected"), style = MaterialTheme.typography.body2)
-            }
+            EmptyState(
+                title = Strings.t("no_device_selected"),
+                hint = Strings.t("no_device_hint"),
+                icon = Icons.Filled.Folder,
+                actionLabel = Strings.t("connect_first_device"),
+                onAction = onOpenConnect,
+            )
             return@Surface
         }
         Column(Modifier.fillMaxSize().padding(8.dp)) {
