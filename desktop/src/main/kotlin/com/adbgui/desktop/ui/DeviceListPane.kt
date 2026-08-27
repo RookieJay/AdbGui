@@ -21,6 +21,7 @@ import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.AlertDialog
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -77,6 +78,12 @@ fun DeviceListPane(
             ) {
                 Text(Strings.t("devices"), style = MaterialTheme.typography.subtitle1)
                 Spacer(Modifier.weight(1f))
+                if (busy) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp).padding(end = 8.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
                 TextButton(onClick = { showPair = true }) { Text(Strings.t("pair")) }
                 IconButton(onClick = onOpenConnect) {
                     Icon(Icons.Filled.Add, contentDescription = Strings.t("connect"))
