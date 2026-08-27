@@ -41,6 +41,7 @@ fun FileExplorerScreen(
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
     val savedFile by vm.savedFile.collectAsState()
+    var pendingPush by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
         if (selectedSerial == null) {
@@ -102,9 +103,13 @@ fun FileExplorerScreen(
                         ) {
                             DropdownMenuItem(onClick = {
                                 menuOpen = false
-                                val dlg = FileDialog(Frame(), "Upload", FileDialog.LOAD)
+                                val dlg = FileDialog(Frame(), Strings.t("upload"), FileDialog.LOAD)
                                 dlg.isVisible = true
-                                if (dlg.file != null) vm.push("${dlg.directory}${dlg.file}")
+                                if (dlg.file != null) {
+                                    val localPath = "${dlg.directory}${dlg.file}"
+                                    val target = "${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${dlg.file}"
+                                    pendingPush = localPath to target
+                                }
                             }) { Text(Strings.t("upload")) }
                             DropdownMenuItem(onClick = {
                                 menuOpen = false
@@ -127,6 +132,20 @@ fun FileExplorerScreen(
                 }
             }
         }
+    }
+
+    pendingPush?.let { (localPath, target) ->
+        AlertDialog(
+            onDismissRequest = { pendingPush = null },
+            title = { Text(Strings.t("push_confirm_title")) },
+            text = { Text(Strings.t("push_confirm_body").format(target)) },
+            confirmButton = {
+                TextButton(onClick = { vm.push(localPath); pendingPush = null }) { Text(Strings.t("upload")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPush = null }) { Text(Strings.t("cancel")) }
+            },
+        )
     }
 }
 
