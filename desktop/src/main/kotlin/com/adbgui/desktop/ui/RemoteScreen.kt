@@ -123,11 +123,7 @@ fun RemoteScreen(
             }
             TextButton(onClick = { showAdd = true }) { Text("+ ${Strings.t("add_button")}") }
             error?.let { msg ->
-                LaunchedEffect(msg) {
-                    kotlinx.coroutines.delay(3000)
-                    vm.clearError()
-                }
-                InlineMessageBanner(msg, MessageKind.Error)
+                InlineMessageBanner(msg, MessageKind.Error, onDismiss = { vm.clearError() })
             }
         }
     }

@@ -151,99 +151,12 @@ fun DeviceOverviewScreen(
                     scrcpyError.value?.let { msg ->
                         InlineMessageBanner(msg, MessageKind.Error)
                     }
-                    // Mode toggle. EXTERNAL works; EMBEDDED (JNA reparent) is reserved —
-                    // disabled pending implementation, slot kept so users know it's planned.
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = true, onClick = {}, enabled = false)
-                        Spacer(Modifier.width(4.dp))
-                        Text(Strings.t("scrcpy_mode_external"))
-                        Spacer(Modifier.width(16.dp))
-                        RadioButton(selected = false, onClick = {}, enabled = false)
-                        Spacer(Modifier.width(4.dp))
-                        Text(Strings.t("scrcpy_mode_embedded") + " " + Strings.t("scrcpy_mode_wip"))
-                    }
-                    // --- Launch options panel ---
-                    // Checkbox row 1
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = optAlwaysOnTop.value, onCheckedChange = { optAlwaysOnTop.value = it })
-                        Spacer(Modifier.width(4.dp))
-                        Text(Strings.t("scrcpy_always_on_top"))
-                        Spacer(Modifier.width(16.dp))
-                        Checkbox(checked = optFullscreen.value, onCheckedChange = { optFullscreen.value = it })
-                        Spacer(Modifier.width(4.dp))
-                        Text(Strings.t("scrcpy_fullscreen"))
-                    }
-                    // Checkbox row 2
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = optStayAwake.value, onCheckedChange = { optStayAwake.value = it })
-                        Spacer(Modifier.width(4.dp))
-                        Text(Strings.t("scrcpy_stay_awake"))
-                        Spacer(Modifier.width(16.dp))
-                        Checkbox(checked = optTurnScreenOff.value, onCheckedChange = { optTurnScreenOff.value = it })
-                        Spacer(Modifier.width(4.dp))
-                        Text(Strings.t("scrcpy_turn_screen_off"))
-                        Spacer(Modifier.width(16.dp))
-                        Checkbox(checked = optNoAudio.value, onCheckedChange = { optNoAudio.value = it })
-                        Spacer(Modifier.width(4.dp))
-                        Text(Strings.t("scrcpy_no_audio"))
-                    }
-                    // Numeric + record fields
+                    // Hoisted so the Start button (above options) can gate on them too.
                     val maxSizeN = optMaxSize.value.toIntOrNull()
                     val maxFpsN = optMaxFps.value.toIntOrNull()
                     val maxSizeErr = maxSizeN != null && maxSizeN != 0 && (maxSizeN < 16 || maxSizeN > 8192)
                     val maxFpsErr = maxFpsN != null && maxFpsN != 0 && (maxFpsN < 1 || maxFpsN > 120)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = optMaxSize.value,
-                            onValueChange = { optMaxSize.value = it.filter { c -> c.isDigit() } },
-                            label = { Text(Strings.t("scrcpy_max_size")) },
-                            singleLine = true,
-                            isError = maxSizeErr,
-                            modifier = Modifier.width(140.dp),
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        OutlinedTextField(
-                            value = optMaxFps.value,
-                            onValueChange = { optMaxFps.value = it.filter { c -> c.isDigit() } },
-                            label = { Text(Strings.t("scrcpy_max_fps")) },
-                            singleLine = true,
-                            isError = maxFpsErr,
-                            modifier = Modifier.width(140.dp),
-                        )
-                    }
-                    if (maxSizeErr || maxFpsErr) {
-                        Text(
-                            if (maxSizeErr) Strings.t("scrcpy_max_size_err") else Strings.t("scrcpy_max_fps_err"),
-                            style = MaterialTheme.typography.caption,
-                            color = MaterialTheme.colors.error,
-                        )
-                    }
-                    // Recording is explicit: only when checked do we pass --record.
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = optRecord.value, onCheckedChange = { optRecord.value = it })
-                        Spacer(Modifier.width(4.dp))
-                        Text(Strings.t("scrcpy_record_toggle"))
-                    }
-                    if (optRecord.value) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = optRecordPath.value,
-                                onValueChange = { optRecordPath.value = it },
-                                label = { Text(Strings.t("scrcpy_record")) },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Button(onClick = {
-                                val chosen = com.adbgui.desktop.platform.FileDialogs.pickDirectory(
-                                    title = Strings.t("scrcpy_record"),
-                                    currentPath = optRecordPath.value,
-                                )
-                                if (chosen != null) optRecordPath.value = chosen
-                            }) { Text(Strings.t("browse")) }
-                        }
-                    }
-                    // --- Buttons row ---
+                    // --- Buttons row (placed above options so Start is immediately visible) ---
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Button(
                             enabled = selectedSerial != null && !scrcpyRunning.value && !maxSizeErr && !maxFpsErr,
@@ -318,6 +231,94 @@ fun DeviceOverviewScreen(
                         Spacer(Modifier.width(8.dp))
                         TextButton(onClick = { showShortcuts.value = true }) {
                             Text(Strings.t("scrcpy_shortcuts"))
+                        }
+                    }
+                    // Mode toggle. EXTERNAL works; EMBEDDED (JNA reparent) is reserved —
+                    // disabled pending implementation, slot kept so users know it's planned.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = true, onClick = {}, enabled = false)
+                        Spacer(Modifier.width(4.dp))
+                        Text(Strings.t("scrcpy_mode_external"))
+                        Spacer(Modifier.width(16.dp))
+                        RadioButton(selected = false, onClick = {}, enabled = false)
+                        Spacer(Modifier.width(4.dp))
+                        Text(Strings.t("scrcpy_mode_embedded") + " " + Strings.t("scrcpy_mode_wip"))
+                    }
+                    // --- Launch options panel ---
+                    // Checkbox row 1
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = optAlwaysOnTop.value, onCheckedChange = { optAlwaysOnTop.value = it })
+                        Spacer(Modifier.width(4.dp))
+                        Text(Strings.t("scrcpy_always_on_top"))
+                        Spacer(Modifier.width(16.dp))
+                        Checkbox(checked = optFullscreen.value, onCheckedChange = { optFullscreen.value = it })
+                        Spacer(Modifier.width(4.dp))
+                        Text(Strings.t("scrcpy_fullscreen"))
+                    }
+                    // Checkbox row 2
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = optStayAwake.value, onCheckedChange = { optStayAwake.value = it })
+                        Spacer(Modifier.width(4.dp))
+                        Text(Strings.t("scrcpy_stay_awake"))
+                        Spacer(Modifier.width(16.dp))
+                        Checkbox(checked = optTurnScreenOff.value, onCheckedChange = { optTurnScreenOff.value = it })
+                        Spacer(Modifier.width(4.dp))
+                        Text(Strings.t("scrcpy_turn_screen_off"))
+                        Spacer(Modifier.width(16.dp))
+                        Checkbox(checked = optNoAudio.value, onCheckedChange = { optNoAudio.value = it })
+                        Spacer(Modifier.width(4.dp))
+                        Text(Strings.t("scrcpy_no_audio"))
+                    }
+                    // Numeric + record fields
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = optMaxSize.value,
+                            onValueChange = { optMaxSize.value = it.filter { c -> c.isDigit() } },
+                            label = { Text(Strings.t("scrcpy_max_size")) },
+                            singleLine = true,
+                            isError = maxSizeErr,
+                            modifier = Modifier.width(140.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        OutlinedTextField(
+                            value = optMaxFps.value,
+                            onValueChange = { optMaxFps.value = it.filter { c -> c.isDigit() } },
+                            label = { Text(Strings.t("scrcpy_max_fps")) },
+                            singleLine = true,
+                            isError = maxFpsErr,
+                            modifier = Modifier.width(140.dp),
+                        )
+                    }
+                    if (maxSizeErr || maxFpsErr) {
+                        Text(
+                            if (maxSizeErr) Strings.t("scrcpy_max_size_err") else Strings.t("scrcpy_max_fps_err"),
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.error,
+                        )
+                    }
+                    // Recording is explicit: only when checked do we pass --record.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = optRecord.value, onCheckedChange = { optRecord.value = it })
+                        Spacer(Modifier.width(4.dp))
+                        Text(Strings.t("scrcpy_record_toggle"))
+                    }
+                    if (optRecord.value) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = optRecordPath.value,
+                                onValueChange = { optRecordPath.value = it },
+                                label = { Text(Strings.t("scrcpy_record")) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Button(onClick = {
+                                val chosen = com.adbgui.desktop.platform.FileDialogs.pickDirectory(
+                                    title = Strings.t("scrcpy_record"),
+                                    currentPath = optRecordPath.value,
+                                )
+                                if (chosen != null) optRecordPath.value = chosen
+                            }) { Text(Strings.t("browse")) }
                         }
                     }
                     // After stopping, show the recorded file's path with open/reveal links.
