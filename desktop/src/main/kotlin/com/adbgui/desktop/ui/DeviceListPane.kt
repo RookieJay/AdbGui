@@ -92,24 +92,37 @@ fun DeviceListPane(
             Divider()
 
             // Device list
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(vertical = 4.dp),
-            ) {
-                items(devices, key = { it.serial }) { device ->
-                    DeviceRow(
-                        device = device,
-                        selected = selected,
-                        onRename = { newAlias ->
-                            // simple inline rename prompt: for now, set alias directly to serial-as-alias placeholder
-                            // (real rename dialog deferred to a later task)
-                            vm.setAlias(device.serial, newAlias)
-                        },
-                        onForget = { vm.forget(device.serial) },
-                        onDisconnect = { vm.disconnect(device.serial) },
-                        onSelect = { onSelect(device) },
-                        onReconnect = onReconnect,
+            // Device list (or empty-state guidance card when no devices)
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                if (devices.isEmpty()) {
+                    EmptyState(
+                        title = Strings.t("no_device_hint"),
+                        actionLabel = Strings.t("connect_first_device"),
+                        onAction = onOpenConnect,
+                        secondaryActionLabel = Strings.t("pair"),
+                        onSecondaryAction = { showPair = true },
                     )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 4.dp),
+                    ) {
+                        items(devices, key = { it.serial }) { device ->
+                            DeviceRow(
+                                device = device,
+                                selected = selected,
+                                onRename = { newAlias ->
+                                    // simple inline rename prompt: for now, set alias directly to serial-as-alias placeholder
+                                    // (real rename dialog deferred to a later task)
+                                    vm.setAlias(device.serial, newAlias)
+                                },
+                                onForget = { vm.forget(device.serial) },
+                                onDisconnect = { vm.disconnect(device.serial) },
+                                onSelect = { onSelect(device) },
+                                onReconnect = onReconnect,
+                            )
+                        }
+                    }
                 }
             }
 

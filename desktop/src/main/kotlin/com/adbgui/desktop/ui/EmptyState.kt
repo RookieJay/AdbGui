@@ -11,6 +11,7 @@ import androidx.compose.material.Button
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +31,8 @@ fun EmptyState(
     hint: String? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    secondaryActionLabel: String? = null,
+    onSecondaryAction: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
@@ -53,6 +56,10 @@ fun EmptyState(
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(16.dp))
             Button(onClick = onAction) { Text(actionLabel) }
+        }
+        if (secondaryActionLabel != null && onSecondaryAction != null) {
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onSecondaryAction) { Text(secondaryActionLabel) }
         }
     }
 }
