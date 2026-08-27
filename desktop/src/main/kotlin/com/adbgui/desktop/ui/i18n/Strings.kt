@@ -224,6 +224,7 @@ object Strings {
         "provider_where" to "Where（可选）",
         // Scrcpy
         "scrcpy" to "投屏",
+        "scrcpy_options" to "选项",
         "scrcpy_status_installed" to "✅ scrcpy 已安装",
         "scrcpy_status_installing" to "⏳ 正在安装 scrcpy...",
         "scrcpy_status_failed" to "❌ 安装失败",
@@ -508,6 +509,7 @@ object Strings {
         "provider_where" to "Where (optional)",
         // Scrcpy
         "scrcpy" to "Screen Mirror",
+        "scrcpy_options" to "Options",
         "scrcpy_status_installed" to "✅ scrcpy installed",
         "scrcpy_status_installing" to "⏳ Installing scrcpy...",
         "scrcpy_status_failed" to "❌ Installation failed",
