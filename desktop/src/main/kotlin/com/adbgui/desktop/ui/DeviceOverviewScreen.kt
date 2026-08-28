@@ -1,6 +1,8 @@
 package com.adbgui.desktop.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -99,18 +101,35 @@ fun DeviceOverviewScreen(
                     }
                 }
             }
-            // --- Remote ---
-            SectionCard(headerTitle = Strings.t("remote")) {
-                RemoteScreen(vm = remoteVm, selectedSerial = selectedSerial, modifier = Modifier.fillMaxWidth())
-            }
-            // --- scrcpy ---
-            SectionCard(headerTitle = Strings.t("scrcpy")) {
-                ScrcpySection(
-                    selectedSerial = selectedSerial,
-                    scrcpyInstaller = scrcpyInstaller,
-                    scrcpyLauncher = scrcpyLauncher,
-                    settingsVm = settingsVm,
-                )
+            // --- Remote + scrcpy: side-by-side when there's room (fills the empty space beside
+            // the D-pad so the user doesn't scroll down to Start scrcpy), stacked when narrow. ---
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val remoteCard = @Composable {
+                    SectionCard(headerTitle = Strings.t("remote")) {
+                        RemoteScreen(vm = remoteVm, selectedSerial = selectedSerial, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                val scrcpyCard = @Composable {
+                    SectionCard(headerTitle = Strings.t("scrcpy")) {
+                        ScrcpySection(
+                            selectedSerial = selectedSerial,
+                            scrcpyInstaller = scrcpyInstaller,
+                            scrcpyLauncher = scrcpyLauncher,
+                            settingsVm = settingsVm,
+                        )
+                    }
+                }
+                if (maxWidth >= 760.dp) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Box(Modifier.weight(1f)) { remoteCard() }
+                        Box(Modifier.weight(1f)) { scrcpyCard() }
+                    }
+                } else {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        remoteCard()
+                        scrcpyCard()
+                    }
+                }
             }
         }
     }

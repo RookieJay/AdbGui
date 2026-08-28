@@ -3,6 +3,8 @@ package com.adbgui.desktop.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.RemoteButton
 import com.adbgui.desktop.ui.i18n.Strings
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun RemoteScreen(
     vm: RemoteViewModel,
@@ -60,15 +62,47 @@ fun RemoteScreen(
                 Spacer(Modifier.width(8.dp))
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             }
-            // D-pad
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button(onClick = { vm.sendKey(19) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null) }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Button(onClick = { vm.sendKey(21) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = null) }
-                    Button(onClick = { vm.sendKey(23) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Text("OK") }
-                    Button(onClick = { vm.sendKey(22) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
+            // D-pad (left) + custom buttons (right) — the custom buttons fill the blank space
+            // beside the arrows instead of sitting below, so the right of the D-pad isn't empty.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // D-pad
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(onClick = { vm.sendKey(19) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(onClick = { vm.sendKey(21) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = null) }
+                        Button(onClick = { vm.sendKey(23) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Text("OK") }
+                        Button(onClick = { vm.sendKey(22) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
+                    }
+                    Button(onClick = { vm.sendKey(20) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) }
                 }
-                Button(onClick = { vm.sendKey(20) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) }
+                // Custom buttons — flow to fill whatever width is left of the D-pad.
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (customButtons.isNotEmpty()) {
+                        Text(Strings.t("custom_buttons"), style = MaterialTheme.typography.caption)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            customButtons.forEach { btn ->
+                                var menuOpen by remember(btn.id) { mutableStateOf(false) }
+                                Box(
+                                    Modifier.pointerInput(btn.id) {
+                                        awaitPointerEventScope {
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                if (event.type == PointerEventType.Press && event.button == PointerButton.Secondary) menuOpen = true
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    OutlinedButton(onClick = { vm.sendKey(btn.keycode) }, enabled = !busy) { Text(remoteButtonLabel(btn)) }
+                                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                        DropdownMenuItem(onClick = { menuOpen = false; editingButton = btn }) { Text(Strings.t("edit_button")) }
+                                        DropdownMenuItem(onClick = { menuOpen = false; confirmDelete = btn }) { Text(Strings.t("remove")) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    TextButton(onClick = { showAdd = true }) { Text("+ ${Strings.t("add_button")}") }
+                }
             }
             // Nav buttons
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -95,36 +129,6 @@ fun RemoteScreen(
                 )
                 Button(onClick = { sendText() }, enabled = !busy && textDraft.isNotBlank()) { Text(Strings.t("send_text")) }
             }
-            // Custom buttons — simple Column of Rows (no LazyGrid, works inside scroll)
-            if (customButtons.isNotEmpty()) {
-                Text(Strings.t("custom_buttons"), style = MaterialTheme.typography.caption)
-                // 3 per row, simple flow layout
-                val rows = customButtons.chunked(3)
-                rows.forEach { rowButtons ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        rowButtons.forEach { btn ->
-                            var menuOpen by remember(btn.id) { mutableStateOf(false) }
-                            Box(
-                                Modifier.pointerInput(btn.id) {
-                                    awaitPointerEventScope {
-                                        while (true) {
-                                            val event = awaitPointerEvent()
-                                            if (event.type == PointerEventType.Press && event.button == PointerButton.Secondary) menuOpen = true
-                                        }
-                                    }
-                                }
-                            ) {
-                                OutlinedButton(onClick = { vm.sendKey(btn.keycode) }, enabled = !busy) { Text(remoteButtonLabel(btn)) }
-                                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                    DropdownMenuItem(onClick = { menuOpen = false; editingButton = btn }) { Text(Strings.t("edit_button")) }
-                                    DropdownMenuItem(onClick = { menuOpen = false; confirmDelete = btn }) { Text(Strings.t("remove")) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            TextButton(onClick = { showAdd = true }) { Text("+ ${Strings.t("add_button")}") }
             error?.let { msg ->
                 InlineMessageBanner(msg, MessageKind.Error, onDismiss = { vm.clearError() })
             }
