@@ -203,6 +203,9 @@ object Strings {
         "upload" to "上传",
         "save_file" to "保存",
         "copy_path" to "复制路径",
+        "col_name" to "名称",
+        "col_size" to "大小",
+        "col_date" to "修改时间",
         // Nav reorg (Task 5)
         "device_overview" to "设备概览",
         "nav_device_overview" to "概览",
@@ -489,6 +492,9 @@ object Strings {
         "upload" to "Upload",
         "save_file" to "Save",
         "copy_path" to "Copy path",
+        "col_name" to "Name",
+        "col_size" to "Size",
+        "col_date" to "Modified",
         // Nav reorg (Task 5)
         "device_overview" to "Device Overview",
         "nav_device_overview" to "Overview",
