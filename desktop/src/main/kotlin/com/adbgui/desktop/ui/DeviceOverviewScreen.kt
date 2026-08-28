@@ -4,9 +4,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -105,12 +108,12 @@ fun DeviceOverviewScreen(
             // the D-pad so the user doesn't scroll down to Start scrcpy), stacked when narrow. ---
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val remoteCard = @Composable {
-                    SectionCard(headerTitle = Strings.t("remote")) {
+                    SectionCard(Modifier.fillMaxSize(), headerTitle = Strings.t("remote")) {
                         RemoteScreen(vm = remoteVm, selectedSerial = selectedSerial, modifier = Modifier.fillMaxWidth())
                     }
                 }
                 val scrcpyCard = @Composable {
-                    SectionCard(headerTitle = Strings.t("scrcpy")) {
+                    SectionCard(Modifier.fillMaxSize(), headerTitle = Strings.t("scrcpy")) {
                         ScrcpySection(
                             selectedSerial = selectedSerial,
                             scrcpyInstaller = scrcpyInstaller,
@@ -120,9 +123,14 @@ fun DeviceOverviewScreen(
                     }
                 }
                 if (maxWidth >= 760.dp) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Box(Modifier.weight(1f)) { remoteCard() }
-                        Box(Modifier.weight(1f)) { scrcpyCard() }
+                    // IntrinsicSize.Max + fillMaxHeight: both cards stretch to the taller one's
+                    // height so their tops AND bottoms align instead of the shorter card dangling.
+                    Row(
+                        Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Box(Modifier.weight(1f).fillMaxHeight()) { remoteCard() }
+                        Box(Modifier.weight(1f).fillMaxHeight()) { scrcpyCard() }
                     }
                 } else {
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {

@@ -64,7 +64,7 @@ fun RemoteScreen(
             }
             // D-pad (left) + custom buttons (right) — the custom buttons fill the blank space
             // beside the arrows instead of sitting below, so the right of the D-pad isn't empty.
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 // D-pad
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Button(onClick = { vm.sendKey(19) }, enabled = !busy, modifier = Modifier.size(56.dp)) { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null) }
