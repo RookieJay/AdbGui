@@ -1,5 +1,6 @@
 package com.adbgui.desktop.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -209,28 +210,15 @@ fun ScrcpySection(
             }
             if (optionsOpen.value) {
                 // Checkbox row 1
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = optAlwaysOnTop.value, onCheckedChange = { optAlwaysOnTop.value = it })
-                    Spacer(Modifier.width(4.dp))
-                    Text(Strings.t("scrcpy_always_on_top"))
-                    Spacer(Modifier.width(16.dp))
-                    Checkbox(checked = optFullscreen.value, onCheckedChange = { optFullscreen.value = it })
-                    Spacer(Modifier.width(4.dp))
-                    Text(Strings.t("scrcpy_fullscreen"))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    CheckboxLabel(optAlwaysOnTop.value, Strings.t("scrcpy_always_on_top")) { optAlwaysOnTop.value = !optAlwaysOnTop.value }
+                    CheckboxLabel(optFullscreen.value, Strings.t("scrcpy_fullscreen")) { optFullscreen.value = !optFullscreen.value }
                 }
                 // Checkbox row 2
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = optStayAwake.value, onCheckedChange = { optStayAwake.value = it })
-                    Spacer(Modifier.width(4.dp))
-                    Text(Strings.t("scrcpy_stay_awake"))
-                    Spacer(Modifier.width(16.dp))
-                    Checkbox(checked = optTurnScreenOff.value, onCheckedChange = { optTurnScreenOff.value = it })
-                    Spacer(Modifier.width(4.dp))
-                    Text(Strings.t("scrcpy_turn_screen_off"))
-                    Spacer(Modifier.width(16.dp))
-                    Checkbox(checked = optNoAudio.value, onCheckedChange = { optNoAudio.value = it })
-                    Spacer(Modifier.width(4.dp))
-                    Text(Strings.t("scrcpy_no_audio"))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    CheckboxLabel(optStayAwake.value, Strings.t("scrcpy_stay_awake")) { optStayAwake.value = !optStayAwake.value }
+                    CheckboxLabel(optTurnScreenOff.value, Strings.t("scrcpy_turn_screen_off")) { optTurnScreenOff.value = !optTurnScreenOff.value }
+                    CheckboxLabel(optNoAudio.value, Strings.t("scrcpy_no_audio")) { optNoAudio.value = !optNoAudio.value }
                 }
                 // Numeric + record fields
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -260,11 +248,7 @@ fun ScrcpySection(
                     )
                 }
                 // Recording is explicit: only when checked do we pass --record.
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = optRecord.value, onCheckedChange = { optRecord.value = it })
-                    Spacer(Modifier.width(4.dp))
-                    Text(Strings.t("scrcpy_record_toggle"))
-                }
+                CheckboxLabel(optRecord.value, Strings.t("scrcpy_record_toggle")) { optRecord.value = !optRecord.value }
                 if (optRecord.value) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
@@ -320,6 +304,27 @@ fun ScrcpySection(
 }
 
 /**
+ * Checkbox + label that both toggle on click. The [Checkbox] is display-only
+ * (`onCheckedChange = null`); the whole row is clickable so clicking the label text toggles too
+ * (label-toggle / larger hit area), instead of only the small checkbox box.
+ */
+@Composable
+private fun CheckboxLabel(
+    checked: Boolean,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.clickable(onClick = onClick).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = null)
+        Spacer(Modifier.width(4.dp))
+        Text(label)
+    }
+}
+
+/**
  * Curated scrcpy MOD+key shortcuts (from `scrcpy.exe --help`, v4.1).
  * Each pair: (key combination shown to user, i18n key for the description).
  * MOD = Left Alt by default. Kept to ~12 of the most useful rows.
@@ -342,8 +347,7 @@ private val scrcpyShortcuts: List<Pair<String, String>> = listOf(
 )
 
 @Composable
-private fun ScrcpyShortcutsDialog(onDismiss: () -> Unit) {
-    AlertDialog(
+private fun ScrcpyShortcutsDialog(onDismiss: () -> Unit) {    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(Strings.t("scrcpy_shortcuts")) },
         text = {

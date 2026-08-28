@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
 import java.awt.Toolkit
@@ -170,8 +171,8 @@ fun DeviceInfoScreen(
                     )
                 }
                 if (infoExpanded) {
-                    PropRow(Strings.t("prop_brand"), p.brand)
-                    PropRow(Strings.t("prop_manufacturer"), p.manufacturer)
+                    PropRow(Strings.t("prop_brand"), p.brand, mono = false)
+                    PropRow(Strings.t("prop_manufacturer"), p.manufacturer, mono = false)
                     PropRow(Strings.t("prop_model"), p.model)
                     PropRow(Strings.t("prop_android_version"), p.androidVersion)
                     PropRow(Strings.t("prop_sdk"), p.sdkInt.toString())
@@ -184,13 +185,16 @@ fun DeviceInfoScreen(
     }
 
 @Composable
-private fun PropRow(label: String, value: String) {
+private fun PropRow(label: String, value: String, mono: Boolean = true) {
     var copied by remember { mutableStateOf(false) }
     LaunchedEffect(copied) {
         if (copied) {
             kotlinx.coroutines.delay(1500)
             copied = false
         }
+    }
+    val valueStyle = MaterialTheme.typography.body1.let {
+        if (mono) it.copy(fontFamily = FontFamily.Monospace) else it
     }
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -201,7 +205,7 @@ private fun PropRow(label: String, value: String) {
             style = MaterialTheme.typography.caption,
             modifier = Modifier.width(160.dp),
         )
-        Text(value, style = MaterialTheme.typography.body1, modifier = Modifier.weight(1f))
+        Text(value, style = valueStyle, modifier = Modifier.weight(1f))
         IconButton(onClick = {
             Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(value), null)
             copied = true
