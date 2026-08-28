@@ -48,8 +48,10 @@ fun RemoteScreen(
     // DeviceOverview, which supplies the card surface + padding + header. Avoids double-padding
     // and a duplicate "遥控" header.
     if (selectedSerial == null) {
-        Box(Modifier.height(100.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text(Strings.t("no_device_selected"), style = MaterialTheme.typography.body2)
+        // Unreachable in practice (AppShell only renders this page when a device is selected),
+        // but keep a consistent empty state if the contract is ever violated.
+        Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+            EmptyState(title = Strings.t("no_device_selected"), hint = Strings.t("no_device_hint"))
         }
         return
     }
@@ -180,9 +182,9 @@ private fun ButtonEditDialog(
         title = { Text(title) },
         text = {
             Column {
-                TextField(value = label, singleLine = true, onValueChange = { label = it }, label = { Text(Strings.t("button_label")) })
+                OutlinedTextField(value = label, singleLine = true, onValueChange = { label = it }, label = { Text(Strings.t("button_label")) })
                 Spacer(Modifier.size(8.dp))
-                TextField(value = keycodeStr, singleLine = true, onValueChange = { keycodeStr = it }, label = { Text(Strings.t("keycode")) })
+                OutlinedTextField(value = keycodeStr, singleLine = true, onValueChange = { keycodeStr = it }, label = { Text(Strings.t("keycode")) })
             }
         },
         confirmButton = {

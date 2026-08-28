@@ -261,7 +261,7 @@ private fun DeviceRow(
             onDismissRequest = { showForgetConfirm = false },
             title = { Text(Strings.t("forget_confirm_title")) },
             text = { Text(Strings.t("forget_confirm_body").format(device.alias ?: device.serial)) },
-            confirmButton = { TextButton(onClick = { showForgetConfirm = false; onForget() }) { Text(Strings.t("forget")) } },
+            confirmButton = { DangerButton(onClick = { showForgetConfirm = false; onForget() }) { Text(Strings.t("forget")) } },
             dismissButton = { TextButton(onClick = { showForgetConfirm = false }) { Text(Strings.t("cancel")) } },
         )
     }

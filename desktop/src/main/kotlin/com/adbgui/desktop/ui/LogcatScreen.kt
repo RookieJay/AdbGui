@@ -68,7 +68,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                     }
                 }
                 // One text input (matches across the raw line: tag + message + timestamp + pid)
-                TextField(
+                OutlinedTextField(
                     value = text, singleLine = true,
                     onValueChange = {
                         text = it
@@ -160,7 +160,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
             title = { Text(Strings.t("clear_logcat_confirm_title")) },
             text = { Text(Strings.t("clear_logcat_confirm_body")) },
             confirmButton = {
-                TextButton(onClick = { vm.clear(); confirmClear = false }) { Text(Strings.t("clear")) }
+                DangerButton(onClick = { vm.clear(); confirmClear = false }) { Text(Strings.t("clear")) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmClear = false }) { Text(Strings.t("cancel")) }

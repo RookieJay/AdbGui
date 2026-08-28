@@ -90,7 +90,7 @@ fun DeviceOverviewScreen(
                             title = { Text(Strings.t("reboot_confirm_title")) },
                             text = { Text(Strings.t("reboot_confirm_body").format(rebootLabel(mode))) },
                             confirmButton = {
-                                TextButton(onClick = { pendingReboot = null; systemOpsVm.reboot(mode) }) { Text(Strings.t("reboot")) }
+                                DangerButton(onClick = { pendingReboot = null; systemOpsVm.reboot(mode) }) { Text(Strings.t("reboot")) }
                             },
                             dismissButton = {
                                 TextButton(onClick = { pendingReboot = null }) { Text(Strings.t("cancel")) }
