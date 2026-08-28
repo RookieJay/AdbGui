@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,13 +37,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.adbgui.core.domain.DeviceView
 import com.adbgui.desktop.ui.i18n.Strings
+import com.adbgui.desktop.ui.theme.AppColors
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.nio.file.Path
 
@@ -73,8 +78,12 @@ fun AppShell(
     var showConnect by remember { mutableStateOf(false) }
     val serialFlow = selectedSerial ?: remember { MutableStateFlow<String?>(null) }
     val selected by serialFlow.collectAsState()
+    val devices by vm.devices.collectAsState()
+    val selectedDevice = devices.firstOrNull { it.serial == selected }
+    val dividerColor = AppColors.current.divider
 
     Row(modifier = modifier.fillMaxSize()) {
+        // ---- Sidebar: device list | feature nav | settings, as three separated zones ----
         Column(
             modifier = Modifier.width(280.dp).fillMaxHeight()
                 .background(MaterialTheme.colors.surface),
@@ -87,9 +96,15 @@ fun AppShell(
                 onReconnect = { ip, port -> vm.reconnect(ip, port) },
                 onOpenConnect = { showConnect = true },
             )
-            Divider()
+            Divider(color = dividerColor)
 
-            // Feature nav items — only render the ones whose VM is wired.
+            // Feature nav zone — fixed (does not scroll with the device list).
+            Text(
+                Strings.t("nav_section_features"),
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 4.dp),
+            )
             val navItems: List<NavItemSpec> = buildList {
                 if (deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null) {
                     add(NavItemSpec(NavPage.DEVICE_OVERVIEW, "nav_device_overview", Icons.Filled.Devices))
@@ -109,7 +124,7 @@ fun AppShell(
             }
 
             if (settingsVm != null && configDir != null) {
-                Divider()
+                Divider(color = dividerColor)
                 NavItem(
                     label = Strings.t("nav_settings"),
                     icon = Icons.Filled.Settings,
@@ -118,46 +133,55 @@ fun AppShell(
                 )
             }
         }
-        Divider(modifier = Modifier.fillMaxHeight().width(1.dp))
-        Surface(modifier = Modifier.fillMaxSize()) {
-            when {
-                page == NavPage.SETTINGS && settingsVm != null && configDir != null -> {
-                    SettingsScreen(vm = settingsVm, configDir = configDir, scrcpyLocator = scrcpyLocator, repo = repo, adbLocator = adbLocator)
-                }
-                selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null && scrcpyInstaller != null && scrcpyLocator != null && scrcpyLauncher != null -> {
-                    DeviceOverviewScreen(
-                        deviceInfoVm = deviceOverviewDeviceInfoVm,
-                        remoteVm = deviceOverviewRemoteVm,
-                        onOpenScreenshot = onOpenScreenshot,
-                        screenshotLoading = screenshotLoading,
-                        selectedSerial = selected,
-                        scrcpyInstaller = scrcpyInstaller,
-                        scrcpyLocator = scrcpyLocator,
-                        scrcpyLauncher = scrcpyLauncher,
-                        settingsVm = settingsVm,
-                        systemOpsVm = systemOpsVm,
-                        onOpenShell = onOpenShell,
+        Divider(color = dividerColor, modifier = Modifier.fillMaxHeight().width(1.dp))
+
+        // ---- Content: top bar + page ----
+        Column(modifier = Modifier.fillMaxSize()) {
+            TopBar(
+                pageTitle = pageTitle(page),
+                device = selectedDevice,
+            )
+            Divider(color = dividerColor)
+            Surface(modifier = Modifier.fillMaxSize()) {
+                when {
+                    page == NavPage.SETTINGS && settingsVm != null && configDir != null -> {
+                        SettingsScreen(vm = settingsVm, configDir = configDir, scrcpyLocator = scrcpyLocator, repo = repo, adbLocator = adbLocator)
+                    }
+                    selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null && scrcpyInstaller != null && scrcpyLocator != null && scrcpyLauncher != null -> {
+                        DeviceOverviewScreen(
+                            deviceInfoVm = deviceOverviewDeviceInfoVm,
+                            remoteVm = deviceOverviewRemoteVm,
+                            onOpenScreenshot = onOpenScreenshot,
+                            screenshotLoading = screenshotLoading,
+                            selectedSerial = selected,
+                            scrcpyInstaller = scrcpyInstaller,
+                            scrcpyLocator = scrcpyLocator,
+                            scrcpyLauncher = scrcpyLauncher,
+                            settingsVm = settingsVm,
+                            systemOpsVm = systemOpsVm,
+                            onOpenShell = onOpenShell,
+                        )
+                    }
+                    selected != null && page == NavPage.APP_CONSOLE && appConsoleVm != null -> {
+                        AppConsoleScreen(vm = appConsoleVm, selectedSerial = selected)
+                    }
+                    selected != null && page == NavPage.LOGCAT && logcatVm != null -> {
+                        LogcatScreen(vm = logcatVm)
+                    }
+                    selected != null && page == NavPage.SYSTEM_INFO && systemInfoVm != null -> {
+                        SystemInfoScreen(vm = systemInfoVm, selectedSerial = selected)
+                    }
+                    selected != null && page == NavPage.FILE_EXPLORER && fileExplorerVm != null -> {
+                        FileExplorerScreen(vm = fileExplorerVm, selectedSerial = selected, onOpenConnect = { showConnect = true })
+                    }
+                    else -> EmptyState(
+                        title = Strings.t("no_device_selected"),
+                        hint = Strings.t("no_device_hint"),
+                        icon = Icons.Filled.Devices,
+                        actionLabel = Strings.t("connect_first_device"),
+                        onAction = { showConnect = true },
                     )
                 }
-                selected != null && page == NavPage.APP_CONSOLE && appConsoleVm != null -> {
-                    AppConsoleScreen(vm = appConsoleVm, selectedSerial = selected)
-                }
-                selected != null && page == NavPage.LOGCAT && logcatVm != null -> {
-                    LogcatScreen(vm = logcatVm)
-                }
-                selected != null && page == NavPage.SYSTEM_INFO && systemInfoVm != null -> {
-                    SystemInfoScreen(vm = systemInfoVm, selectedSerial = selected)
-                }
-                selected != null && page == NavPage.FILE_EXPLORER && fileExplorerVm != null -> {
-                    FileExplorerScreen(vm = fileExplorerVm, selectedSerial = selected, onOpenConnect = { showConnect = true })
-                }
-                else -> EmptyState(
-                    title = Strings.t("no_device_selected"),
-                    hint = Strings.t("no_device_hint"),
-                    icon = Icons.Filled.Devices,
-                    actionLabel = Strings.t("connect_first_device"),
-                    onAction = { showConnect = true },
-                )
             }
         }
     }
@@ -167,14 +191,69 @@ fun AppShell(
     }
 }
 
+private fun pageTitle(page: NavPage): String = when (page) {
+    NavPage.DEVICE_OVERVIEW -> Strings.t("nav_device_overview")
+    NavPage.APP_CONSOLE -> Strings.t("nav_app_console")
+    NavPage.LOGCAT -> Strings.t("nav_logcat")
+    NavPage.SYSTEM_INFO -> Strings.t("nav_system_info")
+    NavPage.FILE_EXPLORER -> Strings.t("nav_file_explorer")
+    NavPage.SETTINGS -> Strings.t("nav_settings")
+}
+
 private enum class NavPage { DEVICE_OVERVIEW, APP_CONSOLE, LOGCAT, SYSTEM_INFO, FILE_EXPLORER, SETTINGS }
 
 private data class NavItemSpec(val page: NavPage, val labelKey: String, val icon: ImageVector)
 
 /**
- * Sidebar nav row with a real selected state: primary-tinted background + a 3dp left indicator
- * bar + primary-colored icon/label. Replaces the old "append ' *' to the label" hack.
- * 44dp tall to meet the desktop touch-target floor.
+ * Persistent top bar over the content area: current page title on the left, selected device
+ * (status dot + alias/serial) on the right. Gives spatial context the per-page titles lacked.
+ */
+@Composable
+private fun TopBar(
+    pageTitle: String,
+    device: DeviceView?,
+) {
+    val dividerColor = AppColors.current.divider
+    Surface(
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+        color = MaterialTheme.colors.surface,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(pageTitle, style = MaterialTheme.typography.h6)
+            Spacer(Modifier.width(16.dp))
+            device?.let { d ->
+                // Device context on the right; weight spacer pushes it to the end.
+                Spacer(Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StatusDot(isLive = d.isLive)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        d.alias ?: d.serial,
+                        style = MaterialTheme.typography.subtitle2,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.75f),
+                    )
+                }
+            } ?: run {
+                Spacer(Modifier.weight(1f))
+                Text(
+                    Strings.t("no_device_selected"),
+                    style = MaterialTheme.typography.subtitle2,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f),
+                )
+            }
+        }
+    }
+    // Divider drawn by the caller (AppShell) so it spans the full content width including under
+    // any nested surfaces; kept here as a no-op to avoid a stray second line.
+}
+
+/**
+ * Sidebar nav row: selected = primary-tinted background + 3dp left indicator + primary icon/label
+ * (SemiBold); hovered = subtle onSurface wash so desktop users get a hover affordance (the M2
+ * ripple means nothing on desktop). 44dp tall to meet the desktop touch-target floor.
  */
 @Composable
 private fun NavItem(
@@ -184,7 +263,12 @@ private fun NavItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val backgroundColor = if (selected) MaterialTheme.colors.primary.copy(alpha = 0.14f) else Color.Transparent
+    var hovered by remember { mutableStateOf(false) }
+    val backgroundColor = when {
+        selected -> MaterialTheme.colors.primary.copy(alpha = 0.14f)
+        hovered -> MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
+        else -> androidx.compose.ui.graphics.Color.Transparent
+    }
     val contentColor = if (selected) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
@@ -195,6 +279,17 @@ private fun NavItem(
             .height(44.dp)
             .background(backgroundColor)
             .then(focusBorder)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        when (awaitPointerEvent().type) {
+                            PointerEventType.Enter -> hovered = true
+                            PointerEventType.Exit -> hovered = false
+                            else -> {}
+                        }
+                    }
+                }
+            }
             .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
             .onPreviewKeyEvent { e ->
                 if (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.Spacebar) {
@@ -215,9 +310,15 @@ private fun NavItem(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, contentDescription = label, tint = contentColor)
+            // Icon sits beside a visible label → decorative (icon-context).
+            Icon(icon, contentDescription = null, tint = contentColor)
             Spacer(Modifier.width(12.dp))
-            Text(label, color = contentColor, style = MaterialTheme.typography.body2)
+            Text(
+                label,
+                color = contentColor,
+                style = MaterialTheme.typography.subtitle2,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            )
         }
     }
 }

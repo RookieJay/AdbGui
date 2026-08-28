@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -17,7 +18,17 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.device.LogcatFilters
 import com.adbgui.core.device.LogcatStatus
@@ -45,9 +56,17 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     var savedFile by remember { mutableStateOf<File?>(null) }
     var exportError by remember { mutableStateOf<String?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
+    val searchFocus = remember { FocusRequester() }
+    val matchHighlight = MaterialTheme.colors.primary.copy(alpha = 0.28f)
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
-        Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Surface(modifier = modifier.fillMaxSize().onPreviewKeyEvent { e ->
+        // Ctrl+F focuses the search box (browser-style find). Fires when focus is anywhere in Logcat.
+        if (e.key == Key.F && e.isCtrlPressed) {
+            searchFocus.requestFocus()
+            true
+        } else false
+    }, color = MaterialTheme.colors.surface) {
+        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             // Filter bar (AS-style: level dropdown + one text input + controls)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 // Level dropdown (multi-select)
@@ -68,14 +87,14 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                     }
                 }
                 // One text input (matches across the raw line: tag + message + timestamp + pid)
-                TextField(
+                OutlinedTextField(
                     value = text, singleLine = true,
                     onValueChange = {
                         text = it
                         vm.setFilters(LogcatFilters(levelSet = levelSet, text = it.ifBlank { null }))
                     },
                     label = { Text(Strings.t("text_search")) },
-                    modifier = Modifier.width(220.dp),
+                    modifier = Modifier.width(220.dp).focusRequester(searchFocus),
                 )
                 Spacer(Modifier.weight(1f))
                 val paused = status == LogcatStatus.PAUSED
@@ -137,10 +156,19 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 if (userAtBottom && lines.isNotEmpty()) listState.animateScrollToItem(lines.size - 1)
             }
             val scrollScope = rememberCoroutineScope()
+            val query = text
             Box(Modifier.fillMaxSize()) {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    itemsIndexed(lines) { _, line ->
-                        Text(line.raw, color = levelColor(line.level), style = MaterialTheme.typography.body2)
+                // SelectionContainer makes the log lines selectable + copyable (Ctrl+C); without it
+                // plain Text can't be selected, which made copying a single line impossible.
+                SelectionContainer {
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                        itemsIndexed(lines) { _, line ->
+                            Text(
+                                highlightMatches(line.raw, query, matchHighlight),
+                                color = levelColor(line.level),
+                                style = MaterialTheme.typography.body2,
+                            )
+                        }
                     }
                 }
                 // Floating "jump to latest" button when the user has scrolled up.
@@ -160,7 +188,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
             title = { Text(Strings.t("clear_logcat_confirm_title")) },
             text = { Text(Strings.t("clear_logcat_confirm_body")) },
             confirmButton = {
-                TextButton(onClick = { vm.clear(); confirmClear = false }) { Text(Strings.t("clear")) }
+                DangerButton(onClick = { vm.clear(); confirmClear = false }) { Text(Strings.t("clear")) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmClear = false }) { Text(Strings.t("cancel")) }
@@ -180,6 +208,29 @@ private fun levelColor(l: LogcatLevel): Color {
         LogcatLevel.E, LogcatLevel.F -> c.logError
     }
 }
+
+/**
+ * Renders [raw] with every case-insensitive occurrence of [query] given a [highlight] background,
+ * so the user can see *why* a line matched the filter. Used per visible line (the filter already
+ * hides non-matching lines, so every visible line contains the query at least once).
+ */
+private fun highlightMatches(raw: String, query: String, highlight: Color): AnnotatedString =
+    buildAnnotatedString {
+        val needle = query.trim().lowercase()
+        if (needle.isEmpty()) { append(raw); return@buildAnnotatedString }
+        val hay = raw.lowercase()
+        var i = 0
+        while (i < raw.length) {
+            val idx = hay.indexOf(needle, i)
+            if (idx < 0) { append(raw.substring(i)); break }
+            append(raw.substring(i, idx))
+            withStyle(SpanStyle(background = highlight)) {
+                append(raw.substring(idx, idx + needle.length))
+            }
+            i = idx + needle.length
+        }
+        if (i < raw.length) append(raw.substring(i))
+    }
 
 private fun levelLabel(levelSet: Set<LogcatLevel>): String =
     if (levelSet.size == LogcatLevel.entries.size) Strings.t("level_all")

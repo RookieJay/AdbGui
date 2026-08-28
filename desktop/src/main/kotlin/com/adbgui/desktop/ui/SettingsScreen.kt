@@ -13,8 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.Divider
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Surface
@@ -69,43 +67,32 @@ fun SettingsScreen(
     var scrcpyDraft by remember(settings.scrcpyPathOverride) {
         mutableStateOf(settings.scrcpyPathOverride.orEmpty())
     }
-    var levelMenu by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colors.surface) {
         Column(
-            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(Strings.t("settings"), style = MaterialTheme.typography.h6)
 
             // --- Language ---
             Text(Strings.t("language"), style = MaterialTheme.typography.subtitle1)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Locale.entries.forEach { locale ->
-                    TextButton(onClick = { vm.setLocale(locale) }) {
-                        Text(
-                            text = locale.display,
-                            color = if (settings.locale == locale.code) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface,
-                        )
-                    }
-                    Spacer(Modifier.width(4.dp))
-                }
-            }
+            SegmentedSelector(
+                options = Locale.entries,
+                selected = Locale.fromCode(settings.locale),
+                onSelect = { vm.setLocale(it) },
+                optionLabel = { locale -> locale.display },
+            )
 
             // --- Theme ---
             Text(Strings.t("theme"), style = MaterialTheme.typography.subtitle1)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ThemePref.entries.forEach { pref ->
-                    TextButton(onClick = { vm.setTheme(pref.code) }) {
-                        Text(
-                            text = Strings.t("theme_" + pref.code),
-                            color = if (settings.theme == pref.code) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface,
-                        )
-                    }
-                    Spacer(Modifier.width(4.dp))
-                }
-            }
+            SegmentedSelector(
+                options = ThemePref.entries,
+                selected = ThemePref.fromCode(settings.theme),
+                onSelect = { vm.setTheme(it.code) },
+                optionLabel = { pref -> Strings.t("theme_" + pref.code) },
+            )
 
             Divider()
 
@@ -209,19 +196,15 @@ fun SettingsScreen(
 
             // --- Log level ---
             Text(Strings.t("log_level"), style = MaterialTheme.typography.subtitle1)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(Strings.t("current").format(settings.logLevel.name), modifier = Modifier.padding(end = 12.dp))
-                TextButton(onClick = { levelMenu = true }) { Text(Strings.t("change")) }
-                DropdownMenu(expanded = levelMenu, onDismissRequest = { levelMenu = false }) {
-                    LogLevel.entries.forEach { lvl ->
-                        DropdownMenuItem(onClick = {
-                            levelMenu = false
-                            vm.setLogLevel(lvl)
-                            status = Strings.t("status_log_level_set").format(lvl.name)
-                        }) { Text(lvl.name) }
-                    }
-                }
-            }
+            SegmentedSelector(
+                options = LogLevel.entries,
+                selected = settings.logLevel,
+                onSelect = { lvl ->
+                    vm.setLogLevel(lvl)
+                    status = Strings.t("status_log_level_set").format(lvl.name)
+                },
+                optionLabel = { lvl -> lvl.name },
+            )
 
             Divider()
 

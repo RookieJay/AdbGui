@@ -24,6 +24,7 @@ object Strings {
         "nav_app_manager" to "应用管理",
         "nav_settings" to "设置",
         "nav_system_info" to "系统信息",
+        "nav_section_features" to "功能",
         // Common
         "no_device_selected" to "未选择设备",
         "no_device_hint" to "连接一台设备以开始",
@@ -202,6 +203,9 @@ object Strings {
         "upload" to "上传",
         "save_file" to "保存",
         "copy_path" to "复制路径",
+        "col_name" to "名称",
+        "col_size" to "大小",
+        "col_date" to "修改时间",
         // Nav reorg (Task 5)
         "device_overview" to "设备概览",
         "nav_device_overview" to "概览",
@@ -309,6 +313,7 @@ object Strings {
         "nav_app_manager" to "App Manager",
         "nav_settings" to "Settings",
         "nav_system_info" to "System info",
+        "nav_section_features" to "Features",
         // Common
         "no_device_selected" to "No device selected",
         "no_device_hint" to "Connect a device to get started",
@@ -487,6 +492,9 @@ object Strings {
         "upload" to "Upload",
         "save_file" to "Save",
         "copy_path" to "Copy path",
+        "col_name" to "Name",
+        "col_size" to "Size",
+        "col_date" to "Modified",
         // Nav reorg (Task 5)
         "device_overview" to "Device Overview",
         "nav_device_overview" to "Overview",

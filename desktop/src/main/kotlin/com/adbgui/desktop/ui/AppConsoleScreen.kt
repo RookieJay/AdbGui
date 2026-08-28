@@ -126,7 +126,7 @@ fun AppConsoleScreen(
     ) {
         if (selectedSerial == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(Strings.t("no_device_selected"), style = MaterialTheme.typography.body2)
+                EmptyState(title = Strings.t("no_device_selected"), hint = Strings.t("no_device_hint"))
             }
             return@Surface
         }
@@ -295,7 +295,7 @@ fun AppConsoleScreen(
             title = { Text(Strings.t("uninstall")) },
             text = { Text("$pkg?") },
             confirmButton = {
-                TextButton(onClick = { vm.uninstall(pkg); confirmUninstall = null }) { Text(Strings.t("uninstall")) }
+                DangerButton(onClick = { vm.uninstall(pkg); confirmUninstall = null }) { Text(Strings.t("uninstall")) }
             },
             dismissButton = { TextButton(onClick = { confirmUninstall = null }) { Text(Strings.t("cancel")) } },
         )
@@ -308,7 +308,7 @@ fun AppConsoleScreen(
             title = { Text(Strings.t("clear_data_confirm_title")) },
             text = { Text(Strings.t("clear_data_confirm_body").format(pkg)) },
             confirmButton = {
-                TextButton(onClick = { vm.clearData(pkg); confirmClearData = null }) { Text(Strings.t("clear")) }
+                DangerButton(onClick = { vm.clearData(pkg); confirmClearData = null }) { Text(Strings.t("clear")) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmClearData = null }) { Text(Strings.t("cancel")) }

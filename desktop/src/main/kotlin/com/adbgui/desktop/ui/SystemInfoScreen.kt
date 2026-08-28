@@ -60,7 +60,7 @@ fun SystemInfoScreen(
 
     Row(modifier.fillMaxSize()) {
         // ---- Left: package selector + grouped command list ----
-        Column(Modifier.width(300.dp).fillMaxHeight().padding(8.dp)) {
+        Column(Modifier.width(300.dp).fillMaxHeight().padding(16.dp)) {
             // Package dropdown (lazy load on first open)
             Box {
                 OutlinedButton(
@@ -111,7 +111,7 @@ fun SystemInfoScreen(
         Divider(Modifier.fillMaxHeight().width(1.dp))
 
         // ---- Right: output ----
-        Column(Modifier.fillMaxSize().padding(8.dp)) {
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
             // Serial label (AppShell only renders this page when a device is selected)
             Text(
                 "adb -s $selectedSerial",
