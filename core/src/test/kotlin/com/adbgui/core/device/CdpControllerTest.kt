@@ -208,6 +208,20 @@ class CdpControllerTest {
     }
 
     @Test
+    fun clearConsole_empties_the_ring_buffer() = runTest {
+        val transport = FakeCdpTransport()
+        val runner = FakeAdbProcessRunner()
+        val (_, ctrl) = makeController(transport, runner, this)
+        ctrl.connectManual(9222); advanceUntilIdle()
+        transport.emit("""{"method":"Runtime.consoleAPICalled","params":{"type":"log","args":[{"value":"hi"}]}}""")
+        advanceUntilIdle()
+        assertEquals(1, ctrl.consoleEntries.value.size)
+        ctrl.clearConsole()
+        assertTrue(ctrl.consoleEntries.value.isEmpty())
+        ctrl.stop()
+    }
+
+    @Test
     fun unknown_method_does_not_crash_or_swallow() = runTest {
         val transport = FakeCdpTransport()
         val runner = FakeAdbProcessRunner()

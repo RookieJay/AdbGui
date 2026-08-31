@@ -267,6 +267,9 @@ class CdpController(
 
     suspend fun reload() { cdpSend("Page.reload").await() }
 
+    /** Clear the console ring buffer. `MutableStateFlow.value` is atomic — no mutex needed. */
+    fun clearConsole() { _console.value = emptyList() }
+
     suspend fun getResponseBody(requestId: String): String? {
         val params = buildJsonObject { put("requestId", requestId) }
         val resp = cdpSend("Network.getResponseBody", params).await()
