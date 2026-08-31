@@ -314,9 +314,6 @@ object Strings {
         "pf_empty" to "该设备暂无转发",
         "pf_need_both_specs" to "请填写本地与远端地址",
         "pf_value_placeholder" to "端口 / 抽象名",
-        "pf_table_serial" to "设备",
-        "pf_table_local" to "本地",
-        "pf_table_remote" to "远端",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -618,9 +615,6 @@ object Strings {
         "pf_empty" to "No forwards on this device",
         "pf_need_both_specs" to "Fill in both local and remote specs",
         "pf_value_placeholder" to "port / abstract name",
-        "pf_table_serial" to "Device",
-        "pf_table_local" to "Local",
-        "pf_table_remote" to "Remote",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)

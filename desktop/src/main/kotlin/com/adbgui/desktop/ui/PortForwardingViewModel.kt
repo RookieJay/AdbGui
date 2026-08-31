@@ -39,10 +39,12 @@ class PortForwardingViewModel(
     val error: StateFlow<String?> = _error.asStateFlow()
 
     // One collector for the lifetime of the VM: re-load whenever the selected device changes.
+    // `collectLatest` cancels the previous emission's work — so `doRefresh` runs as a cancellable
+    // child of the current emission, NOT as a detached `scope.launch` job. This prevents a stale
+    // refresh from a previous device overwriting the list after a rapid A→B switch (I-1).
     private val collector: Job = scope.launch {
         selectedSerial.collectLatest { serial ->
-            if (serial != null) refresh().join()
-            else _forwards.value = emptyList()
+            if (serial != null) doRefresh(serial) else _forwards.value = emptyList()
         }
     }
 
@@ -57,11 +59,15 @@ class PortForwardingViewModel(
 
     fun refresh(): Job = scope.launch {
         val serial = selectedSerial.value ?: return@launch
+        doRefresh(serial)
+    }
+
+    private suspend fun doRefresh(serial: String) {
         _busy.value = true
         try {
             _forwards.value = repo.listForwards(serial)
-        } catch (e: AdbCommandException) {
-            _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
+        } catch (e: Exception) {
+            _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error")
         } finally { _busy.value = false }
     }
 
@@ -77,8 +83,8 @@ class PortForwardingViewModel(
         try {
             repo.forward(serial, ForwardSpec(_localType.value, local), ForwardSpec(_remoteType.value, remote))
             _forwards.value = repo.listForwards(serial)
-        } catch (e: AdbCommandException) {
-            _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
+        } catch (e: Exception) {
+            _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error")
             // Still refresh so the list reflects adb's real state (the failed add may have left nothing).
             runCatching { _forwards.value = repo.listForwards(serial) }
         } finally { _busy.value = false }
@@ -90,8 +96,8 @@ class PortForwardingViewModel(
         try {
             repo.removeForward(serial, local)
             _forwards.value = repo.listForwards(serial)
-        } catch (e: AdbCommandException) {
-            _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
+        } catch (e: Exception) {
+            _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error")
             runCatching { _forwards.value = repo.listForwards(serial) }
         } finally { _busy.value = false }
     }
@@ -102,8 +108,8 @@ class PortForwardingViewModel(
         try {
             repo.removeAllForwards(serial)
             _forwards.value = repo.listForwards(serial)
-        } catch (e: AdbCommandException) {
-            _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
+        } catch (e: Exception) {
+            _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error")
             runCatching { _forwards.value = repo.listForwards(serial) }
         } finally { _busy.value = false }
     }

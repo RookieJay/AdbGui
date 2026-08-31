@@ -9,12 +9,14 @@ import com.adbgui.core.domain.ForwardEntry
  *  - never throws: a real `--list` is host-wide and may include rows for devices the caller
  *    doesn't care about; filtering by serial is the caller's job (R4). */
 object ForwardListParser {
+    private val WS = Regex("\\s+")
+
     fun parse(stdout: String): List<ForwardEntry> {
         val out = mutableListOf<ForwardEntry>()
         for (raw in stdout.lineSequence()) {
             val line = raw.trim()
             if (line.isEmpty() || line.startsWith("#")) continue
-            val parts = line.split(Regex("\\s+"))
+            val parts = line.split(WS)
             if (parts.size < 3) continue
             val serial = parts[0]
             val local = ForwardEndpointType.parse(parts[1]) ?: continue
