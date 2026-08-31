@@ -302,6 +302,21 @@ object Strings {
         "si_packages_failed" to "应用列表加载失败：%s",
         "si_export_title" to "导出系统信息",
         "si_invalid_package" to "应用包名非法：%s",
+        // Port Forwarding
+        "nav_port_forwarding" to "端口转发",
+        "pf_add_title" to "新建转发",
+        "pf_local" to "本地",
+        "pf_remote" to "远端",
+        "pf_add" to "添加",
+        "pf_remove" to "移除",
+        "pf_remove_all" to "全部移除",
+        "pf_refresh" to "刷新",
+        "pf_empty" to "该设备暂无转发",
+        "pf_need_both_specs" to "请填写本地与远端地址",
+        "pf_value_placeholder" to "端口 / 抽象名",
+        "pf_table_serial" to "设备",
+        "pf_table_local" to "本地",
+        "pf_table_remote" to "远端",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -591,6 +606,21 @@ object Strings {
         "si_packages_failed" to "Failed to load packages: %s",
         "si_export_title" to "Export system info",
         "si_invalid_package" to "Invalid package name: %s",
+        // Port Forwarding
+        "nav_port_forwarding" to "Port Forwarding",
+        "pf_add_title" to "New Forward",
+        "pf_local" to "Local",
+        "pf_remote" to "Remote",
+        "pf_add" to "Add",
+        "pf_remove" to "Remove",
+        "pf_remove_all" to "Remove All",
+        "pf_refresh" to "Refresh",
+        "pf_empty" to "No forwards on this device",
+        "pf_need_both_specs" to "Fill in both local and remote specs",
+        "pf_value_placeholder" to "port / abstract name",
+        "pf_table_serial" to "Device",
+        "pf_table_local" to "Local",
+        "pf_table_remote" to "Remote",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)
