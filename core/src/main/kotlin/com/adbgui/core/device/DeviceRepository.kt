@@ -131,4 +131,12 @@ class DeviceRepository(
     suspend fun checkSymlinkDirs(serial: String, paths: List<String>): List<Boolean> = commands.checkSymlinkDirs(serial, paths)
     suspend fun push(serial: String, localPath: String, devicePath: String) = commands.push(serial, localPath, devicePath)
     suspend fun pull(serial: String, devicePath: String, localPath: String) = commands.pull(serial, devicePath, localPath)
+    suspend fun forward(serial: String, local: com.adbgui.core.domain.ForwardSpec, remote: com.adbgui.core.domain.ForwardSpec) =
+        commands.forward(serial, local, remote)
+    /** This device's forwards only — `adb forward --list` is host-wide, filtered here (R4). */
+    suspend fun listForwards(serial: String): List<com.adbgui.core.domain.ForwardEntry> =
+        commands.listForwardsRaw().filter { it.serial == serial }
+    suspend fun removeForward(serial: String, local: com.adbgui.core.domain.ForwardSpec) =
+        commands.removeForward(serial, local)
+    suspend fun removeAllForwards(serial: String) = commands.removeAllForwards(serial)
 }
