@@ -61,35 +61,17 @@
 **Files:**
 - Create: `core/src/main/kotlin/com/adbgui/core/domain/ForwardModels.kt`
 - Create: `core/src/main/kotlin/com/adbgui/core/adb/ForwardListParser.kt`
-- Create: `core/src/test/resources/fixtures/forward_list_output.txt`
 - Create: `core/src/test/kotlin/com/adbgui/core/adb/ForwardListParserTest.kt`
+- Deferred to Task 7: `core/src/test/resources/fixtures/forward_list_output.txt` (real-recorded) + the `fixture_regression_parses_without_error` test. **Pre-flight ruling:** the controller has no device access and `adb devices` is empty, so the real fixture cannot be recorded now. The parser is fully covered by the 4 inline unit tests below (asserted against the documented `forward --list` format). The real fixture is regression insurance against device-specific quirks (`\r\n`, odd serials) and is recorded in Task 7 where a connected device is required anyway. This defers, never hand-writes (tech-debt rule #4 respected).
 
 **Interfaces:**
 - Produces:
   - `enum class ForwardEndpointType { TCP, LOCALABSTRACT, LOCALRESERVED, LOCALFILESYSTEM }` with `fun prefix(): String` (`"tcp:"`, `"localabstract:"`, `"localreserved:"`, `"localfilesystem:"`).
   - `data class ForwardSpec(val type: ForwardEndpointType, val value: String)` with `fun adbForm(): String = type.prefix() + value`.
   - `data class ForwardEntry(val serial: String, val local: ForwardSpec, val remote: ForwardSpec)`.
-  - `object ForwardListParser { fun parse(stdout: String): List<ForwardEntry> }` — parses `adb forward --list` output; one entry per non-blank line `<serial> <local> <remote>`; lines that don't match the 3-token shape are skipped (resilience — see Step 1).
+  - `object ForwardListParser { fun parse(stdout: String): List<ForwardEntry> }` — parses `adb forward --list` output; one entry per non-blank line `<serial> <local> <remote>`; lines that don't match the 3-token shape are skipped (resilience).
 
-- [ ] **Step 1: Record the real fixture**
-
-Per tech-debt rule #4, fixtures must be real-recorded with a provenance header. Run on a device that has at least one forward set up (if none, set one first: `adb forward tcp:9222 localabstract:webview_devtools_remote_1` — or any `localabstract:` name present on the device).
-
-Record command: `adb forward --list > forward_list_output.txt` (then prepend the header comment below).
-
-`core/src/test/resources/fixtures/forward_list_output.txt` (header lines are `#` comments — the parser must skip lines starting with `#`):
-```
-# Source: real device recording. Device: <MODEL> (<MANUFACTURER>), Android <VERSION> (SDK <SDK>),
-# build id <BUILDID>. Recorded: 2026-08-31. Command: `adb forward --list` (host command, no -s).
-# One forward was set up beforehand: `adb -s <serial> forward tcp:9222 localabstract:webview_devtools_remote_1`
-# so the output is non-empty. A second device line (different serial) is included to verify serial filtering.
-<real serial 1> tcp:9222 localabstract:webview_devtools_remote_1
-<real serial 2> tcp:8080 localabstract:webview_devtools_remote_2
-```
-
-Replace `<real serial N>` etc. with the actual recorded content. If you cannot record from a real device right now, STOP — do not hand-write the data lines. Tag the task blocked and ask the user to record. (The header + structure above is a template; the data lines must be real.)
-
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
 `core/src/test/kotlin/com/adbgui/core/adb/ForwardListParserTest.kt`:
 ```kotlin
@@ -105,8 +87,9 @@ class ForwardListParserTest {
 
     @Test
     fun parses_two_entries_with_correct_specs() {
-        // Mirrors the shape of fixtures/forward_list_output.txt (kept inline here so the test
-        // is self-contained; the fixture itself is exercised in Step 4's regression test).
+        // Inline test data asserted against the documented `adb forward --list` format
+        // (`<serial> <local> <remote>` per line). The real-device fixture + regression test
+        // are added in Task 7 once a device is connected for manual verification.
         val out = "192.168.1.50:5555 tcp:9222 localabstract:webview_devtools_remote_1\n" +
             "emulator-5554 tcp:8080 localabstract:webview_devtools_remote_2\n"
         val entries = ForwardListParser.parse(out)
@@ -146,28 +129,15 @@ class ForwardListParserTest {
         assertEquals(ForwardEndpointType.LOCALRESERVED, entries[1].local.type)
         assertEquals(ForwardEndpointType.LOCALFILESYSTEM, entries[1].remote.type)
     }
-
-    @Test
-    fun fixture_regression_parses_without_error() {
-        // Reads the real-recorded fixture; just asserts it parses to a non-empty list whose
-        // first entry's adbForm() round-trips (serial, local, remote all populated).
-        val out = object {}.javaClass.getResourceAsStream("/fixtures/forward_list_output.txt")!!
-            .bufferedReader().readText()
-        val entries = ForwardListParser.parse(out)
-        assertTrue(entries.isNotEmpty(), "fixture must contain at least one forward — re-record if empty")
-        val first = entries.first()
-        assertTrue(first.serial.isNotBlank())
-        assertTrue(first.local.adbForm().startsWith("tcp:") || first.local.adbForm().startsWith("local"))
-    }
 }
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [ ] **Step 2: Run the test to verify it fails**
 
 Run: `./gradlew :core:test --tests "com.adbgui.core.adb.ForwardListParserTest"`
 Expected: FAIL with `unresolved reference: ForwardListParser` (and the domain types don't exist yet).
 
-- [ ] **Step 4: Write minimal implementation**
+- [ ] **Step 3: Write minimal implementation**
 
 `core/src/main/kotlin/com/adbgui/core/domain/ForwardModels.kt`:
 ```kotlin
@@ -232,17 +202,16 @@ object ForwardListParser {
 }
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [ ] **Step 4: Run the test to verify it passes**
 
 Run: `./gradlew :core:test --tests "com.adbgui.core.adb.ForwardListParserTest"`
-Expected: PASS — all 5 tests green.
+Expected: PASS — all 4 tests green.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add core/src/main/kotlin/com/adbgui/core/domain/ForwardModels.kt \
   core/src/main/kotlin/com/adbgui/core/adb/ForwardListParser.kt \
-  core/src/test/resources/fixtures/forward_list_output.txt \
   core/src/test/kotlin/com/adbgui/core/adb/ForwardListParserTest.kt
 git commit -m "feat(core): add ForwardListParser + forward domain models"
 ```
@@ -1036,9 +1005,10 @@ git commit -m "feat(desktop): add Port Forwarding page wired into AppShell"
 
 ## Task 7: Manual verification on a real device
 
-**Files:** none (verification only)
+**Files:**
+- Create (in this task): `core/src/test/resources/fixtures/forward_list_output.txt` (real-recorded) + add the `fixture_regression_parses_without_error` test to `ForwardListParserTest.kt`. (Deferred from Task 1 — Task 1's controller had no device; this task is where a device is connected for verification.)
 
-**Interfaces:** consumes the whole feature.
+**Interfaces:** consumes the whole feature + the `ForwardListParser` from Task 1.
 
 - [ ] **Step 1: Run the app**
 
@@ -1054,11 +1024,43 @@ With a device connected (USB or wireless), select it, open the Port Forwarding p
 5. Add a bad forward (e.g. `tcp:abc` → `localabstract:foo`) → inline error shows adb stderr; list is not corrupted.
 6. Switch device in the sidebar → list auto-reloads for the new serial (R4 filtering visible if the second device has its own forwards).
 
-- [ ] **Step 3: If a probe is needed, read the app log**
+- [ ] **Step 3: Record the real `forward --list` fixture + regression test (deferred from Task 1)**
+
+While a device with at least one forward is connected (set one if needed: `adb -s <serial> forward tcp:9222 localabstract:webview_devtools_remote_1`), record the real output with a provenance header (tech-debt rule #4):
+
+```bash
+{ echo "# Source: real device recording. Device: <MODEL> (<MANUFACTURER>), Android <VERSION> (SDK <SDK>), build id <BUILDID>.";
+  echo "# Recorded: 2026-08-31. Command: \`adb forward --list\` (host command, no -s).";
+  echo "# One forward set up beforehand: \`adb -s <serial> forward tcp:9222 localabstract:webview_devtools_remote_1\`.";
+  adb forward --list; } > core/src/test/resources/fixtures/forward_list_output.txt
+```
+
+Fill in the real device/model/build fields from `adb -s <serial> shell getprop` (`ro.product.model`, `ro.product.manufacturer`, `ro.build.version.release`, `ro.build.version.sdk`, `ro.build.display.id`). Remove the setup forward afterward with `adb -s <serial> forward --remove tcp:9222` (or use the app's Remove button — that itself verifies the feature).
+
+Then add this regression test to `core/src/test/kotlin/com/adbgui/core/adb/ForwardListParserTest.kt` (inside the class):
+```kotlin
+    @Test
+    fun fixture_regression_parses_without_error() {
+        val out = object {}.javaClass.getResourceAsStream("/fixtures/forward_list_output.txt")!!
+            .bufferedReader().readText()
+        val entries = ForwardListParser.parse(out)
+        assertTrue(entries.isNotEmpty(), "fixture must contain at least one forward — re-record if empty")
+        val first = entries.first()
+        assertTrue(first.serial.isNotBlank())
+        assertTrue(first.local.adbForm().startsWith("tcp:") || first.local.adbForm().startsWith("local"))
+    }
+```
+
+Run: `./gradlew :core:test --tests "com.adbgui.core.adb.ForwardListParserTest"`
+Expected: PASS — now 5 tests green (the new regression test reads the real fixture).
+
+Commit: `git add core/src/test/resources/fixtures/forward_list_output.txt core/src/test/kotlin/com/adbgui/core/adb/ForwardListParserTest.kt && git commit -m "test(core): add real-recorded forward --list fixture + regression test"`
+
+- [ ] **Step 4: If a probe is needed, read the app log**
 
 Logs at `%APPDATA%/AdbGui/logs/` — the `CommandRunner` logs each `adb forward ...` call at DEBUG (`cmd -> exit=… out=…`). Toggle DEBUG in Settings if a command misbehaves. (Per `debug-via-logs-not-guessing` memory: read the probe before guessing.)
 
-- [ ] **Step 4: Final commit (if any fixes surfaced from manual testing)**
+- [ ] **Step 5: Final commit (if any fixes surfaced from manual testing)**
 
 ```bash
 # only if Step 2 surfaced a bug — fix under TDD (failing test first), then:
@@ -1070,5 +1072,5 @@ git commit -m "fix(desktop): <what the manual test caught>"
 ## Self-Review (run before declaring done)
 
 1. **Spec coverage:** spec §11 line "端口转发" → Tasks 1-6 implement list/add/remove; Task 7 verifies. ✅ The "调试/系统操作" umbrella also mentions `adb pair`/reboot/root/remount/monkey — those are NOT in this plan (pair/reboot/root/remount already implemented per CHANGELOG; monkey is out of scope). ✅
-2. **Placeholder scan:** search the plan for "TBD"/"TODO"/"implement later"/"add appropriate". None. The fixture data lines in Task 1 Step 1 are explicitly marked "must be real-recorded, else block the task" — that's a guardrail, not a placeholder. ✅
+2. **Placeholder scan:** search the plan for "TBD"/"TODO"/"implement later"/"add appropriate". None. The real fixture is deferred from Task 1 to Task 7 Step 3 by a recorded pre-flight ruling (controller had no device) — it is recorded there on a real device with a provenance header, never hand-written (tech-debt rule #4 respected). ✅
 3. **Type consistency:** `ForwardSpec(ForwardEndpointType.X, value)` signature is identical in Task 1 (definition), Task 2 (CommandRunner tests + impl), Task 3 (repo), Task 4 (VM), Task 6 (Screen). `adbForm()` used consistently. `ForwardEntry.serial/local/remote` used consistently. VM method names (`forward`/`listForwards`/`removeForward`/`removeAllForwards` on repo; `add`/`remove`/`removeAll`/`refresh` on VM) match across Task 4 test, Task 4 impl, Task 6 Screen. ✅
