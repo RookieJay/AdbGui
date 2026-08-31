@@ -38,6 +38,15 @@ class PortForwardingViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    // Auto-refresh toggle. The poll loop itself lives in the Screen (a `LaunchedEffect` that fires
+    // `refresh()` on an interval), NOT here — keeping it out of the VM's long-lived scope means
+    // polling stops when the page leaves the composition, and `advanceUntilIdle()` in VM tests
+    // doesn't hang on an infinite delay loop. The toggle state is VM-level so it survives
+    // recomposition and is unit-testable.
+    private val _autoRefresh = MutableStateFlow(true)
+    val autoRefresh: StateFlow<Boolean> = _autoRefresh.asStateFlow()
+    fun setAutoRefresh(on: Boolean) { _autoRefresh.value = on }
+
     // One collector for the lifetime of the VM: re-load whenever the selected device changes.
     // `collectLatest` cancels the previous emission's work — so `doRefresh` runs as a cancellable
     // child of the current emission, NOT as a detached `scope.launch` job. This prevents a stale

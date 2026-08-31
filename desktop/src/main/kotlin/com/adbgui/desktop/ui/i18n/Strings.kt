@@ -314,6 +314,29 @@ object Strings {
         "pf_empty" to "该设备暂无转发",
         "pf_need_both_specs" to "请填写本地与远端地址",
         "pf_value_placeholder" to "端口 / 抽象名",
+        "pf_help_toggle" to "使用说明",
+        "pf_help_body" to """管理 adb forward —— 把 PC 的一个端口/抽象套接字映射到设备的端口/抽象套接字。
+等价命令：adb -s <设备> forward <本地> <远端>
+
+字段：类型下拉决定前缀（tcp: / localabstract: / localreserved: / localfilesystem:），
+值是不带前缀的部分。例：类型选 tcp:、值填 9222 → tcp:9222。
+
+示例 1 —— 调试设备上的 WebView（Chrome DevTools Protocol）：
+  本地：tcp:           9222
+  远端：localabstract:  webview_devtools_remote_<pid>
+  添加后浏览器开 http://localhost:9222 即可调试该 WebView。
+  （<pid> 是进程号，应用在前台时才会出现这个 socket）
+
+示例 2 —— 端口到端口（转发到另一台网络 adb 设备）：
+  本地：tcp:  8080
+  远端：tcp:  8080
+
+注：本页只管理转发，不自动探测 webview socket 名；
+    规划中的 CDP 调试页会自动探测 + 一键转发 + 打开调试 UI。
+用完点「全部移除」清理。""",
+        "pf_help_this_device" to "本设备查 webview socket：",
+        "pf_auto_on" to "自动：开",
+        "pf_auto_off" to "自动：关",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -615,6 +638,29 @@ object Strings {
         "pf_empty" to "No forwards on this device",
         "pf_need_both_specs" to "Fill in both local and remote specs",
         "pf_value_placeholder" to "port / abstract name",
+        "pf_help_toggle" to "Help",
+        "pf_help_body" to """Manage adb forward — map a PC port/abstract socket to a device port/abstract socket.
+Equivalent: adb -s <device> forward <local> <remote>
+
+Fields: the type dropdown picks the prefix (tcp: / localabstract: / localreserved: / localfilesystem:);
+the value is the part after the prefix. E.g. type tcp: + value 9222 → tcp:9222.
+
+Example 1 — debug a WebView on the device (Chrome DevTools Protocol):
+  Local: tcp:           9222
+  Remote: localabstract:  webview_devtools_remote_<pid>
+  After Add, open http://localhost:9222 in a browser to debug that WebView.
+  (<pid> is a process id; this socket only exists while the app is in the foreground)
+
+Example 2 — port to port (forward to another network-adb device):
+  Local: tcp:  8080
+  Remote: tcp:  8080
+
+Note: this page only manages forwards; it does NOT auto-discover the webview socket name.
+      The planned CDP debug page will auto-discover + one-click forward + open the debug UI.
+Click "Remove All" when done to clean up.""",
+        "pf_help_this_device" to "Find webview socket on this device:",
+        "pf_auto_on" to "Auto: on",
+        "pf_auto_off" to "Auto: off",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)

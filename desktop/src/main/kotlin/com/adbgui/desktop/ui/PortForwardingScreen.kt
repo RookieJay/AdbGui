@@ -1,5 +1,6 @@
 package com.adbgui.desktop.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,9 +17,11 @@ import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
+import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +34,11 @@ import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.ForwardEndpointType
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AppColors
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+
+/** Auto-refresh interval for the forwards list (ms). Host `adb forward --list` is cheap & local. */
+private const val AUTO_REFRESH_INTERVAL_MS = 5000L
 
 @Composable
 fun PortForwardingScreen(
@@ -44,8 +52,24 @@ fun PortForwardingScreen(
     val remoteValue by vm.remoteValue.collectAsState()
     val busy by vm.busy.collectAsState()
     val error by vm.error.collectAsState()
+    val autoRefresh by vm.autoRefresh.collectAsState()
+
+    // Auto-refresh: poll `adb forward --list` every 5s while a device is selected AND auto is on.
+    // Tied to the composition (page visible) — leaves the page → LaunchedEffect cancels → no poll.
+    // Keyed on (selectedSerial, autoRefresh) so toggling/switching restarts the loop cleanly.
+    LaunchedEffect(selectedSerial, autoRefresh) {
+        if (selectedSerial != null && autoRefresh) {
+            while (isActive) {
+                delay(AUTO_REFRESH_INTERVAL_MS)
+                vm.refresh()
+            }
+        }
+    }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // ---- Collapsible help (with a concrete WebView-debug example) ----
+        HelpSection(selectedSerial)
+
         // ---- Add form ----
         Text(Strings.t("pf_add_title"), style = MaterialTheme.typography.h6)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -79,6 +103,9 @@ fun PortForwardingScreen(
             Text("${forwards.size}", style = MaterialTheme.typography.subtitle2)
             Spacer(Modifier.width(8.dp))
             TextButton(onClick = { vm.refresh() }, enabled = !busy) { Text(Strings.t("pf_refresh")) }
+            TextButton(onClick = { vm.setAutoRefresh(!autoRefresh) }) {
+                Text(Strings.t(if (autoRefresh) "pf_auto_on" else "pf_auto_off"))
+            }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { vm.removeAll() }, enabled = !busy && forwards.isNotEmpty()) {
                 Text(Strings.t("pf_remove_all"))
@@ -147,6 +174,54 @@ private fun EndpointEditor(
                 placeholder = { Text(placeholder) },
                 modifier = Modifier.width(180.dp),
             )
+        }
+    }
+}
+
+/**
+ * Collapsible usage help. Default collapsed so the page stays compact; expand for a concrete
+ * WebView-debug example + the generic adb-forward explanation. The dynamic line fills the
+ * selected serial into the "find webview socket" command so it's copy-paste ready.
+ */
+@Composable
+private fun HelpSection(selectedSerial: String?) {
+    var open by remember { mutableStateOf(false) }
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                Strings.t("pf_help_toggle"),
+                style = MaterialTheme.typography.subtitle2,
+                color = MaterialTheme.colors.primary,
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(if (open) "▾" else "▸", color = MaterialTheme.colors.primary)
+        }
+        if (open) {
+            Surface(
+                color = AppColors.current.surfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Whole body in one SelectionContainer (via SelectableText) so the example +
+                    // commands copy as one block. Monospace so the tcp:9222-style examples align.
+                    SelectableText(
+                        text = Strings.t("pf_help_body"),
+                        style = MaterialTheme.typography.caption.copy(fontFamily = FontFamily.Monospace),
+                    )
+                    if (!selectedSerial.isNullOrBlank()) {
+                        // Dynamic, this-device-specific command — copy-paste ready.
+                        SelectableText(
+                            text = Strings.t("pf_help_this_device") + "\n" +
+                                "adb -s $selectedSerial shell cat /proc/net/unix | grep webview_devtools_remote",
+                            style = MaterialTheme.typography.caption.copy(fontFamily = FontFamily.Monospace),
+                            color = MaterialTheme.colors.primary,
+                        )
+                    }
+                }
+            }
         }
     }
 }

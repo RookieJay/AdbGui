@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -115,6 +116,21 @@ class PortForwardingViewModelTest {
             assertTrue(vm.forwards.value.isEmpty())
             selected.value = "sX"; advanceUntilIdle()
             assertEquals(1, vm.forwards.value.size)
+        } finally { vm.stop(); repo.stop() }
+    }
+
+    @Test
+    fun auto_refresh_toggle_defaults_true_and_round_trips() = runTest {
+        // The poll loop itself lives in the Screen (LaunchedEffect), so the VM only owns the toggle
+        // state — this test pins the toggle API: default on, flips both ways.
+        val runner = FakeAdbProcessRunner()
+        val (repo, vm) = makeVm(runner, MutableStateFlow("s1"), this)
+        try {
+            assertTrue(vm.autoRefresh.value)
+            vm.setAutoRefresh(false)
+            assertFalse(vm.autoRefresh.value)
+            vm.setAutoRefresh(true)
+            assertTrue(vm.autoRefresh.value)
         } finally { vm.stop(); repo.stop() }
     }
 }
