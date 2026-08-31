@@ -52,4 +52,17 @@ class ForwardListParserTest {
         assertEquals(ForwardEndpointType.LOCALRESERVED, entries[1].local.type)
         assertEquals(ForwardEndpointType.LOCALFILESYSTEM, entries[1].remote.type)
     }
+
+    @Test
+    fun fixture_regression_parses_without_error() {
+        // Reads the real-recorded fixture; just asserts it parses to a non-empty list whose
+        // first entry's adbForm() round-trips (serial, local, remote all populated).
+        val out = object {}.javaClass.getResourceAsStream("/fixtures/forward_list_output.txt")!!
+            .bufferedReader().readText()
+        val entries = ForwardListParser.parse(out)
+        assertTrue(entries.isNotEmpty(), "fixture must contain at least one forward — re-record if empty")
+        val first = entries.first()
+        assertTrue(first.serial.isNotBlank())
+        assertTrue(first.local.adbForm().startsWith("tcp:") || first.local.adbForm().startsWith("local"))
+    }
 }

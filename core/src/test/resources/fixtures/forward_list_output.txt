@@ -1,0 +1,10 @@
+# Source: real device recording.
+# Device: VIDAA_TV (hisense), Android 9 (SDK 28), build id PPR2.180905.006.A1 dev-keys.
+# Serial: 10.0.6.100:5555 (wireless adb).
+# Recorded: 2026-08-31. Command: `adb forward --list` (host command, no -s).
+# Two forwards set up beforehand on this device:
+#   `adb -s 10.0.6.100:5555 forward tcp:9222 localabstract:webview_devtools_remote_1`
+#   `adb -s 10.0.6.100:5555 forward tcp:8081 localabstract:pf_fixture_test`
+# Reproduce: connect the device, run the two `adb ... forward ...` commands above, then `adb forward --list`.
+10.0.6.100:5555 tcp:9222 localabstract:webview_devtools_remote_1
+10.0.6.100:5555 tcp:8081 localabstract:pf_fixture_test
