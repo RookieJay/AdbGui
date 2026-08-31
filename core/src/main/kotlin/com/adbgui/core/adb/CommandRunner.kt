@@ -276,6 +276,34 @@ class CommandRunner(
         runCmd(serial, listOf("pull", devicePath, localPath))
     }
 
+    /** `adb -s <serial> forward <local> <remote>`. Exits 0 with empty stdout on success (R2);
+     *  on failure adb writes stderr + non-zero → runCmd throws AdbCommandException (surfaced inline by UI). */
+    suspend fun forward(serial: String, local: com.adbgui.core.domain.ForwardSpec, remote: com.adbgui.core.domain.ForwardSpec) {
+        runCmd(serial, listOf("forward", local.adbForm(), remote.adbForm()))
+    }
+
+    /** `adb forward --list` — host command (no -s serial), lists ALL devices' forwards (R1).
+     *  Returns the parsed rows unfiltered; DeviceRepository.listForwards filters by serial (R4).
+     *  Empty result is not an error (R3); non-zero exit is. */
+    suspend fun listForwardsRaw(): List<com.adbgui.core.domain.ForwardEntry> {
+        server.ensureStarted()
+        val cmd = listOf("forward", "--list")
+        val r = runner.run(adb(), cmd)
+        logger.debug("adb ${cmd.joinToString(" ")} -> exit=${r.exitCode} out=${r.stdout.take(200)}")
+        if (r.exitCode != 0) throw AdbCommandException(command = "adb forward --list", exitCode = r.exitCode, stderr = r.stderr)
+        return ForwardListParser.parse(r.stdout)
+    }
+
+    /** `adb -s <serial> forward --remove <local>`. */
+    suspend fun removeForward(serial: String, local: com.adbgui.core.domain.ForwardSpec) {
+        runCmd(serial, listOf("forward", "--remove", local.adbForm()))
+    }
+
+    /** `adb -s <serial> forward --remove-all`. */
+    suspend fun removeAllForwards(serial: String) {
+        runCmd(serial, listOf("forward", "--remove-all"))
+    }
+
     private fun extractPng(bytes: ByteArray): ByteArray? {
         val sig = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
         val start = indexOf(bytes, sig) ?: return null

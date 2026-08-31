@@ -328,4 +328,69 @@ class CommandRunnerTest {
         val leaked = logger.entries.any { it.message.contains("483921") }
         assert(!leaked) { "pairing code leaked into debug log: ${logger.entries.map { it.message }}" }
     }
+
+    @Test
+    fun forward_sends_minus_s_serial_forward_specs() = runTest {
+        // R1/R2: `adb -s <serial> forward <local> <remote>` — serial command, exits 0 with empty stdout.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("forward", "tcp:9222", "localabstract:foo"),
+            AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.forward("192.168.1.50:5555",
+            com.adbgui.core.domain.ForwardSpec(com.adbgui.core.domain.ForwardEndpointType.TCP, "9222"),
+            com.adbgui.core.domain.ForwardSpec(com.adbgui.core.domain.ForwardEndpointType.LOCALABSTRACT, "foo"))
+        // No assertion on result — success = no exception. The FakeAdbProcessRunner default is
+        // exit 1 "no script matched", so if forward() didn't send the right args it would throw.
+    }
+
+    @Test
+    fun forward_nonzero_throws_adb_command_exception() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("forward", "tcp:9222"), AdbProcessResult(1, "", "cannot bind socket"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> {
+            cr.forward("s1",
+                com.adbgui.core.domain.ForwardSpec(com.adbgui.core.domain.ForwardEndpointType.TCP, "9222"),
+                com.adbgui.core.domain.ForwardSpec(com.adbgui.core.domain.ForwardEndpointType.LOCALABSTRACT, "foo"))
+        }
+    }
+
+    @Test
+    fun listForwardsRaw_parses_host_wide_output() = runTest {
+        // R1: `adb forward --list` is a host command — no -s serial. R4: returns ALL devices' rows.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("forward", "--list"),
+            AdbProcessResult(0, "s1 tcp:9222 localabstract:foo\ns2 tcp:8080 localabstract:bar\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val all = cr.listForwardsRaw()
+        assertEquals(2, all.size)
+        assertEquals("s1", all[0].serial)
+        assertEquals("s2", all[1].serial)
+    }
+
+    @Test
+    fun listForwardsRaw_empty_is_not_an_error() = runTest {
+        // R3: empty stdout, exit 0 → emptyList, no throw.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("forward", "--list"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertTrue(cr.listForwardsRaw().isEmpty())
+    }
+
+    @Test
+    fun removeForward_sends_minus_s_remove_local() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("forward", "--remove", "tcp:9222"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.removeForward("s1",
+            com.adbgui.core.domain.ForwardSpec(com.adbgui.core.domain.ForwardEndpointType.TCP, "9222"))
+    }
+
+    @Test
+    fun removeAllForwards_sends_remove_all() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("forward", "--remove-all"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.removeAllForwards("s1")
+    }
 }
