@@ -276,6 +276,14 @@ class CommandRunner(
         runCmd(serial, listOf("pull", devicePath, localPath))
     }
 
+    /** Probe `/proc/net/unix` for the WebView devtools abstract socket
+     *  (`webview_devtools_remote_<pid>`). Returns the bare socket name (no `@` prefix) for use
+     *  with `adb forward localabstract:<name>`, or null when no WebView is on screen. */
+    suspend fun webviewSocket(serial: String): String? {
+        val out = runShellCmd(serial, "cat /proc/net/unix")
+        return WebviewSocketParser.parse(out)
+    }
+
     /** `adb -s <serial> forward <local> <remote>`. Exits 0 with empty stdout on success (R2);
      *  on failure adb writes stderr + non-zero → runCmd throws AdbCommandException (surfaced inline by UI). */
     suspend fun forward(serial: String, local: com.adbgui.core.domain.ForwardSpec, remote: com.adbgui.core.domain.ForwardSpec) {
