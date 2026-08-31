@@ -337,6 +337,23 @@ object Strings {
         "pf_help_this_device" to "本设备查 webview socket：",
         "pf_auto_on" to "自动：开",
         "pf_auto_off" to "自动：关",
+        // CDP Debug
+        "nav_cdp_debug" to "CDP 调试",
+        "cdp_start" to "调试 WebView",
+        "cdp_manual_port" to "手动端口",
+        "cdp_connect" to "连接",
+        "cdp_reload" to "重载",
+        "cdp_run" to "运行",
+        "cdp_console" to "Console",
+        "cdp_network" to "Network",
+        "cdp_eval_placeholder" to "JS 表达式，Ctrl+Enter 执行",
+        "cdp_result" to "(结果)",
+        "cdp_targets" to "目标",
+        "cdp_frames" to "子帧",
+        "cdp_no_socket" to "无 webview socket — 目标应用需在前台运行且含 WebView",
+        "cdp_no_page" to "没有 page target（应用没在前台？）",
+        "cdp_reconnecting" to "正在重连…",
+        "cdp_response_body" to "响应体",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -661,6 +678,23 @@ Click "Remove All" when done to clean up.""",
         "pf_help_this_device" to "Find webview socket on this device:",
         "pf_auto_on" to "Auto: on",
         "pf_auto_off" to "Auto: off",
+        // CDP Debug
+        "nav_cdp_debug" to "CDP Debug",
+        "cdp_start" to "Debug WebView",
+        "cdp_manual_port" to "Manual port",
+        "cdp_connect" to "Connect",
+        "cdp_reload" to "Reload",
+        "cdp_run" to "Run",
+        "cdp_console" to "Console",
+        "cdp_network" to "Network",
+        "cdp_eval_placeholder" to "JS expression, Ctrl+Enter to run",
+        "cdp_result" to "(result)",
+        "cdp_targets" to "Target",
+        "cdp_frames" to "Frame",
+        "cdp_no_socket" to "No webview socket — the target app must be in the foreground and contain a WebView",
+        "cdp_no_page" to "No page target (app not in foreground?)",
+        "cdp_reconnecting" to "Reconnecting…",
+        "cdp_response_body" to "Response body",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)

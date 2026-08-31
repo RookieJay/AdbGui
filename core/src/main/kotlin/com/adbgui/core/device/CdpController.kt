@@ -273,6 +273,9 @@ class CdpController(
     /** Clear the console ring buffer. `MutableStateFlow.value` is atomic — no mutex needed. */
     fun clearConsole() { _console.value = emptyList() }
 
+    /** Clear the inline error message (user dismissed the banner). Atomic, no mutex needed. */
+    fun clearError() { _error.value = null }
+
     suspend fun getResponseBody(requestId: String): String? {
         val params = buildJsonObject { put("requestId", requestId) }
         val resp = cdpSend("Network.getResponseBody", params).await()

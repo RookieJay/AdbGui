@@ -81,5 +81,7 @@ class CdpDebugViewModel(
 
     fun clearConsole() = controller.clearConsole()
 
+    fun clearError() = controller.clearError()
+
     fun selectTarget(targetId: String) { _selectedTargetId.value = targetId }
 }

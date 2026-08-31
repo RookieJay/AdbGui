@@ -24,6 +24,7 @@ import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.FolderOpen
@@ -71,6 +72,7 @@ fun AppShell(
     systemInfoVm: SystemInfoViewModel? = null,
     fileExplorerVm: FileExplorerViewModel? = null,
     portForwardingVm: PortForwardingViewModel? = null,
+    cdpDebugVm: CdpDebugViewModel? = null,
     selectedSerial: MutableStateFlow<String?>? = null,
     onOpenShell: (String) -> Unit = {},
     repo: com.adbgui.core.device.DeviceRepository? = null,
@@ -116,6 +118,7 @@ fun AppShell(
                 if (systemInfoVm != null) add(NavItemSpec(NavPage.SYSTEM_INFO, "nav_system_info", Icons.Filled.Memory))
                 if (fileExplorerVm != null) add(NavItemSpec(NavPage.FILE_EXPLORER, "nav_file_explorer", Icons.Filled.FolderOpen))
                 if (portForwardingVm != null) add(NavItemSpec(NavPage.PORT_FORWARDING, "nav_port_forwarding", Icons.Filled.CompareArrows))
+                if (cdpDebugVm != null) add(NavItemSpec(NavPage.CDP_DEBUG, "nav_cdp_debug", Icons.Filled.BugReport))
             }
             navItems.forEach { (navPage, key, icon) ->
                 NavItem(
@@ -180,6 +183,9 @@ fun AppShell(
                     selected != null && page == NavPage.PORT_FORWARDING && portForwardingVm != null -> {
                         PortForwardingScreen(vm = portForwardingVm, selectedSerial = selected)
                     }
+                    selected != null && page == NavPage.CDP_DEBUG && cdpDebugVm != null -> {
+                        CdpDebugScreen(vm = cdpDebugVm)
+                    }
                     else -> EmptyState(
                         title = Strings.t("no_device_selected"),
                         hint = Strings.t("no_device_hint"),
@@ -204,10 +210,11 @@ private fun pageTitle(page: NavPage): String = when (page) {
     NavPage.SYSTEM_INFO -> Strings.t("nav_system_info")
     NavPage.FILE_EXPLORER -> Strings.t("nav_file_explorer")
     NavPage.PORT_FORWARDING -> Strings.t("nav_port_forwarding")
+    NavPage.CDP_DEBUG -> Strings.t("nav_cdp_debug")
     NavPage.SETTINGS -> Strings.t("nav_settings")
 }
 
-private enum class NavPage { DEVICE_OVERVIEW, APP_CONSOLE, LOGCAT, SYSTEM_INFO, FILE_EXPLORER, PORT_FORWARDING, SETTINGS }
+private enum class NavPage { DEVICE_OVERVIEW, APP_CONSOLE, LOGCAT, SYSTEM_INFO, FILE_EXPLORER, PORT_FORWARDING, CDP_DEBUG, SETTINGS }
 
 private data class NavItemSpec(val page: NavPage, val labelKey: String, val icon: ImageVector)
 

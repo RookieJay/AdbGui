@@ -10,6 +10,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.adbgui.desktop.ui.AppShell
 import com.adbgui.desktop.ui.AppConsoleViewModel
+import com.adbgui.desktop.ui.CdpDebugViewModel
 import com.adbgui.desktop.ui.DeviceInfoViewModel
 import com.adbgui.desktop.ui.DeviceListViewModel
 import com.adbgui.desktop.ui.FileExplorerViewModel
@@ -24,6 +25,8 @@ import com.adbgui.desktop.ui.SystemInfoViewModel
 import com.adbgui.desktop.ui.i18n.Locale
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AdbGuiTheme
+import com.adbgui.desktop.platform.KtorCdpTransport
+import com.adbgui.core.device.CdpController
 import com.adbgui.core.domain.DeviceStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -67,6 +70,8 @@ fun main() = application {
     val remoteVm = remember { RemoteViewModel(root.repository, selectedSerial, root.settings, root.scope) }
     val fileExplorerVm = remember { FileExplorerViewModel(root.repository, selectedSerial, root.scope) }
     val portForwardingVm = remember { PortForwardingViewModel(root.repository, selectedSerial, root.scope) }
+    val cdpController = remember { CdpController(KtorCdpTransport(root.scope), root.commands, root.logger, root.scope) }
+    val cdpDebugVm = remember { CdpDebugViewModel(cdpController, selectedSerial, root.scope) }
     val shellLauncher = remember { com.adbgui.desktop.platform.WindowsShellLauncher() }
     // Auto-select the first ONLINE device when nothing is validly selected.
     // Never steals an active selection: if the current serial is still online, leave it.
@@ -105,6 +110,7 @@ fun main() = application {
                 systemInfoVm = systemInfoVm,
                 fileExplorerVm = fileExplorerVm,
                 portForwardingVm = portForwardingVm,
+                cdpDebugVm = cdpDebugVm,
                 selectedSerial = selectedSerial,
                 onOpenShell = { serial ->
                     // locate() is suspend + may probe the filesystem / spawn adb; run it on the

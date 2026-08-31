@@ -248,6 +248,20 @@ class CdpControllerTest {
     }
 
     @Test
+    fun clearError_nulls_the_error_message() = runTest {
+        val transport = FakeCdpTransport()
+        // make connect throw → connectAndRun sets _error
+        transport.connectShouldFail = true
+        val runner = FakeAdbProcessRunner()
+        val (_, ctrl) = makeController(transport, runner, this)
+        ctrl.connectManual(9222); advanceUntilIdle()
+        assertTrue(ctrl.error.value != null, "expected an error after connect failure; got: ${ctrl.error.value}")
+        ctrl.clearError()
+        assertNull(ctrl.error.value, "clearError must null out the error message")
+        ctrl.stop()
+    }
+
+    @Test
     fun clearConsole_empties_the_ring_buffer() = runTest {
         val transport = FakeCdpTransport()
         val runner = FakeAdbProcessRunner()
