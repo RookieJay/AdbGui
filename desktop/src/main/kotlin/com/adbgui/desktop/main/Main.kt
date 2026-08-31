@@ -14,6 +14,7 @@ import com.adbgui.desktop.ui.DeviceInfoViewModel
 import com.adbgui.desktop.ui.DeviceListViewModel
 import com.adbgui.desktop.ui.FileExplorerViewModel
 import com.adbgui.desktop.ui.LogcatViewModel
+import com.adbgui.desktop.ui.PortForwardingViewModel
 import com.adbgui.desktop.ui.ScreenshotWindow
 import com.adbgui.desktop.ui.SettingsViewModel
 import com.adbgui.desktop.ui.ScreenshotViewModel
@@ -65,6 +66,7 @@ fun main() = application {
     val systemInfoVm = remember { SystemInfoViewModel(root.repository, selectedSerial, root.scope) }
     val remoteVm = remember { RemoteViewModel(root.repository, selectedSerial, root.settings, root.scope) }
     val fileExplorerVm = remember { FileExplorerViewModel(root.repository, selectedSerial, root.scope) }
+    val portForwardingVm = remember { PortForwardingViewModel(root.repository, selectedSerial, root.scope) }
     val shellLauncher = remember { com.adbgui.desktop.platform.WindowsShellLauncher() }
     // Auto-select the first ONLINE device when nothing is validly selected.
     // Never steals an active selection: if the current serial is still online, leave it.
@@ -102,6 +104,7 @@ fun main() = application {
                 systemOpsVm = systemOpsVm,
                 systemInfoVm = systemInfoVm,
                 fileExplorerVm = fileExplorerVm,
+                portForwardingVm = portForwardingVm,
                 selectedSerial = selectedSerial,
                 onOpenShell = { serial ->
                     // locate() is suspend + may probe the filesystem / spawn adb; run it on the
