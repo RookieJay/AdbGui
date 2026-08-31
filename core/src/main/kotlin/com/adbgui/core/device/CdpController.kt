@@ -114,8 +114,11 @@ class CdpController(
                 // (Target.getTargets / domain enables) do NOT block event dispatch — events flow
                 // even while we're suspended waiting for a setup response.
                 launch { runLoop(port) }
+                // CDP responses wrap the payload under "result": {"id":N,"result":{...}}.
+                // Unwrap before reading targetInfos (was reading at top level → always null).
                 val targetsResp = cdpSend("Target.getTargets").await()
-                val pages = targetsResp["targetInfos"]?.jsonArray?.mapNotNull {
+                val targetInfos = targetsResp["result"]?.jsonObject?.get("targetInfos")?.jsonArray
+                val pages = targetInfos?.mapNotNull {
                     val o = it.jsonObject
                     if (o["type"]?.str() == "page") CdpTarget(
                         o["targetId"]?.str() ?: "", "page",
@@ -273,7 +276,8 @@ class CdpController(
     suspend fun getResponseBody(requestId: String): String? {
         val params = buildJsonObject { put("requestId", requestId) }
         val resp = cdpSend("Network.getResponseBody", params).await()
-        return resp["body"]?.str()
+        // CDP wraps the body under "result": {"id":N,"result":{"body":"…","base64Encoded":false}}.
+        return resp["result"]?.jsonObject?.get("body")?.str()
     }
 
     /** Stop the session: cancel the run loop, close the transport, and (one-click mode) remove

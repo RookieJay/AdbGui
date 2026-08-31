@@ -56,6 +56,46 @@ class CdpControllerTest {
     }
 
     @Test
+    fun start_populates_targets_from_gettargets_response() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("shell", "cat /proc/net/unix"),
+            AdbProcessResult(0, "@webview_devtools_remote_42\n", ""))
+        runner.whenArgsContains(listOf("forward", "tcp:9222"), AdbProcessResult(0, "", ""))
+        val transport = FakeCdpTransport()
+        val (_, ctrl) = makeController(transport, runner, this)
+        val job = launch { ctrl.start("s1") }
+        advanceUntilIdle()   // socket probe + forward + connect + Target.getTargets sent (awaiting)
+        // Capture the id the controller allocated for Target.getTargets, then emit the response.
+        // CDP wraps the payload under "result": {"id":N,"result":{"targetInfos":[...]}}.
+        val sentReq = transport.sent.last { it.contains("Target.getTargets") }
+        val id = sentReq.substringAfter("\"id\":").substringBefore(',').toInt()
+        transport.emit("""{"id":$id,"result":{"targetInfos":[{"type":"page","targetId":"PAGE1","title":"t","url":"u"}]}}""")
+        advanceUntilIdle()
+        assertEquals(1, ctrl.targets.value.size, "targets must be populated from the response")
+        assertEquals("PAGE1", ctrl.targets.value[0].targetId)
+        ctrl.stop()
+        job.cancel()
+    }
+
+    @Test
+    fun getResponseBody_unwraps_result_body() = runTest {
+        val transport = FakeCdpTransport()
+        val runner = FakeAdbProcessRunner()
+        val (_, ctrl) = makeController(transport, runner, this)
+        ctrl.connectManual(9222); advanceUntilIdle()
+        val job = async { ctrl.getResponseBody("r1") }
+        advanceUntilIdle()
+        val sentReq = transport.sent.last { it.contains("Network.getResponseBody") }
+        val id = sentReq.substringAfter("\"id\":").substringBefore(',').toInt()
+        // CDP wraps the body under "result": {"id":N,"result":{"body":"hello","base64Encoded":false}}.
+        transport.emit("""{"id":$id,"result":{"body":"hello","base64Encoded":false}}""")
+        advanceUntilIdle()
+        val body = job.await()
+        assertEquals("hello", body, "body must be unwrapped from result")
+        ctrl.stop()
+    }
+
+    @Test
     fun start_no_socket_throws_with_actionable_message() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("shell", "cat /proc/net/unix"), AdbProcessResult(0, "no webview here\n", ""))
