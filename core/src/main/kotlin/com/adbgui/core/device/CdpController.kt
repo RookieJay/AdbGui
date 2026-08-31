@@ -29,6 +29,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -74,6 +75,10 @@ class CdpController(
     @Volatile private var currentSerial: String? = null
     @Volatile private var currentPageId: String? = null
     @Volatile private var currentPort: Int = 9222
+
+    /** CDP domains to enable on connect + on reconnect. Enabling is what makes the WebView
+     *  emit console/network events; re-enabling after a drop is what un-sticks event flow. */
+    private val domainEnables = listOf("Runtime.enable", "Page.enable", "Network.enable", "Log.enable")
 
     /** One-click: probe the WebView socket → forward tcp:9222 → connect browser ws → pick page →
      *  enable domains. Throws [CdpConnectionException] with an actionable message if no socket. */
@@ -122,8 +127,7 @@ class CdpController(
                     ?: throw CdpConnectionException("没有 page target（应用没在前台？）")
                 currentPageId = page.targetId
                 transport.connect("ws://localhost:$port/devtools/page/${page.targetId}")
-                listOf("Runtime.enable", "Page.enable", "Network.enable", "Log.enable")
-                    .forEach { cdpSend(it).await() }
+                domainEnables.forEach { cdpSend(it).await() }
             } catch (e: CdpConnectionException) {
                 _error.value = e.message
             } catch (e: CancellationException) {
@@ -155,7 +159,10 @@ class CdpController(
             delay(backoff)
             backoff = (backoff * 2).coerceAtMost(30_000L)
             val page = currentPageId ?: ""
+            // Reconnect the page ws; on success re-enable domains so events flow again
+            // (M-2: without this, a drop leaves the session alive but silent).
             runCatching { transport.connect("ws://localhost:$port/devtools/page/$page") }
+                .onSuccess { domainEnables.forEach { runCatching { cdpSend(it) } } }
         }
     }
 
@@ -239,8 +246,22 @@ class CdpController(
             CdpEvalResult(null, desc)
         } else {
             val r = resultObj?.get("result")?.jsonObject
-            val v = r?.get("value")?.str() ?: r?.get("description")?.str()
+            val v = r?.let { stringifyEvalValue(it) }
             CdpEvalResult(v ?: "undefined", null)
+        }
+    }
+
+    /** Stringify a Runtime.evaluate `result` object safely. `value` may be a primitive OR an
+     *  object/array (e.g. `eval document.querySelector('div')` returns an object) — calling
+     *  `.jsonPrimitive` on a non-primitive throws. Prefer `description` (CDP populates it for
+     *  object results); fall back to the primitive content, or serialize the object/array. */
+    private fun stringifyEvalValue(r: JsonObject): String? {
+        r["description"]?.str()?.let { return it }
+        val value = r["value"] ?: return null
+        return when (value) {
+            is JsonPrimitive -> value.contentOrNull
+            is JsonObject, is JsonArray -> json.encodeToString(JsonElement.serializer(), value)
+            else -> null
         }
     }
 
@@ -252,13 +273,25 @@ class CdpController(
         return resp["body"]?.str()
     }
 
-    fun stop() {
+    /** Stop the session: cancel the run loop, close the transport, and (one-click mode) remove
+     *  the forward. In-flight `evaluate`/`reload`/`getResponseBody` callers (.await()ing deferreds
+     *  that only the now-cancelled collector could complete) are released with an exception —
+     *  otherwise they'd hang forever. This drain happens BEFORE the run-loop cancel so the
+     *  collector doesn't race us for the same deferreds. */
+    suspend fun stop() {
+        // Drain in-flight callers BEFORE cancelling the collector.
+        val stranded = pendingMutex.withLock {
+            val vals = pending.values.toList()
+            pending.clear()
+            vals
+        }
+        stranded.forEach { it.completeExceptionally(CdpConnectionException("connection closed")) }
         runJob?.cancel()
         runJob = null
         transport.close()
         val serial = currentSerial
         if (ownsForward && serial != null) {
-            scope.launch { runCatching { commands.removeForward(serial, ForwardSpec(ForwardEndpointType.TCP, "9222")) } }
+            runCatching { commands.removeForward(serial, ForwardSpec(ForwardEndpointType.TCP, "9222")) }
         }
         ownsForward = false
     }

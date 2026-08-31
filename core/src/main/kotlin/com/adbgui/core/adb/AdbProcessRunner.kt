@@ -32,6 +32,10 @@ class FakeAdbProcessRunner : AdbProcessRunner {
 
     fun setDefault(result: AdbProcessResult) { default = result }
 
+    /** Every `run` call's full argv list, in invocation order — for asserting a specific command
+     *  was actually issued (not just that a script would match if it were). */
+    val runs = mutableListOf<List<String>>()
+
     private var binaryResponse: ByteArray = ByteArray(0)
 
     fun setBinaryResponse(b: ByteArray) { binaryResponse = b }
@@ -41,6 +45,7 @@ class FakeAdbProcessRunner : AdbProcessRunner {
     fun setStreamLines(lines: List<String>) { streamLines = lines }
 
     override suspend fun run(adb: AdbBinary, args: List<String>, timeoutMs: Long?): AdbProcessResult {
+        runs += args
         return scripts.firstOrNull { r -> r.keywords.all { kw -> args.any { it.contains(kw) } } }?.result
             ?: default
     }

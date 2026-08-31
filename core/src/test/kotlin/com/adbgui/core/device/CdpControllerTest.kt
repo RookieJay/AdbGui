@@ -13,10 +13,12 @@ import com.adbgui.core.log.NoopLogger
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -135,8 +137,63 @@ class CdpControllerTest {
         ctrl.stop()
         advanceUntilIdle()
         job.cancel()
-        // removeForward sent with tcp:9222 — the rule matches, so exit 0 (a remove call happened).
-        assertEquals(0, runner.run(adb, listOf("forward", "--remove", "tcp:9222")).exitCode)
+        // M-4: assert the CONTROLLER actually issued `forward --remove tcp:9222` (recorded against
+        // the Fake's run log), not just that a script would match if it were called.
+        assertTrue(runner.runs.any { it.contains("--remove") && it.contains("tcp:9222") },
+            "expected a forward --remove tcp:9222 call; got: ${runner.runs}")
+    }
+
+    @Test
+    fun stop_strands_inflight_evaluate_with_connection_closed_exception() = runTest {
+        val transport = FakeCdpTransport()
+        val runner = FakeAdbProcessRunner()
+        val (_, ctrl) = makeController(transport, runner, this)
+        ctrl.connectManual(9222); advanceUntilIdle()
+        // Isolate the async's failure from the runTest parent (structured concurrency would
+        // otherwise cancel the test scope when the stranded evaluate throws).
+        supervisorScope {
+            // Start an evaluate but NEVER emit its response → it's in-flight when stop() runs.
+            val evalJob = async { ctrl.evaluate("1+1", null) }
+            advanceUntilIdle()
+            ctrl.stop()  // drains pending + completes the deferred exceptionally
+            val ex = assertFailsWith<CdpConnectionException> { evalJob.await() }
+            assertTrue(ex.message!!.contains("closed"))
+        }
+    }
+
+    @Test
+    fun evaluate_object_result_stringifies_without_crashing() = runTest {
+        val transport = FakeCdpTransport()
+        val runner = FakeAdbProcessRunner()
+        val (_, ctrl) = makeController(transport, runner, this)
+        ctrl.connectManual(9222); advanceUntilIdle()
+        val job = async { ctrl.evaluate("document.querySelector('div')", null) }
+        advanceUntilIdle()
+        val sentReq = transport.sent.last { it.contains("Runtime.evaluate") }
+        val id = sentReq.substringAfter("\"id\":").substringBefore(',').toInt()
+        // Non-primitive `value` (an object, no description) — must stringify, not throw.
+        transport.emit("""{"id":$id,"result":{"result":{"type":"object","value":{"x":1}}}}""")
+        val result = job.await()
+        assertNull(result.exception)
+        assertTrue(result.value!!.contains("\"x\":1"), "expected serialized object; got: ${result.value}")
+        ctrl.stop()
+    }
+
+    @Test
+    fun evaluate_object_result_prefers_description() = runTest {
+        val transport = FakeCdpTransport()
+        val runner = FakeAdbProcessRunner()
+        val (_, ctrl) = makeController(transport, runner, this)
+        ctrl.connectManual(9222); advanceUntilIdle()
+        val job = async { ctrl.evaluate("document.querySelector('div')", null) }
+        advanceUntilIdle()
+        val sentReq = transport.sent.last { it.contains("Runtime.evaluate") }
+        val id = sentReq.substringAfter("\"id\":").substringBefore(',').toInt()
+        transport.emit("""{"id":$id,"result":{"result":{"type":"object","value":{"x":1},"description":"<div>"}}}""")
+        val result = job.await()
+        assertEquals("<div>", result.value)
+        assertNull(result.exception)
+        ctrl.stop()
     }
 
     @Test
