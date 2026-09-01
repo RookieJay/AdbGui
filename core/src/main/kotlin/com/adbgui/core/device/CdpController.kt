@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -62,7 +63,16 @@ class CdpController(
     val networkRequests: StateFlow<List<CdpNetworkRequest>> = _net.asStateFlow()
     private val _targets = MutableStateFlow<List<CdpTarget>>(emptyList())
     val targets: StateFlow<List<CdpTarget>> = _targets.asStateFlow()
-    val state: StateFlow<CdpConnectionState> = transport.state
+
+    // C1: connectionState is a manually-managed MutableStateFlow updated by the state-observer
+    // (runLoop) + connectAndRun catch blocks. When a drop is detected, the state-observer sets
+    // RECONNECTING during backoff, then CONNECTED/FAILED on reconnect outcome. Without this,
+    // the real transport's state goes DISCONNECTED on peer-drop but incoming.collect suspends
+    // forever (incomingCh never closed) → reconnect was dead code.
+    private val _connectionState = MutableStateFlow(CdpConnectionState.DISCONNECTED)
+    val connectionState: StateFlow<CdpConnectionState> = _connectionState.asStateFlow()
+    val state: StateFlow<CdpConnectionState> get() = connectionState
+
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
@@ -77,6 +87,7 @@ class CdpController(
     @Volatile private var currentSerial: String? = null
     @Volatile private var currentPageId: String? = null
     @Volatile private var currentPort: Int = 9222
+    @Volatile private var setupComplete = false      // C1: state-observer only triggers reconnect after initial setup
 
     /** CDP domains to enable on connect + on reconnect. Enabling is what makes the WebView
      *  emit console/network events; re-enabling after a drop is what un-sticks event flow. */
@@ -118,6 +129,8 @@ class CdpController(
         currentPort = port
         runJob = scope.launch {
             try {
+                setupComplete = false
+                _connectionState.value = CdpConnectionState.CONNECTING
                 transport.connect("ws://localhost:$port/devtools/browser")
                 // Start the inbound-frame collector on a sibling child so setup-command awaits
                 // (Target.getTargets / domain enables) do NOT block event dispatch — events flow
@@ -139,43 +152,92 @@ class CdpController(
                     ?: throw CdpConnectionException("没有 page target（应用没在前台？）")
                 currentPageId = page.targetId
                 transport.connect("ws://localhost:$port/devtools/page/${page.targetId}")
+                setupComplete = true  // C1: page ws connected — state-observer can now react to drops
                 domainEnables.forEach { cdpSend(it).await() }
             } catch (e: CdpConnectionException) {
                 _error.value = e.message
+                _connectionState.value = transport.state.value
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
                 _error.value = t.message
+                _connectionState.value = transport.state.value
                 logger.warn("[cdp] connectAndRun error: ${t.message}")
             }
         }
     }
 
-    /** Reconnect loop mirroring LogcatController: collect inbound frames; on stream end/error
-     *  back off (1s→…→30s cap) and reconnect. 3 consecutive failures degrade to FAILED. */
-    private suspend fun runLoop(port: Int) {
-        var backoff = 1000L
-        var failures = 0
-        while (true) {
+    /** C1: Run loop with state-observer reconnect. Two children under [supervisorScope]:
+     *  1) Event dispatcher — collects [transport.incoming] and routes frames to [handleFrame].
+     *     The persistent `incomingCh` is never closed on peer-drop (only `close()` closes it),
+     *     so this suspends forever and resumes when a reconnect pumps new frames.
+     *  2) State observer — watches [transport.state]; on DISCONNECTED/FAILED while a session is
+     *     expected (wasConnected + setupComplete + currentPageId), calls [driveReconnect].
+     *     This is the REAL drop detection path: KtorCdpTransport sets state=DISCONNECTED on
+     *     peer-close but never closes incomingCh, so the dispatcher's collect never returns.
+     *     Unifies Fake/real drop contract: both signal drops via state→DISCONNECTED. */
+    private suspend fun runLoop(port: Int) = supervisorScope {
+        // Event dispatcher
+        launch {
             try {
                 transport.incoming.collect { frame -> handleFrame(frame) }
                 logger.warn("[cdp] incoming stream ended")
-                failures++
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
-                logger.warn("[cdp] stream error: ${t.message}")
+                logger.warn("[cdp] dispatch error: ${t.message}")
                 _error.value = t.message
-                failures++
             }
-            if (failures >= 3) failures = 0  // keep retrying after FAILED-grade backoff
-            delay(backoff)
-            backoff = (backoff * 2).coerceAtMost(30_000L)
-            val page = currentPageId ?: ""
-            // Reconnect the page ws; on success re-enable domains so events flow again
-            // (M-2: without this, a drop leaves the session alive but silent).
-            runCatching { transport.connect("ws://localhost:$port/devtools/page/$page") }
-                .onSuccess { domainEnables.forEach { runCatching { cdpSend(it) } } }
         }
+        // State observer — drives reconnect on drop. Mirrors transport.state into
+        // _connectionState, but overrides with RECONNECTING during backoff so the UI
+        // shows the "正在重连…" banner (C1).
+        launch {
+            var wasConnected = false
+            transport.state.collect { newState ->
+                when (newState) {
+                    CdpConnectionState.CONNECTED -> {
+                        wasConnected = true
+                        _connectionState.value = newState
+                    }
+                    CdpConnectionState.DISCONNECTED, CdpConnectionState.FAILED -> {
+                        if (wasConnected && setupComplete && currentPageId != null) {
+                            wasConnected = false
+                            _connectionState.value = CdpConnectionState.RECONNECTING
+                            driveReconnect(port)
+                            // driveReconnect sets _connectionState to CONNECTED or FAILED
+                        } else {
+                            _connectionState.value = newState
+                        }
+                    }
+                    else -> {
+                        _connectionState.value = newState
+                    }
+                }
+            }
+        }
+    }
+
+    /** C1: Backoff reconnect (1s→30s cap, 3 fails → give up). _connectionState is already
+     *  RECONNECTING (set by the state observer). On success, re-connects the page ws, sets
+     *  CONNECTED, and re-enables domains so events flow again. On 3 failures, sets FAILED. */
+    private suspend fun driveReconnect(port: Int) {
+        var backoff = 1000L
+        var failures = 0
+        while (true) {
+            delay(backoff)
+            val page = currentPageId ?: break
+            val pageUrl = "ws://localhost:$port/devtools/page/$page"
+            val ok = runCatching { transport.connect(pageUrl) }.isSuccess
+            if (ok) {
+                _connectionState.value = CdpConnectionState.CONNECTED
+                domainEnables.forEach { runCatching { cdpSend(it) } }
+                return
+            }
+            failures++
+            if (failures >= 3) break
+            backoff = (backoff * 2).coerceAtMost(30_000L)
+        }
+        _connectionState.value = transport.state.value
     }
 
     private suspend fun handleFrame(frame: String) {
@@ -309,6 +371,8 @@ class CdpController(
         stranded.forEach { it.completeExceptionally(CdpConnectionException("connection closed")) }
         runJob?.cancel()
         runJob = null
+        setupComplete = false
+        _connectionState.value = CdpConnectionState.DISCONNECTED
         transport.close()
         val serial = currentSerial
         if (ownsForward && serial != null) {

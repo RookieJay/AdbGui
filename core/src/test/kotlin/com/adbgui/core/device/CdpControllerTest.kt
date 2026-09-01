@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -326,5 +327,39 @@ class CdpControllerTest {
             "expected forward --remove tcp:9222 on one-click→manual switch; got: ${runner.runs}")
         ctrl.stop()
         job.cancel()
+    }
+
+    // C1: on a drop (state→DISCONNECTED while setupComplete), the state-observer sets
+    // RECONNECTING, backs off, re-connects the page ws, re-enables domains, returns to CONNECTED.
+    @Test
+    fun reconnect_on_drop_sets_reconnecting_then_reconnects() = runTest {
+        val transport = FakeCdpTransport()
+        val runner = FakeAdbProcessRunner()
+        val (_, ctrl) = makeController(transport, runner, this)
+        ctrl.connectManual(9222); advanceUntilIdle()
+        // Script the Target.getTargets response so setup completes (setupComplete = true,
+        // page ws connected). Domain enables are still awaiting responses — that's fine;
+        // setupComplete is set right after the page ws connect.
+        val sentReq = transport.sent.last { it.contains("Target.getTargets") }
+        val id = sentReq.substringAfter("\"id\":").substringBefore(',').toInt()
+        transport.emit("""{"id":$id,"result":{"targetInfos":[{"type":"page","targetId":"PAGE1","title":"t","url":"u"}]}}""")
+        advanceUntilIdle()
+        // Setup complete: state CONNECTED, at least 1 domain enable sent
+        assertEquals(CdpConnectionState.CONNECTED, ctrl.connectionState.value)
+        val sentBefore = transport.sent.size
+        assertTrue(sentBefore >= 2, "expected at least Target.getTargets + 1 domain enable; got $sentBefore")
+        // Simulate a drop — state→DISCONNECTED (channel stays open for recovery)
+        transport.simulateDrop()
+        runCurrent()  // state observer sees DISCONNECTED, enters driveReconnect, _connectionState=RECONNECTING
+        assertEquals(CdpConnectionState.RECONNECTING, ctrl.connectionState.value,
+            "expected RECONNECTING during backoff; got ${ctrl.connectionState.value}")
+        advanceUntilIdle()  // backoff completes, reconnect succeeds
+        assertEquals(CdpConnectionState.CONNECTED, ctrl.connectionState.value,
+            "expected CONNECTED after reconnect; got ${ctrl.connectionState.value}")
+        // Reconnect re-sent 4 domain enables
+        val sentAfter = transport.sent.size
+        assertTrue(sentAfter >= sentBefore + 4,
+            "reconnect should re-send 4 domain enables; before=$sentBefore after=$sentAfter")
+        ctrl.stop()
     }
 }

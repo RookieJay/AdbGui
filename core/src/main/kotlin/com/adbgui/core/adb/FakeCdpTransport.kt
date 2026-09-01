@@ -33,7 +33,12 @@ class FakeCdpTransport : CdpTransport {
     override suspend fun send(json: String) { sent.add(json) }
 
     fun emit(json: String) { ch.trySend(json) }
-    fun simulateDrop() { _state.value = CdpConnectionState.DISCONNECTED; ch.close(); }
+    /** C1: simulate a peer-drop via state→DISCONNECTED only (do NOT close the channel).
+     *  This unifies the Fake/real drop contract: both signal drops via state, not channel close.
+     *  The controller's state-observer detects the drop and drives reconnect; the dispatch job's
+     *  incoming.collect keeps suspending (channel still open) and resumes when reconnect pumps
+     *  new frames. */
+    fun simulateDrop() { _state.value = CdpConnectionState.DISCONNECTED }
 
     override fun close() { _state.value = CdpConnectionState.DISCONNECTED; ch.close() }
 }
