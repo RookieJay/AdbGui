@@ -130,7 +130,7 @@ fun CdpDebugScreen(
                 onTargetsOpen = { targetsMenuOpen = true },
                 targetsMenuOpen = targetsMenuOpen,
                 onTargetsDismiss = { targetsMenuOpen = false },
-                onSelectTarget = { vm.selectTarget(it); targetsMenuOpen = false },
+                onSelectTarget = { targetsMenuOpen = false },  // display-only (v1 scope cut); TODO(v2): CdpController.switchPage(targetId) to reconnect page ws
                 manualPort = manualPort,
                 onManualPortChange = { manualPort = it.filter { c -> c.isDigit() } },
                 onStart = { vm.start() },
@@ -227,7 +227,7 @@ fun CdpDebugScreen(
                     val scrollScope = rememberCoroutineScope()
                     Box(Modifier.fillMaxSize()) {
                         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                            items(filteredConsole, key = { it.hashCode() }) { entry ->
+                            items(filteredConsole, key = { it.id }) { entry ->
                                 SelectableText(
                                     text = entry.text,
                                     color = cdpLevelColor(entry.level),

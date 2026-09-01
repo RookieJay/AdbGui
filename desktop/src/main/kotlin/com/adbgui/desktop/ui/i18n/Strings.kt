@@ -350,8 +350,6 @@ object Strings {
         "cdp_result" to "(结果)",
         "cdp_targets" to "目标",
         "cdp_frames" to "子帧",
-        "cdp_no_socket" to "无 webview socket — 目标应用需在前台运行且含 WebView",
-        "cdp_no_page" to "没有 page target（应用没在前台？）",
         "cdp_reconnecting" to "正在重连…",
         "cdp_response_body" to "响应体",
     )
@@ -691,8 +689,6 @@ Click "Remove All" when done to clean up.""",
         "cdp_result" to "(result)",
         "cdp_targets" to "Target",
         "cdp_frames" to "Frame",
-        "cdp_no_socket" to "No webview socket — the target app must be in the foreground and contain a WebView",
-        "cdp_no_page" to "No page target (app not in foreground?)",
         "cdp_reconnecting" to "Reconnecting…",
         "cdp_response_body" to "Response body",
     )

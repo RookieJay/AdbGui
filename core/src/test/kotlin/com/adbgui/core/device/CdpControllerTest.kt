@@ -288,4 +288,43 @@ class CdpControllerTest {
         assertTrue(ctrl.networkRequests.value.isEmpty())
         ctrl.stop()
     }
+
+    // I1: two identical console frames must produce entries with DISTINCT ids so the LazyColumn
+    // key (it.id) is unique — hashCode key crashed on duplicate lines.
+    @Test
+    fun console_entries_get_distinct_ids_for_identical_frames() = runTest {
+        val transport = FakeCdpTransport()
+        val runner = FakeAdbProcessRunner()
+        val (_, ctrl) = makeController(transport, runner, this)
+        ctrl.connectManual(9222); advanceUntilIdle()
+        transport.emit("""{"method":"Runtime.consoleAPICalled","params":{"type":"log","args":[{"value":"x"}]}}""")
+        transport.emit("""{"method":"Runtime.consoleAPICalled","params":{"type":"log","args":[{"value":"x"}]}}""")
+        advanceUntilIdle()
+        assertEquals(2, ctrl.consoleEntries.value.size)
+        val id0 = ctrl.consoleEntries.value[0].id
+        val id1 = ctrl.consoleEntries.value[1].id
+        assertTrue(id0 != id1, "identical console frames must get distinct ids; got $id0 and $id1")
+        ctrl.stop()
+    }
+
+    // I3: one-click→manual switch must drain the prior session's forward (removeForward tcp:9222).
+    @Test
+    fun connectManual_after_start_removes_one_click_forward() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("shell", "cat /proc/net/unix"),
+            AdbProcessResult(0, "@webview_devtools_remote_1\n", ""))
+        runner.whenArgsContains(listOf("forward", "tcp:9222"), AdbProcessResult(0, "", ""))
+        runner.whenArgsContains(listOf("forward", "--remove"), AdbProcessResult(0, "", ""))
+        val transport = FakeCdpTransport()
+        val (_, ctrl) = makeController(transport, runner, this)
+        val job = launch { ctrl.start("s1") }
+        advanceUntilIdle()
+        // one-click start granted the forward; switch to manual → must remove the prior forward
+        ctrl.connectManual(9222)
+        advanceUntilIdle()
+        assertTrue(runner.runs.any { it.contains("--remove") && it.contains("tcp:9222") },
+            "expected forward --remove tcp:9222 on one-click→manual switch; got: ${runner.runs}")
+        ctrl.stop()
+        job.cancel()
+    }
 }

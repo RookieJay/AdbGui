@@ -3,13 +3,16 @@ package com.adbgui.core.domain
 /** Console severity for a CDP console entry. Maps Runtime.consoleAPICalled `type` and Log.entryAdded `level`. */
 enum class CdpLevel { LOG, DEBUG, INFO, WARNING, ERROR }
 
-/** One console line from the device WebView (Runtime.consoleAPICalled / Runtime.exceptionThrown / Log.entryAdded). */
+/** One console line from the device WebView (Runtime.consoleAPICalled / Runtime.exceptionThrown / Log.entryAdded).
+ *  `id` is a monotonic counter assigned by [com.adbgui.core.device.CdpController] — guarantees a stable LazyColumn
+ *  key even when two identical console lines produce the same hashCode (I1: duplicate-line crash). */
 data class CdpConsoleEntry(
     val level: CdpLevel,
     val text: String,
     val source: String,        // "console-api" / "exception" / "log-entry" — which CDP event produced it
     val url: String?,
     val lineNumber: Int?,
+    val id: Long = 0L,
 )
 
 enum class CdpNetState { SENT, RESPONSE, DONE, FAILED }

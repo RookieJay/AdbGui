@@ -37,6 +37,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /** Drives a Chrome DevTools Protocol session over a [CdpTransport] (one-click `start` or manual
  *  `connectManual`). Mirrors [LogcatController]: a long-lived run loop on the injected [scope]
@@ -69,6 +70,7 @@ class CdpController(
     private val pending = mutableMapOf<Int, CompletableDeferred<JsonObject>>()
     private val pendingMutex = Mutex()
     private val nextId = AtomicInteger(1)
+    private val idCounter = AtomicLong(0)   // monotonic id for CdpConsoleEntry (I1: stable LazyColumn key)
 
     private var runJob: Job? = null
     @Volatile private var ownsForward = false        // one-click mode → stop() removes the forward
@@ -83,29 +85,36 @@ class CdpController(
     /** One-click: probe the WebView socket → forward tcp:9222 → connect browser ws → pick page →
      *  enable domains. Throws [CdpConnectionException] with an actionable message if no socket. */
     suspend fun start(serial: String) {
-        currentSerial = serial
-        currentPort = 9222
         val socket = commands.webviewSocket(serial)
             ?: throw CdpConnectionException("无 webview socket — 目标应用需在前台运行且含 WebView")
         commands.forward(serial,
             ForwardSpec(ForwardEndpointType.TCP, "9222"),
             ForwardSpec(ForwardEndpointType.LOCALABSTRACT, socket))
-        ownsForward = true
-        connectAndRun(portOverride = null)
+        connectAndRun(serial = serial, port = 9222, ownsForwardNew = true)
     }
 
     /** Manual: skip the forward (user set it up themselves), connect to
      *  ws://localhost:<port>/devtools/browser directly. */
     suspend fun connectManual(port: Int) {
-        ownsForward = false
-        currentSerial = null
-        currentPort = port
-        connectAndRun(portOverride = port)
+        connectAndRun(serial = null, port = port, ownsForwardNew = false)
     }
 
-    private fun connectAndRun(portOverride: Int?) {
+    private suspend fun connectAndRun(serial: String?, port: Int, ownsForwardNew: Boolean) {
+        // I3: tear down the prior session — remove its one-click forward + drain in-flight
+        // callers — before starting a new one. Reads OLD ownsForward/currentSerial before
+        // reassigning them below (one-click→manual or start→start switch leaked the forward).
+        if (ownsForward && currentSerial != null) {
+            runCatching { commands.removeForward(currentSerial!!, ForwardSpec(ForwardEndpointType.TCP, "9222")) }
+        }
+        val stranded = pendingMutex.withLock {
+            val vals = pending.values.toList()
+            pending.clear()
+            vals
+        }
+        stranded.forEach { it.completeExceptionally(CdpConnectionException("connection closed")) }
         runJob?.cancel()
-        val port = portOverride ?: currentPort
+        ownsForward = ownsForwardNew
+        currentSerial = serial
         currentPort = port
         runJob = scope.launch {
             try {
@@ -195,7 +204,9 @@ class CdpController(
         pendingMutex.withLock {
             when (e) {
                 is CdpEvent.ConsoleAdd ->
-                    _console.value = (_console.value + e.entry).takeLast(ringCap)
+                    // I1: assign a monotonic id so the LazyColumn key is stable even for
+                    // identical console lines (hashCode collision → Compose IllegalArgumentException).
+                    _console.value = (_console.value + e.entry.copy(id = idCounter.getAndIncrement())).takeLast(ringCap)
                 is CdpEvent.NetRequest ->
                     _net.value = _net.value + e.req
                 is CdpEvent.NetResponse ->
