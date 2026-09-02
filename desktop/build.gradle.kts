@@ -23,10 +23,6 @@ compose.desktop.application {
         targetFormats(TargetFormat.Msi, TargetFormat.AppImage)
         packageName = "AdbGui"
         packageVersion = "1.0.0"
-        // Bundles desktop/resources/ into the AppImage's app/resources/ — used to ship
-        // platform-tools adb so users don't need adb on PATH. At runtime resolve via
-        // System.getProperty("compose.application.resources.dir").
-        appResourcesRootDir.set(layout.projectDirectory.dir("resources"))
         windows {
             dirChooser = true
             perUserInstall = true
@@ -35,4 +31,20 @@ compose.desktop.application {
             // To bundle adb later: add to appResourcesRootDir; v1 leaves unbundled (PATH/override).
         }
     }
+}
+
+// Bundles platform-tools adb (desktop/resources/adb/win/) into the AppImage's
+// app/resources/adb/win/ so the distributed app needs no adb on PATH. The Compose
+// launcher sets compose.application.resources.dir=$APPDIR\resources at runtime,
+// which ResourceBundledAdbProvider reads to locate adb.exe.
+// (appResourcesRootDir is a no-op in Compose 1.7.x — the new compose.resources {}
+// system superseded it — so we copy into the built image dir directly.)
+val copyBundledAdb by tasks.registering(Copy::class) {
+    from(layout.projectDirectory.dir("resources/adb/win"))
+    into(layout.buildDirectory.dir("compose/binaries/main/app/AdbGui/app/resources/adb/win"))
+}
+afterEvaluate {
+    // Compose plugin registers packaging tasks in afterEvaluate, so wire finalizedBy here.
+    tasks.findByName("packageAppImage")?.finalizedBy(copyBundledAdb)
+    tasks.findByName("packageReleaseAppImage")?.finalizedBy(copyBundledAdb)
 }
