@@ -5,6 +5,7 @@ import com.adbgui.core.domain.CdpConnectionState
 import com.adbgui.core.domain.CdpConsoleEntry
 import com.adbgui.core.domain.CdpEvalResult
 import com.adbgui.core.domain.CdpNetworkRequest
+import com.adbgui.core.domain.CdpResponseBody
 import com.adbgui.core.domain.CdpTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -38,8 +39,8 @@ class CdpDebugViewModel(
     // wrapper can publish them without making the UI callback suspend.
     private val _evalResult = MutableStateFlow<CdpEvalResult?>(null)
     val evalResult: StateFlow<CdpEvalResult?> = _evalResult.asStateFlow()
-    private val _responseBody = MutableStateFlow<String?>(null)
-    val responseBody: StateFlow<String?> = _responseBody.asStateFlow()
+    private val _responseBody = MutableStateFlow<CdpResponseBody?>(null)
+    val responseBody: StateFlow<CdpResponseBody?> = _responseBody.asStateFlow()
     private val _selectedTargetId = MutableStateFlow<String?>(null)
     val selectedTargetId: StateFlow<String?> = _selectedTargetId.asStateFlow()
 
@@ -76,10 +77,13 @@ class CdpDebugViewModel(
     fun reload(): Job = scope.launch { controller.reload() }
 
     fun getResponseBody(requestId: String): Job = scope.launch {
+        _responseBody.value = null  // clear stale body from a prior row so the spinner shows
         _responseBody.value = controller.getResponseBody(requestId)
     }
 
     fun clearConsole() = controller.clearConsole()
+
+    fun clearNetwork() = controller.clearNetwork()
 
     fun clearError() = controller.clearError()
 

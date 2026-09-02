@@ -3,10 +3,12 @@ package com.adbgui.desktop.platform
 import com.adbgui.core.adb.CdpConnectionException
 import com.adbgui.core.adb.CdpTransport
 import com.adbgui.core.domain.CdpConnectionState
+import com.adbgui.core.log.Logger
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.http.HttpHeaders
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
@@ -30,7 +32,10 @@ import kotlinx.coroutines.launch
  *  running after `connect()` returns. [incomingCh] is ONE persistent channel for the transport's lifetime
  *  (I-4): the run-loop's `transport.incoming.collect` (started once in [CdpController]) keeps working across
  *  the 2-connect browser→page handoff. Cross-thread vars are `@Volatile` (red-line #3). */
-class KtorCdpTransport(private val scope: CoroutineScope) : CdpTransport {
+class KtorCdpTransport(
+    private val scope: CoroutineScope,
+    private val logger: Logger,
+) : CdpTransport {
     private val client = HttpClient(CIO) { install(WebSockets) }
     private val _state = MutableStateFlow(CdpConnectionState.DISCONNECTED)
     override val state: StateFlow<CdpConnectionState> = _state.asStateFlow()
@@ -55,7 +60,15 @@ class KtorCdpTransport(private val scope: CoroutineScope) : CdpTransport {
 
         sessionJob = scope.launch {
             try {
-                client.webSocket(urlString = url) {
+                // CDP's /devtools/browser endpoint requires an Origin header (node's WebSocket sends
+                // one by default; ktor's CIO ws client does NOT — without it the Android WebView
+                // DevTools server closes the ws ~3ms after the handshake). Derive Origin host:port from the url.
+                val origin = "http://" + url.substringAfter("ws://").substringBefore("/")
+                logger.info("[cdp-transport] connecting $url (Origin=$origin)")
+                client.webSocket(
+                    urlString = url,
+                    request = { headers.append(HttpHeaders.Origin, origin) },
+                ) {
                     // Handshake done — signal connect() to proceed, then keep pumping.
                     _state.value = CdpConnectionState.CONNECTED
                     openSignal.complete(null)
@@ -65,8 +78,11 @@ class KtorCdpTransport(private val scope: CoroutineScope) : CdpTransport {
                             if (frame is Frame.Text) incomingCh.send(frame.readText())
                         }
                     } finally { sendJob.cancel() }
+                    // Log the peer's close reason (closeReason is a WebSocketSession member, in scope here).
+                    val reason = closeReason.await()
+                    logger.info("[cdp-transport] ws session ended; closeReason code=${reason?.code} message=${reason?.message}")
                 }
-                // Session ended normally (peer closed). Reset only if not FAILED (I-1).
+                // Session ended (peer closed). Reset only if not FAILED (I-1).
                 if (_state.value !== CdpConnectionState.FAILED) {
                     _state.value = CdpConnectionState.DISCONNECTED
                 }
@@ -75,6 +91,7 @@ class KtorCdpTransport(private val scope: CoroutineScope) : CdpTransport {
             } catch (e: Throwable) {
                 _state.value = CdpConnectionState.FAILED
                 openSignal.complete(e)
+                logger.warn("[cdp-transport] ws connect failed: ${e.message}")
             }
         }
 
@@ -88,7 +105,13 @@ class KtorCdpTransport(private val scope: CoroutineScope) : CdpTransport {
         sessionJob = null
         sessionOut?.close()
         sessionOut = null
-        incomingCh.close()
+        // NOTE: do NOT close `incomingCh` here. It is a `val` (I-4: persistent across the
+        // browser→page 2-connect handoff within a session). Closing it would permanently kill the
+        // transport — the next `connect()`'s session pump would throw "Channel was closed" on
+        // `incomingCh.send`, + the controller's `incoming.collect` would complete immediately.
+        // The transport must survive `stop()` → re-`connect()` (the VM is app-lifetime; the user
+        // re-enters the page + clicks 调试 WebView again). Cancelling `sessionJob` stops the
+        // producer; `incoming.collect` just suspends (no frames) until a new session pumps.
         _state.value = CdpConnectionState.DISCONNECTED
     }
 }

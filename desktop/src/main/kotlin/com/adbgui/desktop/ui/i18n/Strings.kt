@@ -352,6 +352,13 @@ object Strings {
         "cdp_frames" to "子帧",
         "cdp_reconnecting" to "正在重连…",
         "cdp_response_body" to "响应体",
+        "cdp_col_method" to "方法",
+        "cdp_col_url" to "URL",
+        "cdp_col_status" to "状态",
+        "cdp_col_type" to "类型",
+        "cdp_col_time" to "时间",
+        "cdp_clear_network" to "清空网络",
+        "cdp_jump_latest" to "跳到最新",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -691,6 +698,13 @@ Click "Remove All" when done to clean up.""",
         "cdp_frames" to "Frame",
         "cdp_reconnecting" to "Reconnecting…",
         "cdp_response_body" to "Response body",
+        "cdp_col_method" to "Method",
+        "cdp_col_url" to "URL",
+        "cdp_col_status" to "Status",
+        "cdp_col_type" to "Type",
+        "cdp_col_time" to "Time",
+        "cdp_clear_network" to "Clear network",
+        "cdp_jump_latest" to "Jump to latest",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)

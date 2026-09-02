@@ -70,7 +70,7 @@ fun main() = application {
     val remoteVm = remember { RemoteViewModel(root.repository, selectedSerial, root.settings, root.scope) }
     val fileExplorerVm = remember { FileExplorerViewModel(root.repository, selectedSerial, root.scope) }
     val portForwardingVm = remember { PortForwardingViewModel(root.repository, selectedSerial, root.scope) }
-    val cdpController = remember { CdpController(KtorCdpTransport(root.scope), root.commands, root.logger, root.scope) }
+    val cdpController = remember { CdpController(KtorCdpTransport(root.scope, root.logger), root.commands, root.logger, root.scope) }
     val cdpDebugVm = remember { CdpDebugViewModel(cdpController, selectedSerial, root.scope) }
     val shellLauncher = remember { com.adbgui.desktop.platform.WindowsShellLauncher() }
     // Auto-select the first ONLINE device when nothing is validly selected.

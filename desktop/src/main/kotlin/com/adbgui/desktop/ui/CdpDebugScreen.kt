@@ -62,6 +62,7 @@ import com.adbgui.core.domain.CdpConnectionState
 import com.adbgui.core.domain.CdpConsoleEntry
 import com.adbgui.core.domain.CdpLevel
 import com.adbgui.core.domain.CdpNetworkRequest
+import com.adbgui.core.domain.CdpResponseBody
 import com.adbgui.core.domain.CdpTarget
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AppColors
@@ -229,7 +230,7 @@ fun CdpDebugScreen(
                         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                             items(filteredConsole, key = { it.id }) { entry ->
                                 SelectableText(
-                                    text = entry.text,
+                                    text = "[${entry.timestamp}] ${entry.text}",
                                     color = cdpLevelColor(entry.level),
                                     style = MaterialTheme.typography.body2,
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
@@ -249,7 +250,22 @@ fun CdpDebugScreen(
 
                 // ---- Right: Network ----
                 Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(Strings.t("cdp_network"), style = MaterialTheme.typography.subtitle2)
+                    // Network toolbar
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(Strings.t("cdp_network"), style = MaterialTheme.typography.subtitle2)
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { vm.clearNetwork() }, enabled = networkRequests.isNotEmpty()) {
+                            Icon(Icons.Filled.Delete, contentDescription = Strings.t("cdp_clear_network"))
+                        }
+                    }
+                    // Column headers
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(Strings.t("cdp_col_time"), style = MaterialTheme.typography.caption, modifier = Modifier.width(86.dp), color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+                        Text(Strings.t("cdp_col_method"), style = MaterialTheme.typography.caption, modifier = Modifier.width(40.dp), color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+                        Text(Strings.t("cdp_col_url"), style = MaterialTheme.typography.caption, modifier = Modifier.weight(1f), color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+                        Text(Strings.t("cdp_col_status"), style = MaterialTheme.typography.caption, modifier = Modifier.width(40.dp), color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+                        Text(Strings.t("cdp_col_type"), style = MaterialTheme.typography.caption, modifier = Modifier.width(140.dp), color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+                    }
                     Divider(color = AppColors.current.divider)
                     if (networkRequests.isEmpty()) {
                         Text(
@@ -258,13 +274,35 @@ fun CdpDebugScreen(
                             modifier = Modifier.padding(16.dp),
                         )
                     } else {
-                        LazyColumn(Modifier.fillMaxSize()) {
-                            items(networkRequests, key = { it.requestId }) { req ->
-                                NetworkRow(req = req) {
-                                    responseModalFor = req.requestId
-                                    vm.getResponseBody(req.requestId)
+                        val netListState = rememberLazyListState()
+                        val netAtBottom by remember {
+                            derivedStateOf {
+                                val info = netListState.layoutInfo
+                                val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+                                networkRequests.isEmpty() || lastVisible >= networkRequests.size - 2
+                            }
+                        }
+                        LaunchedEffect(networkRequests.size) {
+                            if (netAtBottom && networkRequests.isNotEmpty()) {
+                                netListState.animateScrollToItem(networkRequests.size - 1)
+                            }
+                        }
+                        val netScrollScope = rememberCoroutineScope()
+                        Box(Modifier.fillMaxSize()) {
+                            LazyColumn(state = netListState, modifier = Modifier.fillMaxSize()) {
+                                items(networkRequests, key = { it.requestId }) { req ->
+                                    NetworkRow(req = req) {
+                                        responseModalFor = req.requestId
+                                        vm.getResponseBody(req.requestId)
+                                    }
+                                    Divider(color = AppColors.current.divider)
                                 }
-                                Divider(color = AppColors.current.divider)
+                            }
+                            if (!netAtBottom && networkRequests.isNotEmpty()) {
+                                OutlinedButton(
+                                    onClick = { netScrollScope.launch { netListState.animateScrollToItem(networkRequests.size - 1) } },
+                                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+                                ) { Text("↓") }
                             }
                         }
                     }
@@ -310,25 +348,61 @@ fun CdpDebugScreen(
 
     // ---- Response body modal ----
     responseModalFor?.let { requestId ->
+        val req = networkRequests.firstOrNull { it.requestId == requestId }
         AlertDialog(
             onDismissRequest = { responseModalFor = null },
             title = { Text(Strings.t("cdp_response_body")) },
             text = {
-                Box(Modifier.fillMaxWidth()) {
-                    val body = responseBody
-                    if (body == null) {
-                        CircularProgressIndicator(Modifier.align(Alignment.Center))
-                    } else {
+                Column(Modifier.fillMaxWidth().height(450.dp)) {
+                    // Request info header (selectable) — timestamp / method url / status mime
+                    if (req != null) {
                         SelectableText(
-                            text = body,
-                            style = MaterialTheme.typography.body2.copy(fontFamily = FontFamily.Monospace),
+                            text = "${req.timestamp}  ${req.method} ${req.url}\n${req.status ?: "—"}  ${req.mime ?: "—"}",
+                            style = MaterialTheme.typography.caption.copy(fontFamily = FontFamily.Monospace),
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        Divider(color = AppColors.current.divider)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    // Body OR error — LazyColumn (bounded viewport → dialog doesn't grow on scroll).
+                    // CdpResponseBody distinguishes Body from Error so a stale requestId (after a page
+                    // reload) shows an error message instead of spinning the loader forever.
+                    Box(Modifier.fillMaxWidth().weight(1f)) {
+                        val rb = responseBody
+                        if (rb == null) {
+                            CircularProgressIndicator(Modifier.align(Alignment.Center))
+                        } else {
+                            when (rb) {
+                                is CdpResponseBody.Body -> LazyColumn(Modifier.fillMaxSize()) {
+                                    item {
+                                        SelectableText(
+                                            text = rb.text,
+                                            style = MaterialTheme.typography.body2.copy(fontFamily = FontFamily.Monospace),
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
+                                }
+                                is CdpResponseBody.Error -> Text(
+                                    rb.message,
+                                    color = MaterialTheme.colors.error,
+                                    style = MaterialTheme.typography.body2,
+                                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                                )
+                            }
+                        }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { responseModalFor = null }) { Text(Strings.t("ok")) }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = {
+                        val info = req?.let { "${it.timestamp} ${it.method} ${it.url}\n${it.status ?: "—"} ${it.mime ?: "—"}" } ?: ""
+                        val bodyText = (responseBody as? CdpResponseBody.Body)?.text
+                            ?: (responseBody as? CdpResponseBody.Error)?.message ?: ""
+                        Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection("$info\n---\n$bodyText"), null)
+                    }) { Text(Strings.t("copy")) }
+                    TextButton(onClick = { responseModalFor = null }) { Text(Strings.t("ok")) }
+                }
             },
         )
     }
@@ -402,7 +476,8 @@ private fun NetworkRow(req: CdpNetworkRequest, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(req.method, style = MaterialTheme.typography.caption.copy(fontFamily = FontFamily.Monospace), modifier = Modifier.width(50.dp))
+        Text(req.timestamp, style = MaterialTheme.typography.caption.copy(fontFamily = FontFamily.Monospace), modifier = Modifier.width(86.dp))
+        Text(req.method, style = MaterialTheme.typography.caption.copy(fontFamily = FontFamily.Monospace), modifier = Modifier.width(40.dp))
         Text(
             req.url,
             style = MaterialTheme.typography.caption,
@@ -416,7 +491,7 @@ private fun NetworkRow(req: CdpNetworkRequest, onClick: () -> Unit) {
             modifier = Modifier.width(40.dp),
             color = if (req.state == com.adbgui.core.domain.CdpNetState.FAILED) MaterialTheme.colors.error else MaterialTheme.colors.onSurface,
         )
-        Text(req.mime ?: "—", style = MaterialTheme.typography.caption, modifier = Modifier.width(80.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Text(req.mime ?: "—", style = MaterialTheme.typography.caption, modifier = Modifier.width(140.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
 

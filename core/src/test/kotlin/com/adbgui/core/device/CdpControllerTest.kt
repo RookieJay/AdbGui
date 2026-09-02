@@ -85,14 +85,15 @@ class CdpControllerTest {
         val (_, ctrl) = makeController(transport, runner, this)
         ctrl.connectManual(9222); advanceUntilIdle()
         val job = async { ctrl.getResponseBody("r1") }
-        advanceUntilIdle()
+        runCurrent()  // let cdpSend register pending + send the request WITHOUT advancing virtual time (the 5s withTimeout would fire under advanceUntilIdle)
         val sentReq = transport.sent.last { it.contains("Network.getResponseBody") }
         val id = sentReq.substringAfter("\"id\":").substringBefore(',').toInt()
         // CDP wraps the body under "result": {"id":N,"result":{"body":"hello","base64Encoded":false}}.
         transport.emit("""{"id":$id,"result":{"body":"hello","base64Encoded":false}}""")
-        advanceUntilIdle()
+        advanceUntilIdle()  // deliver the response → complete the await (before the 5s timeout)
         val body = job.await()
-        assertEquals("hello", body, "body must be unwrapped from result")
+        assertTrue(body is com.adbgui.core.domain.CdpResponseBody.Body, "expected Body, got $body")
+        assertEquals("hello", (body as com.adbgui.core.domain.CdpResponseBody.Body).text, "body must be unwrapped from result")
         ctrl.stop()
     }
 
@@ -277,6 +278,20 @@ class CdpControllerTest {
     }
 
     @Test
+    fun clearNetwork_empties_the_request_list() = runTest {
+        val transport = FakeCdpTransport()
+        val runner = FakeAdbProcessRunner()
+        val (_, ctrl) = makeController(transport, runner, this)
+        ctrl.connectManual(9222); advanceUntilIdle()
+        transport.emit("""{"method":"Network.requestWillBeSent","params":{"requestId":"r1","request":{"method":"GET","url":"http://x"}}}""")
+        advanceUntilIdle()
+        assertEquals(1, ctrl.networkRequests.value.size)
+        ctrl.clearNetwork()
+        assertTrue(ctrl.networkRequests.value.isEmpty())
+        ctrl.stop()
+    }
+
+    @Test
     fun unknown_method_does_not_crash_or_swallow() = runTest {
         val transport = FakeCdpTransport()
         val runner = FakeAdbProcessRunner()
@@ -308,9 +323,13 @@ class CdpControllerTest {
         ctrl.stop()
     }
 
-    // I3: one-click→manual switch must drain the prior session's forward (removeForward tcp:9222).
+    // I3 (revised): one-click→manual switch does NOT remove the prior forward — `start()` sets up the
+    // new forward BEFORE connectAndRun, so removing "the prior forward" (same local port tcp:9222)
+    // would remove the new one → Connection refused. Forward cleanup is `stop()`'s job. The
+    // one-click→manual-different-port leak is a deferred minor (rare). What I3 DOES do: drain the
+    // prior session's pending (tested elsewhere). Here we pin the no-remove-on-switch behavior.
     @Test
-    fun connectManual_after_start_removes_one_click_forward() = runTest {
+    fun connectManual_after_start_does_not_remove_forward_on_switch() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("shell", "cat /proc/net/unix"),
             AdbProcessResult(0, "@webview_devtools_remote_1\n", ""))
@@ -320,11 +339,11 @@ class CdpControllerTest {
         val (_, ctrl) = makeController(transport, runner, this)
         val job = launch { ctrl.start("s1") }
         advanceUntilIdle()
-        // one-click start granted the forward; switch to manual → must remove the prior forward
         ctrl.connectManual(9222)
         advanceUntilIdle()
-        assertTrue(runner.runs.any { it.contains("--remove") && it.contains("tcp:9222") },
-            "expected forward --remove tcp:9222 on one-click→manual switch; got: ${runner.runs}")
+        // The switch must NOT have issued --remove (that would remove the forward start() just set).
+        assertTrue(runner.runs.none { it.contains("--remove") },
+            "start→connectManual must not remove the forward (would remove the new one); got: ${runner.runs}")
         ctrl.stop()
         job.cancel()
     }

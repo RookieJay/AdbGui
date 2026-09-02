@@ -10,6 +10,7 @@ import com.adbgui.core.domain.CdpEvalResult
 import com.adbgui.core.domain.CdpEvent
 import com.adbgui.core.domain.CdpNetState
 import com.adbgui.core.domain.CdpNetworkRequest
+import com.adbgui.core.domain.CdpResponseBody
 import com.adbgui.core.domain.CdpTarget
 import com.adbgui.core.domain.ForwardEndpointType
 import com.adbgui.core.domain.ForwardSpec
@@ -18,7 +19,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,6 +57,7 @@ class CdpController(
     private val logger: Logger,
     private val scope: CoroutineScope,
     private val ringCap: Int = 10000,
+    private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -98,9 +102,11 @@ class CdpController(
     suspend fun start(serial: String) {
         val socket = commands.webviewSocket(serial)
             ?: throw CdpConnectionException("无 webview socket — 目标应用需在前台运行且含 WebView")
+        logger.info("[cdp] start: serial=$serial socket=$socket")
         commands.forward(serial,
             ForwardSpec(ForwardEndpointType.TCP, "9222"),
             ForwardSpec(ForwardEndpointType.LOCALABSTRACT, socket))
+        logger.info("[cdp] forwarded tcp:9222 -> localabstract:$socket")
         connectAndRun(serial = serial, port = 9222, ownsForwardNew = true)
     }
 
@@ -111,17 +117,19 @@ class CdpController(
     }
 
     private suspend fun connectAndRun(serial: String?, port: Int, ownsForwardNew: Boolean) {
-        // I3: tear down the prior session — remove its one-click forward + drain in-flight
-        // callers — before starting a new one. Reads OLD ownsForward/currentSerial before
-        // reassigning them below (one-click→manual or start→start switch leaked the forward).
-        if (ownsForward && currentSerial != null) {
-            runCatching { commands.removeForward(currentSerial!!, ForwardSpec(ForwardEndpointType.TCP, "9222")) }
-        }
+        logger.info("[cdp] connectAndRun: serial=$serial port=$port ownsForwardNew=$ownsForwardNew | prior ownsForward=$ownsForward priorSerial=$currentSerial priorPage=$currentPageId")
+        // I3: drain in-flight callers from the prior session + cancel its runJob before starting a
+        // new one. (Releases any `.await()`ing caller — e.g. a stranded Target.getTargets — with
+        // "connection closed" so it doesn't hang.) We do NOT remove the prior forward here: `start()`
+        // sets up the NEW forward BEFORE calling connectAndRun, so removing "the prior forward" would
+        // actually remove the new one (same local port tcp:9222) → Connection refused. Forward cleanup
+        // is `stop()`'s job (ownsForward). The one-click→manual-different-port leak is a deferred minor.
         val stranded = pendingMutex.withLock {
             val vals = pending.values.toList()
             pending.clear()
             vals
         }
+        if (stranded.isNotEmpty()) logger.info("[cdp] I3: draining ${stranded.size} stranded pending -> connection closed")
         stranded.forEach { it.completeExceptionally(CdpConnectionException("connection closed")) }
         runJob?.cancel()
         ownsForward = ownsForwardNew
@@ -131,13 +139,10 @@ class CdpController(
             try {
                 setupComplete = false
                 _connectionState.value = CdpConnectionState.CONNECTING
+                logger.info("[cdp] connecting browser ws ws://localhost:$port/devtools/browser ...")
                 transport.connect("ws://localhost:$port/devtools/browser")
-                // Start the inbound-frame collector on a sibling child so setup-command awaits
-                // (Target.getTargets / domain enables) do NOT block event dispatch — events flow
-                // even while we're suspended waiting for a setup response.
+                logger.info("[cdp] browser ws connected; sending Target.getTargets")
                 launch { runLoop(port) }
-                // CDP responses wrap the payload under "result": {"id":N,"result":{...}}.
-                // Unwrap before reading targetInfos (was reading at top level → always null).
                 val targetsResp = cdpSend("Target.getTargets").await()
                 val targetInfos = targetsResp["result"]?.jsonObject?.get("targetInfos")?.jsonArray
                 val pages = targetInfos?.mapNotNull {
@@ -148,15 +153,20 @@ class CdpController(
                     else null
                 } ?: emptyList()
                 _targets.value = pages
+                logger.info("[cdp] targets: ${pages.size} pages: ${pages.map { it.targetId }}")
                 val page = pages.firstOrNull()
                     ?: throw CdpConnectionException("没有 page target（应用没在前台？）")
                 currentPageId = page.targetId
+                logger.info("[cdp] connecting page ws ws://localhost:$port/devtools/page/${page.targetId} ...")
                 transport.connect("ws://localhost:$port/devtools/page/${page.targetId}")
-                setupComplete = true  // C1: page ws connected — state-observer can now react to drops
+                setupComplete = true
+                logger.info("[cdp] setupComplete=true; enabling domains")
                 domainEnables.forEach { cdpSend(it).await() }
+                logger.info("[cdp] domains enabled; session CONNECTED")
             } catch (e: CdpConnectionException) {
                 _error.value = e.message
                 _connectionState.value = transport.state.value
+                logger.info("[cdp] connectAndRun caught CdpConnectionException: ${e.message}")
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
@@ -188,12 +198,11 @@ class CdpController(
                 _error.value = t.message
             }
         }
-        // State observer — drives reconnect on drop. Mirrors transport.state into
-        // _connectionState, but overrides with RECONNECTING during backoff so the UI
-        // shows the "正在重连…" banner (C1).
+        // State observer — drives reconnect on drop.
         launch {
             var wasConnected = false
             transport.state.collect { newState ->
+                logger.info("[cdp] state -> $newState (wasConnected=$wasConnected setupComplete=$setupComplete page=$currentPageId)")
                 when (newState) {
                     CdpConnectionState.CONNECTED -> {
                         wasConnected = true
@@ -203,8 +212,8 @@ class CdpController(
                         if (wasConnected && setupComplete && currentPageId != null) {
                             wasConnected = false
                             _connectionState.value = CdpConnectionState.RECONNECTING
+                            logger.info("[cdp] drop detected -> driveReconnect")
                             driveReconnect(port)
-                            // driveReconnect sets _connectionState to CONNECTED or FAILED
                         } else {
                             _connectionState.value = newState
                         }
@@ -228,15 +237,18 @@ class CdpController(
             val page = currentPageId ?: break
             val pageUrl = "ws://localhost:$port/devtools/page/$page"
             val ok = runCatching { transport.connect(pageUrl) }.isSuccess
+            logger.info("[cdp] reconnect attempt #$failures: $pageUrl ok=$ok")
             if (ok) {
                 _connectionState.value = CdpConnectionState.CONNECTED
                 domainEnables.forEach { runCatching { cdpSend(it) } }
+                logger.info("[cdp] reconnected; re-enabled domains")
                 return
             }
             failures++
             if (failures >= 3) break
             backoff = (backoff * 2).coerceAtMost(30_000L)
         }
+        logger.info("[cdp] reconnect gave up after $failures failures -> FAILED")
         _connectionState.value = transport.state.value
     }
 
@@ -247,12 +259,13 @@ class CdpController(
         }
         val id = obj["id"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
         if (id != null) {
-            // Response — complete the pending request (correlation by id).
+            logger.debug("[cdp] response id=$id")
             val completer = pendingMutex.withLock { pending.remove(id) }
             completer?.complete(obj)
             return
         }
         val method = obj["method"]?.str() ?: return
+        logger.debug("[cdp] event: $method")
         val params = obj["params"]?.jsonObject ?: JsonObject(emptyMap())
         val event = CdpEventParser.parseEvent(method, params)
         if (event == null) {
@@ -263,14 +276,16 @@ class CdpController(
     }
 
     private suspend fun applyEvent(e: CdpEvent) {
+        val now = fmtClock(clock())
         pendingMutex.withLock {
             when (e) {
                 is CdpEvent.ConsoleAdd ->
                     // I1: assign a monotonic id so the LazyColumn key is stable even for
                     // identical console lines (hashCode collision → Compose IllegalArgumentException).
-                    _console.value = (_console.value + e.entry.copy(id = idCounter.getAndIncrement())).takeLast(ringCap)
+                    // timestamp = wall-clock arrival time, for manual review.
+                    _console.value = (_console.value + e.entry.copy(id = idCounter.getAndIncrement(), timestamp = now)).takeLast(ringCap)
                 is CdpEvent.NetRequest ->
-                    _net.value = _net.value + e.req
+                    _net.value = _net.value + e.req.copy(timestamp = now)
                 is CdpEvent.NetResponse ->
                     _net.value = _net.value.map {
                         if (it.requestId == e.requestId)
@@ -286,6 +301,9 @@ class CdpController(
             }
         }
     }
+
+    private fun fmtClock(ms: Long): String =
+        java.text.SimpleDateFormat("HH:mm:ss.SSS").format(java.util.Date(ms))
 
     /** Send a CDP request; return a [CompletableDeferred] that completes with the matching
      *  response object (routed by [handleFrame] via `id`). */
@@ -346,14 +364,27 @@ class CdpController(
     /** Clear the console ring buffer. `MutableStateFlow.value` is atomic — no mutex needed. */
     fun clearConsole() { _console.value = emptyList() }
 
+    /** Clear the network request list. Atomic. */
+    fun clearNetwork() { _net.value = emptyList() }
+
     /** Clear the inline error message (user dismissed the banner). Atomic, no mutex needed. */
     fun clearError() { _error.value = null }
 
-    suspend fun getResponseBody(requestId: String): String? {
+    suspend fun getResponseBody(requestId: String): CdpResponseBody {
         val params = buildJsonObject { put("requestId", requestId) }
-        val resp = cdpSend("Network.getResponseBody", params).await()
-        // CDP wraps the body under "result": {"id":N,"result":{"body":"…","base64Encoded":false}}.
-        return resp["result"]?.jsonObject?.get("body")?.str()
+        // Timeout: after a page reload the old requestId is gone; DevTools may return an error
+        // OR (worse) never respond → without a timeout the modal's spinner would spin forever.
+        val resp = try {
+            withTimeout(5_000) { cdpSend("Network.getResponseBody", params).await() }
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            return CdpResponseBody.Error("timeout (5s) — requestId may be stale after a reload")
+        } catch (e: CdpConnectionException) {
+            return CdpResponseBody.Error(e.message ?: "connection closed")
+        }
+        // CDP error response: {"id":N,"error":{"message":"No resource with given identifier found"}}
+        resp["error"]?.jsonObject?.get("message")?.str()?.let { return CdpResponseBody.Error(it) }
+        val body = resp["result"]?.jsonObject?.get("body")?.str()
+        return if (body != null) CdpResponseBody.Body(body) else CdpResponseBody.Error("no body")
     }
 
     /** Stop the session: cancel the run loop, close the transport, and (one-click mode) remove
@@ -368,6 +399,7 @@ class CdpController(
             pending.clear()
             vals
         }
+        logger.info("[cdp] stop: draining ${stranded.size} stranded, ownsForward=$ownsForward serial=$currentSerial")
         stranded.forEach { it.completeExceptionally(CdpConnectionException("connection closed")) }
         runJob?.cancel()
         runJob = null
