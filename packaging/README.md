@@ -8,7 +8,8 @@
 ## Portable (no-install) — recommended, no extra tooling (still needs the full JDK above)
 ./gradlew :desktop:packageAppImage
 # Output: desktop/build/compose/binaries/main/app/AdbGui/
-#   Contains AdbGui.exe + bundled JRE (runtime/). Run AdbGui.exe directly.
+#   Contains AdbGui.exe + bundled JRE (runtime/) + bundled platform-tools adb
+#   (app/resources/adb/win/). Run AdbGui.exe directly — no adb on PATH needed.
 # Zip this directory to distribute.
 
 ## MSI installer (per-user, Start menu shortcut) — requires WiX + full JDK

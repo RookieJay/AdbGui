@@ -16,9 +16,15 @@ class WindowsConfigDirProvider {
 }
 
 class ResourceBundledAdbProvider : BundledAdbProvider {
-    // v1 ships without a bundled adb; returns null so locator falls back to PATH/override.
-    // To bundle later: place adb.exe in desktop/src/main/resources/adb/win/adb.exe and resolve here.
-    override fun bundledAdbPath(): String? = null
+    // Resolves platform-tools adb shipped inside the native distribution.
+    // compose.application.resources.dir is set by the Compose runtime in a packaged
+    // distribution (AppImage/MSI); it is null under desktopRun, so in dev the locator
+    // falls back to PATH/override — no local adb needed for development.
+    override fun bundledAdbPath(): String? {
+        val resDir = System.getProperty("compose.application.resources.dir") ?: return null
+        val exe = Path.of(resDir, "adb", "win", "adb.exe")
+        return if (Files.isExecutable(exe)) exe.pathString else null
+    }
 }
 
 class SystemPathProbe : PathProbe {

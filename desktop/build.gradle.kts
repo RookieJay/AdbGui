@@ -23,6 +23,10 @@ compose.desktop.application {
         targetFormats(TargetFormat.Msi, TargetFormat.AppImage)
         packageName = "AdbGui"
         packageVersion = "1.0.0"
+        // Bundles desktop/resources/ into the AppImage's app/resources/ — used to ship
+        // platform-tools adb so users don't need adb on PATH. At runtime resolve via
+        // System.getProperty("compose.application.resources.dir").
+        appResourcesRootDir.set(layout.projectDirectory.dir("resources"))
         windows {
             dirChooser = true
             perUserInstall = true
