@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.*
@@ -156,7 +158,9 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 }
             }
             LaunchedEffect(lines.size) {
-                if (userAtBottom && lines.isNotEmpty()) listState.animateScrollToItem(lines.size - 1)
+                // Instant snap (not animate) so a fast/chatty stream on a laggy device can keep up —
+                // animateScrollToItem gets cancelled/re-launched on every new line and never settles.
+                if (userAtBottom && lines.isNotEmpty()) listState.scrollToItem(lines.size - 1)
             }
             val scrollScope = rememberCoroutineScope()
             val query = text
@@ -186,13 +190,20 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                         }
                     }
                 }
-                // Floating "jump to latest" button when the user has scrolled up.
+                // Floating "jump to latest" button when the user has scrolled up. Instant snap
+                // (animate gets interrupted by new lines on a fast stream and never reaches bottom).
                 if (!userAtBottom && lines.isNotEmpty()) {
                     OutlinedButton(
-                        onClick = { scrollScope.launch { listState.animateScrollToItem(lines.size - 1) } },
+                        onClick = { scrollScope.launch { listState.scrollToItem(lines.size - 1) } },
                         modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
                     ) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = Strings.t("scroll_to_latest")) }
                 }
+                // Right-edge scrollbar so the user can see position and drag (animateScrollToItem
+                // failing left them with no cue where they were on a laggy device).
+                VerticalScrollbar(
+                    adapter = rememberScrollbarAdapter(listState),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
                 // Empty-state "fix logcat" overlay (logd silenced, e.g. TCL TVs).
                 if (showEmptyHint) {
                     Column(
