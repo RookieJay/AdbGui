@@ -47,6 +47,8 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     val lines by vm.lines.collectAsState()
     val status by vm.status.collectAsState()
     val error by vm.error.collectAsState()
+    val fixing by vm.fixing.collectAsState()
+    val fixError by vm.fixError.collectAsState()
     // Filter UI state is LOCAL (synchronous) — vm.setFilters is async on serialDispatcher
     // (the L4 concurrency fix), so binding inputs to the controller's StateFlow made checkboxes
     // not uncheck and textfields not type. Local state drives the inputs; setFilters applies async.
@@ -157,6 +159,17 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
             }
             val scrollScope = rememberCoroutineScope()
             val query = text
+            // Empty-state hint: stream is RUNNING but no lines arrived for a grace period (~3s)
+            // → some devices (e.g. TCL TVs) ship with logd silenced. Don't flash on fresh start.
+            var showEmptyHint by remember { mutableStateOf(false) }
+            LaunchedEffect(status, lines.size) {
+                showEmptyHint = false
+                if (status == LogcatStatus.RUNNING && lines.isEmpty()) {
+                    kotlinx.coroutines.delay(3000)
+                    // Re-check after the delay — lines may have arrived, or status may have changed.
+                    if (status == LogcatStatus.RUNNING && lines.isEmpty()) showEmptyHint = true
+                }
+            }
             Box(Modifier.fillMaxSize()) {
                 // SelectionContainer makes the log lines selectable + copyable (Ctrl+C); without it
                 // plain Text can't be selected, which made copying a single line impossible.
@@ -177,6 +190,20 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                         onClick = { scrollScope.launch { listState.animateScrollToItem(lines.size - 1) } },
                         modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
                     ) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = Strings.t("scroll_to_latest")) }
+                }
+                // Empty-state "fix logcat" overlay (logd silenced, e.g. TCL TVs).
+                if (showEmptyHint) {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(Strings.t("logcat_empty_hint"), style = MaterialTheme.typography.body2)
+                        Button(onClick = { vm.fixLogcat() }, enabled = !fixing) {
+                            Text(Strings.t(if (fixing) "logcat_fix_running" else "logcat_fix_button"))
+                        }
+                        fixError?.let { InlineMessageBanner(it, MessageKind.Error) }
+                    }
                 }
             }
         }

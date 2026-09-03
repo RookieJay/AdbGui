@@ -393,4 +393,30 @@ class CommandRunnerTest {
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         cr.removeAllForwards("s1")
     }
+
+    @Test
+    fun fixLogcatDisabled_runs_setprop_stop_start_with_semicolons() = runTest {
+        // `;` (not `&&`) so a non-zero `stop logd` (logd already stopped) doesn't skip `start logd`.
+        // The whole sequence is one shell argv element so the device shell interprets the `;`.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(
+            listOf("shell", "setprop persist.sys.logd.level V; stop logd; start logd"),
+            AdbProcessResult(0, "", ""),
+        )
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.fixLogcatDisabled("s1")
+        // FakeAdbProcessRunner records every run() call's args — assert the shell command went out.
+        assertTrue(runner.runs.any { it.contains("shell") && it.contains("setprop persist.sys.logd.level V; stop logd; start logd") })
+    }
+
+    @Test
+    fun fixLogcatDisabled_propagates_nonzero_as_adb_command_exception() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(
+            listOf("shell", "setprop persist.sys.logd.level V; stop logd; start logd"),
+            AdbProcessResult(1, "", "setprop: permission denied"),
+        )
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.fixLogcatDisabled("s1") }
+    }
 }

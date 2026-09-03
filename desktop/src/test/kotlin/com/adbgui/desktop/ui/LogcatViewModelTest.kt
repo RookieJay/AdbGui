@@ -1,5 +1,6 @@
 package com.adbgui.desktop.ui
 
+import com.adbgui.core.adb.AdbProcessResult
 import com.adbgui.core.adb.CommandRunner
 import com.adbgui.core.adb.FakeAdbProcessRunner
 import com.adbgui.core.device.LogcatController
@@ -11,6 +12,8 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LogcatViewModelTest {
@@ -47,6 +50,47 @@ class LogcatViewModelTest {
         vm.clear()
         advanceUntilIdle()
         assertEquals(0, vm.lines.value.size)
+        vm.stop(); controller.stop()
+    }
+
+    @Test fun fixLogcat_runs_setprop_and_restarts_stream_clears_error() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I Tag: hi"))
+        runner.whenArgsContains(
+            listOf("shell", "setprop persist.sys.logd.level V; stop logd; start logd"),
+            AdbProcessResult(0, "", ""),
+        )
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
+        val selected = MutableStateFlow("abc")
+        val vm = LogcatViewModel(controller, selected, this)
+        advanceUntilIdle()
+        vm.fixLogcat()
+        advanceUntilIdle()
+        // The fix shell command went out. runs is List<List<String>> (argv per run); check substring.
+        assertTrue(runner.runs.any { args -> args.any { it.contains("setprop persist.sys.logd.level V") } })
+        // No error surfaced; fixing flag cycled back to false.
+        assertNull(vm.fixError.value)
+        assertEquals(false, vm.fixing.value)
+        vm.stop(); controller.stop()
+    }
+
+    @Test fun fixLogcat_surfaces_error_when_command_fails() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I Tag: hi"))
+        runner.whenArgsContains(
+            listOf("shell", "setprop persist.sys.logd.level V; stop logd; start logd"),
+            AdbProcessResult(1, "", "setprop: permission denied"),
+        )
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
+        val selected = MutableStateFlow("abc")
+        val vm = LogcatViewModel(controller, selected, this)
+        advanceUntilIdle()
+        vm.fixLogcat()
+        advanceUntilIdle()
+        assertNotNull(vm.fixError.value)
+        assertEquals(false, vm.fixing.value)
         vm.stop(); controller.stop()
     }
 }

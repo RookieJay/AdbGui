@@ -67,6 +67,15 @@ class CommandRunner(
         return sanitizeShellOutput(runCmd(serial, listOf("shell", cmd)).stdout)
     }
 
+    /** Re-enable logd after a device shipped with it silenced (e.g. TCL Android TVs set
+     *  `persist.sys.logd.level=S` at factory → `adb logcat` is empty). Runs setprop + stop/start
+     *  logd as one shell line with `;` so a non-zero `stop logd` (already stopped) doesn't skip
+     *  `start logd`. The caller MUST restart its logcat stream afterwards — restarting logd
+     *  breaks the existing stream. Throws AdbCommandException on non-zero exit. */
+    suspend fun fixLogcatDisabled(serial: String): String {
+        return runShellCmd(serial, "setprop persist.sys.logd.level V; stop logd; start logd")
+    }
+
     /** Normalize device-shell stdout for display:
      *  - strip ANSI escape sequences (CSI: `ESC[...letter`) — interactive commands like
      *    `top` emit these under the pty; ESC has no glyph in Compose fonts -> tofu;

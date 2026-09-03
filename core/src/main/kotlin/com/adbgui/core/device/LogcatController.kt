@@ -90,6 +90,14 @@ class LogcatController(
 
     fun export(): String = _lines.value.joinToString("\n") { it.raw }
 
+    /** Re-enable logd on a device that ships with it silenced (e.g. TCL TVs). Does NOT restart
+     *  the logcat stream — the caller does that via [start] afterwards (so the call site controls
+     *  timing and is testable without a live stream). */
+    suspend fun fixLogcatDisabled(serial: String): String {
+        logger.info("[logcat] fix disabled logd serial=$serial")
+        return commands.fixLogcatDisabled(serial)
+    }
+
     private suspend fun runLoop(serial: String) {
         var backoff = 1000L
         var failures = 0

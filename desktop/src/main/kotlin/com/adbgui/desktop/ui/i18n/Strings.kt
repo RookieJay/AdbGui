@@ -150,6 +150,9 @@ object Strings {
         "scroll_to_latest" to "跳到最新",
         "no_device_selected_logcat" to "未选择设备",
         "save_logcat_title" to "导出 logcat",
+        "logcat_empty_hint" to "看不到日志？某些设备（如 TCL 电视）出厂把 logd 设成静默。点此尝试修复。",
+        "logcat_fix_button" to "修复 logcat",
+        "logcat_fix_running" to "修复中…",
         // System Ops
         "system_ops" to "系统操作",
         "nav_system_ops" to "系统操作",
@@ -496,6 +499,9 @@ object Strings {
         "scroll_to_latest" to "Jump to latest",
         "no_device_selected_logcat" to "No device selected",
         "save_logcat_title" to "Export logcat",
+        "logcat_empty_hint" to "No logs? Some devices (e.g. TCL TVs) ship with logd silenced. Try fixing it.",
+        "logcat_fix_button" to "Fix logcat",
+        "logcat_fix_running" to "Fixing…",
         // System Ops
         "system_ops" to "System Ops",
         "nav_system_ops" to "System Ops",
