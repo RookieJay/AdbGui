@@ -49,6 +49,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     val error by vm.error.collectAsState()
     val fixing by vm.fixing.collectAsState()
     val fixError by vm.fixError.collectAsState()
+    val deviceOnline by vm.deviceOnline.collectAsState()
     // Filter UI state is LOCAL (synchronous) — vm.setFilters is async on serialDispatcher
     // (the L4 concurrency fix), so binding inputs to the controller's StateFlow made checkboxes
     // not uncheck and textfields not type. Local state drives the inputs; setFilters applies async.
@@ -160,14 +161,15 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
             val scrollScope = rememberCoroutineScope()
             val query = text
             // Empty-state hint: stream is RUNNING but no lines arrived for a grace period (~3s)
-            // → some devices (e.g. TCL TVs) ship with logd silenced. Don't flash on fresh start.
+            // AND the device is genuinely online → some devices (e.g. TCL TVs) ship with logd
+            // silenced. Don't flash on fresh start, and don't show for disconnected devices
+            // (which also yield an empty stream — that's not a silenced logd).
             var showEmptyHint by remember { mutableStateOf(false) }
-            LaunchedEffect(status, lines.size) {
+            LaunchedEffect(status, lines.size, deviceOnline) {
                 showEmptyHint = false
-                if (status == LogcatStatus.RUNNING && lines.isEmpty()) {
+                if (deviceOnline && status == LogcatStatus.RUNNING && lines.isEmpty()) {
                     kotlinx.coroutines.delay(3000)
-                    // Re-check after the delay — lines may have arrived, or status may have changed.
-                    if (status == LogcatStatus.RUNNING && lines.isEmpty()) showEmptyHint = true
+                    if (deviceOnline && status == LogcatStatus.RUNNING && lines.isEmpty()) showEmptyHint = true
                 }
             }
             Box(Modifier.fillMaxSize()) {

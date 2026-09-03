@@ -14,6 +14,10 @@ import kotlinx.coroutines.launch
 class LogcatViewModel(
     private val controller: LogcatController,
     private val selectedSerial: kotlinx.coroutines.flow.StateFlow<String?>,
+    /** Whether the currently selected device is ONLINE. The empty-state "fix logcat" hint is
+     *  gated on this — a disconnected/offline device produces an empty logcat stream too, but
+     *  that's not a silenced logd; showing the fix there is misleading. */
+    val deviceOnline: StateFlow<Boolean>,
     private val scope: CoroutineScope,
 ) {
     val lines: StateFlow<List<LogcatLine>> = controller.lines

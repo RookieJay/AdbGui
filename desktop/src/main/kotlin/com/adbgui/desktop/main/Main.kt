@@ -29,6 +29,9 @@ import com.adbgui.desktop.platform.KtorCdpTransport
 import com.adbgui.core.device.CdpController
 import com.adbgui.core.domain.DeviceStatus
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -64,7 +67,14 @@ fun main() = application {
         }
     }
     val logcatController = remember { com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope) }
-    val logcatVm = remember { LogcatViewModel(logcatController, selectedSerial, root.scope) }
+    // Whether the selected device is ONLINE — gates the Logcat empty-state "fix logd" hint so
+    // it doesn't show for disconnected devices (which also produce an empty logcat stream).
+    val deviceOnline = remember {
+        combine(root.repository.devices, selectedSerial) { list, serial ->
+            serial != null && list.any { it.serial == serial && it.status == DeviceStatus.ONLINE }
+        }.stateIn(root.scope, SharingStarted.WhileSubscribed(5000), false)
+    }
+    val logcatVm = remember { LogcatViewModel(logcatController, selectedSerial, deviceOnline, root.scope) }
     val systemOpsVm = remember { SystemOpsViewModel(root.repository, selectedSerial, root.scope) }
     val systemInfoVm = remember { SystemInfoViewModel(root.repository, selectedSerial, root.scope) }
     val remoteVm = remember { RemoteViewModel(root.repository, selectedSerial, root.settings, root.scope) }
