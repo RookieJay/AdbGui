@@ -356,7 +356,7 @@ class CommandRunner(
                 exitCode = r.exitCode,
                 stderr = "no bugreport zip path found in stdout; destDir=$destDir; stdout head=${r.stdout.take(200)}",
             )
-        return BugreportResult(zipPath = zip, stdout = r.stdout)
+        return BugreportResult(zipPath = zip)
     }
 
     /** Parse the zip path from `adb bugreport` stdout ("Bug report is stored at <path>"); fall back to

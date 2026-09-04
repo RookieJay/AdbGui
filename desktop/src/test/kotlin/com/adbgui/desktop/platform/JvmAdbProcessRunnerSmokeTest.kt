@@ -4,7 +4,6 @@ import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbSource
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class JvmAdbProcessRunnerSmokeTest {

@@ -108,7 +108,8 @@ fun AppConsoleScreen(
 
     // Drop APK files anywhere on the console to install — the modern path the button-picker
     // can't reliably be (the hand-rolled COM picker was removed). onEntered/Exited drive the
-    // drop-zone highlight; onDrop filters to .apk files and installs each.
+    // drop-zone highlight; onDrop filters to .apk files and installs all dropped APKs in one
+    // install-multiple call so split-APKs install together.
     val dropTarget = remember {
         object : DragAndDropTarget {
             override fun onDrop(event: DragAndDropEvent): Boolean {
