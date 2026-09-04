@@ -167,14 +167,24 @@ class DeviceListOrganizerTest {
     }
 
     @Test
-    fun groupBy_TAG_orders_by_mru_untagged_first_when_used_most_recently() {
-        // The untagged device was used most recently → untagged bucket first (MRU overrides the
-        // alphabetical base order).
+    fun groupBy_TAG_orders_tagged_groups_then_untagged_last() {
+        // Tagged groups order by online-first/MRU among themselves; the untagged catch-all
+        // bucket is pinned last regardless of MRU (it's not a real tag group).
         val z = view("z", lastUsedAt = 1L, tag = "zebra")
         val a = view("a", lastUsedAt = 2L, tag = "alpha")
         val none = view("n", lastUsedAt = 9L, tag = null)
         val groups = DeviceListOrganizer.groupBy(listOf(none, z, a), DeviceGroupBy.TAG)
-        assertEquals(listOf("tag_none", "alpha", "zebra"), groups.map { it.key })
+        assertEquals(listOf("alpha", "zebra", "tag_none"), groups.map { it.key })
+    }
+
+    @Test
+    fun groupBy_TAG_untagged_pinned_last_even_when_online_and_most_recently_used() {
+        // Strong form of the rule: even if the untagged device is online AND most-recently-used,
+        // the untagged bucket stays last — the user wants real tag groups to lead.
+        val tagged = view("t", lastUsedAt = 1L, status = DeviceStatus.ONLINE, tag = "lab")
+        val untagged = view("u", lastUsedAt = 999L, status = DeviceStatus.ONLINE, tag = null)
+        val groups = DeviceListOrganizer.groupBy(listOf(untagged, tagged), DeviceGroupBy.TAG)
+        assertEquals(listOf("lab", "tag_none"), groups.map { it.key })
     }
 
     @Test

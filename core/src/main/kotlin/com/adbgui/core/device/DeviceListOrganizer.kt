@@ -74,6 +74,14 @@ object DeviceListOrganizer {
                     .thenByDescending { (_, devs) -> devs.mapNotNull { it.lastUsedAt }.maxOrNull() ?: Long.MIN_VALUE }
             )
             .map { DeviceGroup(it.first, it.second) }
+            .let { groups ->
+                // In TAG mode the "untagged" bucket is a catch-all, not a real tag group — pin it
+                // last so the real tag groups lead, even if its member is online/most-recent.
+                if (mode == DeviceGroupBy.TAG) {
+                    val (none, rest) = groups.partition { it.key == "tag_none" }
+                    rest + none
+                } else groups
+            }
     }
 
     private fun typeBuckets(devices: List<DeviceView>): List<Pair<String, List<DeviceView>>> {
