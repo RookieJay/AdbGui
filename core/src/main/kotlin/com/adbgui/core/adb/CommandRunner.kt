@@ -2,6 +2,7 @@ package com.adbgui.core.adb
 
 import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbCommandException
+import com.adbgui.core.domain.BugreportResult
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceProps
 import com.adbgui.core.domain.Extra
@@ -344,6 +345,30 @@ class CommandRunner(
         runCmd(serial, listOf("forward", "--remove-all"))
     }
 
+    /** `adb -s <serial> bugreport <destDir>` — host command (not shell). adb writes
+     *  `bugreport-<date>.zip` into destDir and prints the path to stdout. Long-running (10–60s+):
+     *  passes a 180s timeout (JvmAdbProcessRunner.run honors it via async reads after T5). */
+    suspend fun bugreport(serial: String, destDir: String): BugreportResult {
+        val r = runCmd(serial, listOf("bugreport", destDir), timeoutMs = 180_000L)
+        val zip = extractBugreportPath(r.stdout, destDir)
+            ?: throw AdbCommandException(
+                command = "adb -s $serial bugreport $destDir",
+                exitCode = r.exitCode,
+                stderr = "no bugreport zip path found in stdout; destDir=$destDir; stdout head=${r.stdout.take(200)}",
+            )
+        return BugreportResult(zipPath = zip, stdout = r.stdout)
+    }
+
+    /** Parse the zip path from `adb bugreport` stdout ("Bug report is stored at <path>"); fall back to
+     *  scanning destDir for the newest bugreport-*.zip (real-device path; in tests stdout always carries it). */
+    private fun extractBugreportPath(stdout: String, destDir: String): String? {
+        val re = Regex("Bug report is stored at:?\\s*(\\S+)")
+        re.find(stdout)?.let { return it.groupValues[1].trim() }
+        val dir = java.io.File(destDir)
+        return dir.listFiles { f -> f.name.startsWith("bugreport-") && f.extension.equals("zip", ignoreCase = true) }
+            ?.maxByOrNull { it.lastModified() }?.absolutePath
+    }
+
     private fun extractPng(bytes: ByteArray): ByteArray? {
         val sig = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
         val start = indexOf(bytes, sig) ?: return null
@@ -360,11 +385,11 @@ class CommandRunner(
         return null
     }
 
-    private suspend fun runCmd(serial: String, args: List<String>): AdbProcessResult {
+    private suspend fun runCmd(serial: String, args: List<String>, timeoutMs: Long? = null): AdbProcessResult {
         server.ensureStarted()
         val full = buildList { add("-s"); add(serial); addAll(args) }
         val cmd = "adb ${full.joinToString(" ")}"
-        val r = runner.run(adb(), full)
+        val r = runner.run(adb(), full, timeoutMs)
         logger.debug("$cmd -> exit=${r.exitCode} err=${r.stderr.take(200)}")
         if (r.exitCode != 0) throw AdbCommandException(command = cmd, exitCode = r.exitCode, stderr = r.stderr)
         return r

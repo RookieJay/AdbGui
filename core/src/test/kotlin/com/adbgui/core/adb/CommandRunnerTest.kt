@@ -470,4 +470,24 @@ class CommandRunnerTest {
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         assertFailsWith<AdbCommandException> { cr.startActivity("abc", action = "VIEW", data = null, component = null, extras = emptyList()) }
     }
+
+    @Test
+    fun bugreport_returns_zip_path_from_stdout() = runTest {
+        // `adb -s <serial> bugreport <destDir>` is a host command. adb prints
+        // "Bug report is stored at <zipPath>"; we parse the zip path from stdout.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("bugreport"), AdbProcessResult(0,
+            "Bug report is processed\r\nBug report is stored at /tmp/bugreport-2026-09-04.zip\r\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val r = cr.bugreport("abc", "/tmp")
+        assertEquals("/tmp/bugreport-2026-09-04.zip", r.zipPath)
+    }
+
+    @Test
+    fun bugreport_nonzero_throws() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("bugreport"), AdbProcessResult(1, "", "device offline"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.bugreport("abc", "/tmp") }
+    }
 }

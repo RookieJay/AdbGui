@@ -162,4 +162,6 @@ class DeviceRepository(
     suspend fun removeForward(serial: String, local: com.adbgui.core.domain.ForwardSpec) =
         commands.removeForward(serial, local)
     suspend fun removeAllForwards(serial: String) = commands.removeAllForwards(serial)
+    suspend fun bugreport(serial: String, destDir: String): com.adbgui.core.domain.BugreportResult =
+        commands.bugreport(serial, destDir)
 }
