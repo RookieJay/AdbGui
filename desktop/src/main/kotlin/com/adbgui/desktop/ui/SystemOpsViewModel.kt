@@ -2,8 +2,10 @@ package com.adbgui.desktop.ui
 
 import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.domain.AdbCommandException
+import com.adbgui.core.domain.BugreportResult
 import com.adbgui.core.domain.RebootMode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +22,16 @@ class SystemOpsViewModel(
     val message: StateFlow<String?> = _message.asStateFlow()
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    // Bugreport is a long operation (10–60s+); keep its busy flag independent from _busy so it
+    // does not block the reboot/root/remount buttons while it runs.
+    private val _bugreportBusy = MutableStateFlow(false)
+    val bugreportBusy: StateFlow<Boolean> = _bugreportBusy.asStateFlow()
+    private val _bugreportResult = MutableStateFlow<BugreportResult?>(null)
+    val bugreportResult: StateFlow<BugreportResult?> = _bugreportResult.asStateFlow()
+    private val _bugreportError = MutableStateFlow<String?>(null)
+    val bugreportError: StateFlow<String?> = _bugreportError.asStateFlow()
+    private var bugreportJob: Job? = null
 
     fun reboot(mode: RebootMode) = scope.launch {
         val serial = selectedSerial.value ?: return@launch
@@ -57,4 +69,26 @@ class SystemOpsViewModel(
     }
 
     fun clearError() { _error.value = null }
+
+    fun bugreport(destDir: String) {
+        val serial = selectedSerial.value ?: return
+        bugreportJob?.cancel()
+        bugreportJob = scope.launch {
+            _bugreportBusy.value = true
+            _bugreportError.value = null
+            _bugreportResult.value = null
+            try {
+                _bugreportResult.value = repo.bugreport(serial, destDir)
+            } catch (e: AdbCommandException) {
+                _bugreportError.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
+            } finally {
+                _bugreportBusy.value = false
+            }
+        }
+    }
+
+    fun cancelBugreport() {
+        bugreportJob?.cancel()
+        _bugreportBusy.value = false
+    }
 }
