@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
  * device rows without recomputing the whole list from the data layer.
  */
 sealed class DeviceListItem {
-    data class Header(val key: String, val count: Int) : DeviceListItem()
+    data class Header(val key: String, val count: Int, val onlineCount: Int) : DeviceListItem()
     data class Device(val view: com.adbgui.core.domain.DeviceView, val groupKey: String) : DeviceListItem()
 }
 
@@ -55,7 +55,7 @@ class DeviceListViewModel(
                 DeviceListOrganizer.sortMru(devices).map { DeviceListItem.Device(it, "") }
             } else {
                 DeviceListOrganizer.groupBy(devices, s.deviceGroupBy).flatMap { g ->
-                    listOf(DeviceListItem.Header(g.key, g.devices.size)) +
+                    listOf(DeviceListItem.Header(g.key, g.devices.size, g.devices.count { it.isLive })) +
                         g.devices.map { DeviceListItem.Device(it, g.key) }
                 }
             }

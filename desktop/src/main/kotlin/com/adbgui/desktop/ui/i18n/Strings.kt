@@ -77,6 +77,8 @@ object Strings {
         "tag_label" to "标签",
         "tag_placeholder" to "输入分组标签（留空清除）",
         "tag_suggestions" to "已有标签",
+        "expand_all" to "展开全部",
+        "collapse_all" to "折叠全部",
         // Connect dialog
         "connect_title" to "连接设备",
         "ip_address" to "IP 地址",
@@ -444,6 +446,8 @@ object Strings {
         "tag_label" to "Tag",
         "tag_placeholder" to "Group tag (leave empty to clear)",
         "tag_suggestions" to "Existing tags",
+        "expand_all" to "Expand all",
+        "collapse_all" to "Collapse all",
         // Connect dialog
         "connect_title" to "Connect to device",
         "ip_address" to "IP address",

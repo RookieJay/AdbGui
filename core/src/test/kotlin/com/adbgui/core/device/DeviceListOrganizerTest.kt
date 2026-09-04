@@ -90,13 +90,23 @@ class DeviceListOrganizerTest {
     }
 
     @Test
-    fun groupBy_STATUS_offline_group_first_when_its_member_used_most_recently() {
-        // MRU is the top priority: if the offline device was used most recently, the offline
-        // group sorts first — even though "online first" is the usual preference.
+    fun groupBy_STATUS_online_group_first_even_if_offline_used_more_recently() {
+        // Online-first trumps MRU: even if the offline device was used more recently, the online
+        // group sorts first — the "currently connected" device's group must surface.
         val off1 = view("o1", lastUsedAt = 999L, status = DeviceStatus.OFFLINE)
         val on1 = view("n1", lastUsedAt = 10L, status = DeviceStatus.ONLINE)
         val groups = DeviceListOrganizer.groupBy(listOf(off1, on1), DeviceGroupBy.STATUS)
-        assertEquals(listOf("status_offline", "status_online"), groups.map { it.key })
+        assertEquals(listOf("status_online", "status_offline"), groups.map { it.key })
+    }
+
+    @Test
+    fun groupBy_SUBNET_online_group_first_even_if_offline_subnet_used_more_recently() {
+        // Cross-mode: a subnet with an online device sorts above a subnet whose (offline) device
+        // was used more recently. This is the fix for "connected device's group not on top".
+        val off = view("o", lastUsedAt = 999L, wirelessIp = "10.0.0.5", type = DeviceType.WIRELESS, status = DeviceStatus.OFFLINE)
+        val on = view("n", lastUsedAt = 1L, wirelessIp = "192.168.50.9", type = DeviceType.WIRELESS, status = DeviceStatus.ONLINE)
+        val groups = DeviceListOrganizer.groupBy(listOf(off, on), DeviceGroupBy.SUBNET)
+        assertEquals(listOf("192.168.50", "10.0.0"), groups.map { it.key })
     }
 
     @Test

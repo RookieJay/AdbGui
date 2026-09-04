@@ -17,11 +17,13 @@ data class DeviceGroup(val key: String, val devices: List<DeviceView>)
  * unit-testable without UI, and so the same logic could feed a future CLI/sorting elsewhere.
  *
  * Sort policy: most-recently-used first (by `lastUsedAt`), nulls last. Within a group, devices
- * are MRU-sorted. **Group order is also driven by MRU**: a group sorts by the most-recently-used
- * member's `lastUsedAt`, descending. This makes "the group containing the device you just used"
- * always rise to the top — the user's strongest signal — regardless of grouping mode. Groups
- * whose members all have null `lastUsedAt` sort last, falling back to a per-mode stable base
- * order (e.g. USB before wireless, subnets numerically, tags alphabetical) for tie-breaking.
+ * are MRU-sorted. **Group order: online-first, then MRU.** A group containing any online device
+ * sorts above all-offline groups — so the "currently connected" device's group always surfaces,
+ * regardless of mode (this is what makes the connected device's subnet/type/tag group land on
+ * top even when its `lastUsedAt` is stale or null, e.g. migrated from a pre-feature devices.json).
+ * Among same-online-status groups, the group with the larger max `lastUsedAt` ranks first. Ties
+ * (incl. all-null, fresh install) fall back to the per-mode stable base order: USB before
+ * wireless, subnets numerically, tags alphabetical.
  */
 object DeviceListOrganizer {
     /**
@@ -52,13 +54,16 @@ object DeviceListOrganizer {
             DeviceGroupBy.SUBNET -> subnetBuckets(devices)
             DeviceGroupBy.TAG -> tagBuckets(devices)
         }
-        // MRU-of-group ordering: a group's rank is its most-recently-used member's lastUsedAt.
-        // sortedByDescending is stable, so ties (incl. all-null groups) keep the base bucket
-        // order above as a tiebreaker.
+        // Online-first, then MRU: a group with any online device sorts above all-offline groups
+        // (so the currently-connected device's group always surfaces), then by max lastUsedAt
+        // desc. sortedByDescending is stable, so ties (incl. all-null groups) keep the base bucket
+        // order above as a tiebreak. Pair<Boolean, Long> is Comparable: Boolean first (true >
+        // false → online first), then Long desc.
         return buckets
-            .sortedByDescending { (_, devs) ->
-                devs.mapNotNull { it.lastUsedAt }.maxOrNull() ?: Long.MIN_VALUE
-            }
+            .sortedWith(
+                compareByDescending<Pair<String, List<DeviceView>>> { (_, devs) -> devs.any { it.isLive } }
+                    .thenByDescending { (_, devs) -> devs.mapNotNull { it.lastUsedAt }.maxOrNull() ?: Long.MIN_VALUE }
+            )
             .map { DeviceGroup(it.first, it.second) }
     }
 

@@ -37,6 +37,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.UnfoldLess
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -86,6 +88,8 @@ fun DeviceListPane(
     val existingTags = remember(allDevices) {
         allDevices.mapNotNull { it.tag }.filter { it.isNotBlank() }.distinct()
     }
+    val groupKeys = remember(items) { items.filterIsInstance<DeviceListItem.Header>().map { it.key } }
+    val hasGroups = groupKeys.isNotEmpty()
 
     Surface(modifier = modifier, color = MaterialTheme.colors.surface) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -112,6 +116,15 @@ fun DeviceListPane(
                                 settingsVm?.setDeviceGroupBy(mode)
                             }) { Text(groupByLabel(mode)) }
                         }
+                    }
+                }
+                // Expand-all / collapse-all. Only when grouped (NONE has no headers to toggle).
+                if (hasGroups) {
+                    IconButton(onClick = { collapsed.clear() }, enabled = groupKeys.any { collapsed[it] == true }) {
+                        Icon(Icons.Filled.UnfoldMore, contentDescription = Strings.t("expand_all"))
+                    }
+                    IconButton(onClick = { groupKeys.forEach { collapsed[it] = true } }, enabled = groupKeys.any { collapsed[it] != true }) {
+                        Icon(Icons.Filled.UnfoldLess, contentDescription = Strings.t("collapse_all"))
                     }
                 }
                 Spacer(Modifier.weight(1f))
@@ -205,7 +218,9 @@ private fun GroupHeaderRow(
     collapsed: Boolean,
     onToggle: () -> Unit,
 ) {
-    // A sticky-feeling section header: collapse chevron + label + count. Click toggles the group.
+    // A sticky-feeling section header: collapse chevron + label + online/total counts. The
+    // online dot+count stays visible when the group is collapsed, so the user can still tell
+    // which group has a connected device without expanding every group.
     Row(
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colors.background)
             .clickable { onToggle() }
@@ -219,10 +234,26 @@ private fun GroupHeaderRow(
         )
         Spacer(Modifier.width(4.dp))
         Text(
-            groupLabel(header.key) + Strings.t("group_count").format(header.count),
+            groupLabel(header.key),
             style = MaterialTheme.typography.caption,
             color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
         )
+        Spacer(Modifier.width(6.dp))
+        if (header.onlineCount > 0) {
+            StatusDot(isLive = true)
+            Spacer(Modifier.width(2.dp))
+            Text(
+                "${header.onlineCount}/${header.count}",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+            )
+        } else {
+            Text(
+                Strings.t("group_count").format(header.count),
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
+            )
+        }
     }
 }
 
