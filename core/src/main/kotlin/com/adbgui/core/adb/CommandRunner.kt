@@ -5,6 +5,7 @@ import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceProps
 import com.adbgui.core.domain.Extra
+import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.domain.InstallResult
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.core.domain.RebootMode
@@ -108,14 +109,21 @@ class CommandRunner(
         return PackageListParser.parse(r.stdout, thirdPartyOnly = true)
     }
 
-    suspend fun install(serial: String, apkPath: String, reinstall: Boolean): InstallResult {
+    suspend fun install(serial: String, paths: List<String>, flags: InstallFlags): InstallResult {
+        require(paths.isNotEmpty()) { "install: paths must not be empty" }
+        val subcmd = if (paths.size == 1) "install" else "install-multiple"
         val args = buildList {
-            add("install"); if (reinstall) add("-r"); add(apkPath)
+            add(subcmd)
+            if (flags.reinstall) add("-r")
+            if (flags.allowTest) add("-t")
+            if (flags.downgrade) add("-d")
+            if (flags.grantPerms) add("-g")
+            addAll(paths)
         }
         val r = runCmd(serial, args)
         val parsed = InstallResultParser.parse(r.stdout, r.stderr, r.exitCode)
         if (!parsed.success) {
-            throw AdbCommandException(command = "install ${args.joinToString(" ")}", exitCode = r.exitCode, stderr = r.stderr)
+            throw AdbCommandException(command = "adb -s $serial ${args.joinToString(" ")}", exitCode = r.exitCode, stderr = r.stderr)
         }
         return parsed
     }

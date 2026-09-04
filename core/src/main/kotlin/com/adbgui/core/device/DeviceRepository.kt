@@ -7,6 +7,7 @@ import com.adbgui.core.domain.DeviceSnapshot
 import com.adbgui.core.domain.DeviceStatus
 import com.adbgui.core.domain.DeviceType
 import com.adbgui.core.domain.DeviceView
+import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.domain.InstallResult
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.core.log.Logger
@@ -103,8 +104,8 @@ class DeviceRepository(
     suspend fun adbVersion(): String = commands.adbVersion()
     suspend fun runShellCmd(serial: String, cmd: String): String = commands.runShellCmd(serial, cmd)
     suspend fun listPackages(serial: String): List<PackageInfo> = commands.listPackages(serial)
-    suspend fun install(serial: String, apkPath: String, reinstall: Boolean): InstallResult =
-        commands.install(serial, apkPath, reinstall)
+    suspend fun install(serial: String, paths: List<String>, flags: InstallFlags): InstallResult =
+        commands.install(serial, paths, flags)
     suspend fun uninstall(serial: String, pkg: String): Boolean = commands.uninstall(serial, pkg)
     suspend fun clearData(serial: String, pkg: String): Boolean = commands.clearData(serial, pkg)
     suspend fun deviceProps(serial: String): DeviceProps = commands.deviceProps(serial)

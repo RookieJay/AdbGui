@@ -52,6 +52,14 @@ data class ConnectResult(
 
 data class InstallResult(val success: Boolean, val message: String, val code: String? = null)
 
+/** Flags for `adb install` / `adb install-multiple`. Each maps to a standard adb switch. */
+data class InstallFlags(
+    val reinstall: Boolean,   // -r  keep data
+    val allowTest: Boolean,   // -t  test APK
+    val downgrade: Boolean,   // -d  allow downgrade
+    val grantPerms: Boolean,  // -g  grant all runtime perms
+)
+
 data class DeviceProps(
     val brand: String,
     val manufacturer: String,

@@ -3,6 +3,7 @@ package com.adbgui.core.adb
 import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.AdbSource
+import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.log.NoopLogger
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -73,12 +74,40 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun install_single_with_flags_builds_correct_argv() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("install"), AdbProcessResult(0, "Success", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.install("abc", listOf("/x.apk"), InstallFlags(reinstall = true, allowTest = true, downgrade = false, grantPerms = false))
+        val argv = runner.runs.last()
+        assertTrue(argv.containsAll(listOf("-s","abc","install","-r","-t","/x.apk")))
+        assertTrue(!argv.contains("-d") && !argv.contains("-g"))
+    }
+
+    @Test
+    fun install_multiple_builds_install_multiple_argv() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("install-multiple"), AdbProcessResult(0, "Success", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.install("abc", listOf("/a.apk","/b.apk"), InstallFlags(reinstall = true, allowTest = false, downgrade = true, grantPerms = true))
+        val argv = runner.runs.last()
+        assertTrue(argv.contains("install-multiple"))
+        assertTrue(argv.containsAll(listOf("-r","-d","-g","/a.apk","/b.apk")))
+    }
+
+    @Test
+    fun install_empty_paths_throws_argument() = runTest {
+        val runner = FakeAdbProcessRunner()
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<IllegalArgumentException> { cr.install("abc", emptyList(), InstallFlags(reinstall = true, allowTest = false, downgrade = false, grantPerms = false)) }
+    }
+
+    @Test
     fun install_failure_throws_with_raw_stderr() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("install"), AdbProcessResult(1, "Failure [INSTALL_FAILED_OLDER_SDK]", ""))
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val ex = assertFailsWith<RuntimeException> { cr.install("abc", "x.apk", reinstall = true) }
-        // AdbCommandException is a RuntimeException; check message carries context
+        val ex = assertFailsWith<RuntimeException> { cr.install("abc", listOf("x.apk"), InstallFlags(reinstall = true, allowTest = false, downgrade = false, grantPerms = false)) }
         assert(ex.message!!.contains("install"))
     }
 

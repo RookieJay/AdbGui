@@ -3,6 +3,7 @@ package com.adbgui.desktop.ui
 import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.Extra
+import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CoroutineScope
@@ -43,7 +44,7 @@ class AppConsoleViewModel(
         val serial = selectedSerial.value ?: return@launch
         _busy.value = true; _error.value = null; _message.value = null
         try {
-            repo.install(serial, apkPath, reinstall = true)
+            repo.install(serial, listOf(apkPath), InstallFlags(reinstall = true, allowTest = false, downgrade = false, grantPerms = false))
             _message.value = Strings.t("install_success").format(java.io.File(apkPath).name)
             load()
         }
