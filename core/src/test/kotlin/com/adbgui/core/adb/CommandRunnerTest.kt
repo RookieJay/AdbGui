@@ -3,6 +3,8 @@ package com.adbgui.core.adb
 import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.AdbSource
+import com.adbgui.core.domain.Extra
+import com.adbgui.core.domain.ExtraType
 import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.log.NoopLogger
 import kotlinx.coroutines.flow.first
@@ -447,5 +449,33 @@ class CommandRunnerTest {
         )
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         assertFailsWith<AdbCommandException> { cr.fixLogcatDisabled("s1") }
+    }
+
+    @Test
+    fun startActivity_with_action_and_data_builds_argv() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("am","start"), AdbProcessResult(0, "Starting: Intent { ... }", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.startActivity("abc", action = "android.intent.action.VIEW", data = "myapp://x", component = null, extras = emptyList())
+        val argv = runner.runs.last()
+        assertTrue(argv.containsAll(listOf("-s","abc","shell","am","start","-a","android.intent.action.VIEW","-d","myapp://x")))
+    }
+
+    @Test
+    fun startActivity_with_component_and_extras_builds_argv() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("am","start"), AdbProcessResult(0, "Starting", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.startActivity("abc", action = null, data = null, component = "com.x/.Main", extras = listOf(Extra(ExtraType.STRING,"k","v")))
+        val argv = runner.runs.last()
+        assertTrue(argv.containsAll(listOf("-n","com.x/.Main","--es","k","v")))
+    }
+
+    @Test
+    fun startActivity_failure_throws() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("am","start"), AdbProcessResult(1, "", "Error"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.startActivity("abc", action = "VIEW", data = null, component = null, extras = emptyList()) }
     }
 }

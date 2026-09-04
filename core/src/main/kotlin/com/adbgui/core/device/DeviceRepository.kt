@@ -148,6 +148,7 @@ class DeviceRepository(
     suspend fun forceStop(serial: String, pkg: String): String = commands.forceStop(serial, pkg)
     suspend fun startApp(serial: String, pkg: String): String = commands.startApp(serial, pkg)
     suspend fun startAppActivity(serial: String, pkg: String, activity: String): String = commands.startAppActivity(serial, pkg, activity)
+    suspend fun startActivity(serial: String, action: String?, data: String?, component: String?, extras: List<com.adbgui.core.domain.Extra>): String = commands.startActivity(serial, action, data, component, extras)
     suspend fun sendBroadcast(serial: String, action: String, uri: String?, extras: List<com.adbgui.core.domain.Extra>): String = commands.sendBroadcast(serial, action, uri, extras)
     suspend fun queryProvider(serial: String, uri: String, where: String?): String = commands.queryProvider(serial, uri, where)
     suspend fun ls(serial: String, path: String): String = commands.ls(serial, path)

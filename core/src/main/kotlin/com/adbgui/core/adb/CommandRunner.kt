@@ -251,6 +251,25 @@ class CommandRunner(
         return runCmd(serial, listOf("shell", "am", "start", "-n", "$pkg/$activity")).stdout
     }
 
+    /** `am start` with optional action/data/component + extras. At least one of action/component
+     *  should be non-blank (VM guards); core doesn't enforce — adb will error if both blank. */
+    suspend fun startActivity(
+        serial: String,
+        action: String?,
+        data: String?,
+        component: String?,
+        extras: List<Extra>,
+    ): String {
+        val args = buildList {
+            add("shell"); add("am"); add("start")
+            if (!action.isNullOrBlank()) { add("-a"); add(action) }
+            if (!data.isNullOrBlank()) { add("-d"); add(data) }
+            if (!component.isNullOrBlank()) { add("-n"); add(component) }
+            extras.forEach { add(it.type.flag); add(it.key); add(it.value) }
+        }
+        return runCmd(serial, args).stdout
+    }
+
     suspend fun sendBroadcast(serial: String, action: String, uri: String?, extras: List<Extra>): String {
         val args = buildList {
             add("shell"); add("am"); add("broadcast"); add("-a"); add(action)
