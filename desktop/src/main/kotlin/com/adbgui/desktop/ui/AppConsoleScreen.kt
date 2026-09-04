@@ -307,7 +307,7 @@ fun AppConsoleScreen(
                             busy = busy,
                             broadcastResult = broadcastResult,
                             providerResult = providerResult,
-                            onStartActivity = { activity -> vm.startAppActivity(sel, activity) },
+                            onStartActivity = { action, data, component, extras -> vm.startActivity(action, data, component, extras) },
                             onSendBroadcast = { action, uri, extras -> vm.sendBroadcast(action, uri, extras) },
                             onQueryProvider = { uri, where -> vm.queryProvider(uri, where) },
                         )
@@ -380,12 +380,15 @@ private fun AdvancedPanel(
     busy: Boolean,
     broadcastResult: String?,
     providerResult: String?,
-    onStartActivity: (String) -> Unit,
+    onStartActivity: (String?, String?, String?, List<Extra>) -> Unit,
     onSendBroadcast: (String, String?, List<Extra>) -> Unit,
     onQueryProvider: (String, String?) -> Unit,
 ) {
     // am start
-    var activity by remember { mutableStateOf("") }
+    var amComponent by remember { mutableStateOf("") }
+    var amAction by remember { mutableStateOf("") }
+    var amData by remember { mutableStateOf("") }
+    val amExtras = remember { mutableStateListOf<Triple<ExtraType, String, String>>() }
     // broadcast
     var bAction by remember { mutableStateOf("") }
     var bUri by remember { mutableStateOf("") }
@@ -400,21 +403,45 @@ private fun AdvancedPanel(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // --- am start ---
+            // --- am start (deep link / explicit component) ---
             Text(Strings.t("start_activity"), style = MaterialTheme.typography.subtitle2)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = activity,
-                    singleLine = true,
-                    onValueChange = { activity = it },
-                    label = { Text(Strings.t("activity_name")) },
-                    placeholder = { Text("$pkg/.MainActivity") },
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
+            OutlinedTextField(
+                value = amComponent,
+                singleLine = true,
+                onValueChange = { amComponent = it },
+                label = { Text(Strings.t("component")) },
+                placeholder = { Text("$pkg/.MainActivity") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = amAction,
+                singleLine = true,
+                onValueChange = { amAction = it },
+                label = { Text(Strings.t("am_action")) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = amData,
+                singleLine = true,
+                onValueChange = { amData = it },
+                label = { Text(Strings.t("am_data")) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            ExtrasEditor(amExtras)
+            Row {
                 Button(
-                    enabled = !busy && activity.isNotBlank(),
-                    onClick = { onStartActivity(activity.trim()) },
+                    enabled = !busy && (amAction.isNotBlank() || amComponent.isNotBlank()),
+                    onClick = {
+                        val extras = amExtras
+                            .filter { it.second.isNotBlank() }
+                            .map { Extra(it.first, it.second.trim(), it.third) }
+                        onStartActivity(
+                            amAction.trim().ifBlank { null },
+                            amData.trim().ifBlank { null },
+                            amComponent.trim().ifBlank { null },
+                            extras,
+                        )
+                    },
                 ) { Text(Strings.t("start_activity")) }
             }
 
@@ -440,47 +467,8 @@ private fun AdvancedPanel(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            Text(Strings.t("extras"), style = MaterialTheme.typography.caption)
-            extrasRows.forEachIndexed { index, row ->
-                val (type, key, value) = row
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    var typeExpanded by remember { mutableStateOf(false) }
-                    Box {
-                        OutlinedButton(onClick = { typeExpanded = true }) { Text(type.flag) }
-                        DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                            ExtraType.values().forEach { et ->
-                                DropdownMenuItem(onClick = {
-                                    extrasRows[index] = Triple(et, key, value)
-                                    typeExpanded = false
-                                }) { Text(et.flag) }
-                            }
-                        }
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    OutlinedTextField(
-                        value = key,
-                        singleLine = true,
-                        onValueChange = { extrasRows[index] = Triple(type, it, value) },
-                        placeholder = { Text("key") },
-                        modifier = Modifier.width(120.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    OutlinedTextField(
-                        value = value,
-                        singleLine = true,
-                        onValueChange = { extrasRows[index] = Triple(type, key, it) },
-                        placeholder = { Text("value") },
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    TextButton(onClick = { extrasRows.removeAt(index) }) { Text(Strings.t("remove")) }
-                }
-            }
+            ExtrasEditor(extrasRows)
             Row {
-                OutlinedButton(onClick = { extrasRows.add(Triple(ExtraType.STRING, "", "")) }) {
-                    Text(Strings.t("add_button"))
-                }
-                Spacer(Modifier.width(8.dp))
                 Button(
                     enabled = !busy && bAction.isNotBlank(),
                     onClick = {
@@ -528,6 +516,53 @@ private fun AdvancedPanel(
                 Text(Strings.t("provider_result"), style = MaterialTheme.typography.caption)
                 SelectableText(it)
             }
+        }
+    }
+}
+
+@Composable
+private fun ExtrasEditor(
+    rows: androidx.compose.runtime.snapshots.SnapshotStateList<Triple<ExtraType, String, String>>,
+) {
+    Text(Strings.t("extras"), style = MaterialTheme.typography.caption)
+    rows.forEachIndexed { index, row ->
+        val (type, key, value) = row
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            var typeExpanded by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(onClick = { typeExpanded = true }) { Text(type.flag) }
+                DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
+                    ExtraType.values().forEach { et ->
+                        DropdownMenuItem(onClick = {
+                            rows[index] = Triple(et, key, value)
+                            typeExpanded = false
+                        }) { Text(et.flag) }
+                    }
+                }
+            }
+            Spacer(Modifier.width(4.dp))
+            OutlinedTextField(
+                value = key,
+                singleLine = true,
+                onValueChange = { rows[index] = Triple(type, it, value) },
+                placeholder = { Text("key") },
+                modifier = Modifier.width(120.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            OutlinedTextField(
+                value = value,
+                singleLine = true,
+                onValueChange = { rows[index] = Triple(type, key, it) },
+                placeholder = { Text("value") },
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(4.dp))
+            TextButton(onClick = { rows.removeAt(index) }) { Text(Strings.t("remove")) }
+        }
+    }
+    Row {
+        OutlinedButton(onClick = { rows.add(Triple(ExtraType.STRING, "", "")) }) {
+            Text(Strings.t("add_button"))
         }
     }
 }

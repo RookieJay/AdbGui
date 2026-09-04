@@ -247,10 +247,6 @@ class CommandRunner(
         return runCmd(serial, listOf("shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1")).stdout
     }
 
-    suspend fun startAppActivity(serial: String, pkg: String, activity: String): String {
-        return runCmd(serial, listOf("shell", "am", "start", "-n", "$pkg/$activity")).stdout
-    }
-
     /** `am start` with optional action/data/component + extras. At least one of action/component
      *  should be non-blank (VM guards); core doesn't enforce — adb will error if both blank. */
     suspend fun startActivity(

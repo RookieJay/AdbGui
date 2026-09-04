@@ -265,14 +265,6 @@ class CommandRunnerTest {
     }
 
     @Test
-    fun startAppActivity_passes_am_start_n() = runTest {
-        val runner = FakeAdbProcessRunner()
-        runner.whenArgsContains(listOf("am", "start"), AdbProcessResult(0, "Starting:", ""))
-        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        cr.startAppActivity("abc", "com.foo", "MainActivity")
-    }
-
-    @Test
     fun sendBroadcast_passes_action_and_extras() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("broadcast"), AdbProcessResult(0, "Broadcasting Intent { act=com.test }", ""))

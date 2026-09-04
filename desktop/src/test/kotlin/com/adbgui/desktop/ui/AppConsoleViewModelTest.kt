@@ -122,4 +122,27 @@ class AppConsoleViewModelTest {
         assertTrue(vm.providerResult.value?.contains("Row:") == true)
         vm.stop(); repo.stop()
     }
+
+    @Test fun startActivity_calls_repo_and_sets_message() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("am", "start"), AdbProcessResult(0, "Starting: Intent\n", ""))
+        val selected = MutableStateFlow<String?>("serial1")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.startActivity(action = "VIEW", data = "x://y", component = null, extras = emptyList())
+        advanceUntilIdle()
+        assertEquals("Starting: Intent", vm.message.value)
+        vm.stop(); repo.stop()
+    }
+
+    @Test fun startActivity_with_blank_action_and_component_does_not_call_repo() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("am", "start"), AdbProcessResult(0, "should not happen\n", ""))
+        val selected = MutableStateFlow<String?>("serial1")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.startActivity(action = "", data = null, component = "", extras = emptyList())
+        advanceUntilIdle()
+        assertTrue(vm.message.value == null, "no message when guard short-circuits")
+        assertTrue(runner.runs.none { it.any { a -> a.contains("am") && a.contains("start") } }, "repo must not be called")
+        vm.stop(); repo.stop()
+    }
 }

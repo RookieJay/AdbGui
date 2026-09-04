@@ -90,11 +90,16 @@ class AppConsoleViewModel(
         finally { _busy.value = false }
     }
 
-    fun startAppActivity(pkg: String, activity: String) = scope.launch {
+    fun startActivity(action: String?, data: String?, component: String?, extras: List<Extra>) = scope.launch {
         val serial = selectedSerial.value ?: return@launch
-        _busy.value = true; _error.value = null
-        try { repo.startAppActivity(serial, pkg, activity) }
-        catch (e: Exception) { _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error") }
+        val a = action?.trim()?.ifBlank { null }
+        val c = component?.trim()?.ifBlank { null }
+        if (a == null && c == null) return@launch  // guard: at least one
+        _busy.value = true; _error.value = null; _message.value = null
+        try {
+            val out = repo.startActivity(serial, a, data?.ifBlank { null }, c, extras).trim()
+            _message.value = out.ifBlank { Strings.t("start_activity_done") }
+        } catch (e: AdbCommandException) { _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}" }
         finally { _busy.value = false }
     }
 
