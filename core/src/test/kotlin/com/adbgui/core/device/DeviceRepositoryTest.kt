@@ -171,4 +171,36 @@ class DeviceRepositoryTest {
         assertEquals("lab", v.tag)
         repo.stop()
     }
+
+    @Test
+    fun clearTag_clears_tag_from_all_devices_in_one_write() = runTest {
+        // Three devices tagged "lab"; clearTag must untag all three atomically. (Per-device
+        // setTag(null) races and only clears one — the bug this guards against.)
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(
+                DeviceSnapshot("a", DeviceStatus.ONLINE),
+                DeviceSnapshot("b", DeviceStatus.ONLINE),
+                DeviceSnapshot("c", DeviceStatus.ONLINE),
+            ))
+        }
+        val dir = Files.createTempDirectory("rep6")
+        val history = DeviceHistoryStore(dir, clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        history.upsert("a", DeviceType.USB, null, null); history.setTag("a", "lab")
+        history.upsert("b", DeviceType.USB, null, null); history.setTag("b", "lab")
+        history.upsert("c", DeviceType.USB, null, null); history.setTag("c", "lab")
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        repo.clearTag("lab")
+        val views = repo.devices.value.associateBy { it.serial }
+        assertEquals(null, views["a"]?.tag)
+        assertEquals(null, views["b"]?.tag)
+        assertEquals(null, views["c"]?.tag)
+        // Persisted too:
+        val hist = history.load().associateBy { it.serial }
+        assertEquals(null, hist["a"]?.tag)
+        assertEquals(null, hist["b"]?.tag)
+        assertEquals(null, hist["c"]?.tag)
+        repo.stop()
+    }
 }

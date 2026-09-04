@@ -233,7 +233,7 @@ fun DeviceListPane(
             confirmButton = {
                 DangerButton(onClick = {
                     tagToDelete = null
-                    allDevices.filter { it.tag == tag }.forEach { vm.setTag(it.serial, null) }
+                    vm.clearTag(tag)
                 }) { Text(Strings.t("delete")) }
             },
             dismissButton = { TextButton(onClick = { tagToDelete = null }) { Text(Strings.t("cancel")) } },

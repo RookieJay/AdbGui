@@ -120,6 +120,8 @@ class DeviceListViewModel(
 
     fun setAlias(serial: String, alias: String?) { scope.launch { repo.setAlias(serial, alias) } }
     fun setTag(serial: String, tag: String?) { scope.launch { repo.setTag(serial, tag) } }
+    /** Atomically clear [tag] from every device bearing it (not a per-device race). */
+    fun clearTag(tag: String) { scope.launch { repo.clearTag(tag) } }
     fun touchLastUsed(serial: String) { scope.launch { repo.touchLastUsed(serial) } }
     fun forget(serial: String) { scope.launch { repo.forgetDevice(serial) } }
     fun clearError() { _error.value = null }

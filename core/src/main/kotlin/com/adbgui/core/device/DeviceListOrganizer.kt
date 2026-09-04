@@ -27,11 +27,20 @@ data class DeviceGroup(val key: String, val devices: List<DeviceView>)
  */
 object DeviceListOrganizer {
     /**
-     * MRU sort: `lastUsedAt` descending, nulls last. Stable for equal timestamps (sortedWith is a
-     * stable merge sort). Implemented as an explicit comparator because `compareByDescending` +
-     * `reversed()` both mishandle null placement (descending reverses nulls to the front).
+     * Device sort within a group (and the flat NONE list): **online-first, then MRU**. Online
+     * devices sort above offline ones regardless of `lastUsedAt` — so a freshly-reconnected
+     * device (whose `lastUsedAt` is stale because auto-reconnect doesn't stamp it) surfaces
+     * above stale offline entries in the same group. Then by `lastUsedAt` desc, nulls last.
+     *
+     * Stable for equal (online, timestamp) tuples (sortedWith is a stable merge sort). Explicit
+     * comparator because `compareByDescending` + `reversed()` both mishandle null placement
+     * (descending reverses nulls to the front).
      */
     private val mruComparator = Comparator<DeviceView> { a, b ->
+        // Online-first: matches the group-level rule so within-group order is consistent.
+        val aLive = a.isLive
+        val bLive = b.isLive
+        if (aLive != bLive) return@Comparator if (aLive) -1 else 1
         val la = a.lastUsedAt
         val lb = b.lastUsedAt
         when {

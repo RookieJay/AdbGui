@@ -114,4 +114,25 @@ class DeviceHistoryStoreTest {
         val e = store.load().first()
         assertEquals(null, e.tag)
     }
+
+    @Test
+    fun clearTag_removes_tag_from_all_entries_in_one_atomic_write() = runTest {
+        // Regression guard: clearing a tag must affect EVERY device bearing it, not just the
+        // last writer. Per-device setTag(null) races on the read-modify-write in mutate() —
+        // concurrent writers each start from the same base file and the last write wins, so
+        // only one device's tag is actually cleared. clearTag does it in a single mutate.
+        val dir = Files.createTempDirectory("cleartag")
+        val store = DeviceHistoryStore(dir, clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        store.upsert("a", DeviceType.USB, null, null)
+        store.upsert("b", DeviceType.USB, null, null)
+        store.upsert("c", DeviceType.USB, null, null)
+        store.setTag("a", "lab")
+        store.setTag("b", "lab")
+        store.setTag("c", "other")
+        store.clearTag("lab")
+        val loaded = store.load().associateBy { it.serial }
+        assertEquals(null, loaded["a"]?.tag)
+        assertEquals(null, loaded["b"]?.tag)
+        assertEquals("other", loaded["c"]?.tag)  // unrelated tag untouched
+    }
 }

@@ -128,6 +128,12 @@ class DeviceRepository(
         recompute(tracker.devices.value)
     }
 
+    /** Clear [tag] from every device bearing it, atomically. See [DeviceHistoryStore.clearTag]. */
+    suspend fun clearTag(tag: String) {
+        history.clearTag(tag)
+        recompute(tracker.devices.value)
+    }
+
     suspend fun forgetDevice(serial: String) {
         history.remove(serial)
         recompute(tracker.devices.value)

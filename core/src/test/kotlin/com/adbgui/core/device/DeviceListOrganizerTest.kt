@@ -36,6 +36,29 @@ class DeviceListOrganizerTest {
     }
 
     @Test
+    fun sortMru_online_first_even_if_offline_used_more_recently() {
+        // Within a group (and the flat list), online trumps MRU: a reconnected device whose
+        // lastUsedAt is stale (auto-reconnect doesn't stamp it) must still surface above a
+        // same-group offline device that was used more recently.
+        val on = view("on", lastUsedAt = 10L, status = DeviceStatus.ONLINE)
+        val off = view("off", lastUsedAt = 999L, status = DeviceStatus.OFFLINE)
+        val out = DeviceListOrganizer.sortMru(listOf(off, on))
+        assertEquals(listOf("on", "off"), out.map { it.serial })
+    }
+
+    @Test
+    fun groupBy_SUBNET_online_device_surfaces_above_stale_offline_in_same_group() {
+        // Regression for the wifi-drop-and-reconnect bug: 192.168.50.9 just came back online
+        // (old lastUsedAt=1), 192.168.50.5 is a stale offline entry with a newer lastUsedAt=999.
+        // Same subnet group; the online device must list first within the group.
+        val on = view("on", lastUsedAt = 1L, wirelessIp = "192.168.50.9", type = DeviceType.WIRELESS, status = DeviceStatus.ONLINE)
+        val off = view("off", lastUsedAt = 999L, wirelessIp = "192.168.50.5", type = DeviceType.WIRELESS, status = DeviceStatus.OFFLINE)
+        val groups = DeviceListOrganizer.groupBy(listOf(off, on), DeviceGroupBy.SUBNET)
+        assertEquals(listOf("192.168.50"), groups.map { it.key })
+        assertEquals(listOf("on", "off"), groups[0].devices.map { it.serial })
+    }
+
+    @Test
     fun groupBy_NONE_returns_one_flat_group_sorted_by_mru() {
         val a = view("a", lastUsedAt = 100L)
         val b = view("b", lastUsedAt = 300L)

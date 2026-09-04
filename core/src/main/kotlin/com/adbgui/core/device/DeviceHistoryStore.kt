@@ -72,6 +72,16 @@ class DeviceHistoryStore(
         else entries + DeviceHistoryEntry(serial = serial, tag = tag)
     }
 
+    /**
+     * Clear [tag] from EVERY entry bearing it, in a single read-modify-write. This is the
+     * atomic counterpart to looping `setTag(serial, null)` per device — which races on
+     * concurrent mutate() calls (each starts from the same base file, last write wins, so only
+     * one device's tag is actually removed).
+     */
+    suspend fun clearTag(tag: String) = mutate { entries ->
+        entries.map { if (it.tag == tag) it.copy(tag = null) else it }
+    }
+
     suspend fun remove(serial: String) = mutate { entries -> entries.filterNot { it.serial == serial } }
 
     private suspend fun mutate(transform: (List<DeviceHistoryEntry>) -> List<DeviceHistoryEntry>) =
