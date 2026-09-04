@@ -40,12 +40,13 @@ class AppConsoleViewModel(
         finally { _busy.value = false }
     }
 
-    fun install(apkPath: String) = scope.launch {
+    fun install(paths: List<String>, flags: InstallFlags) = scope.launch {
+        require(paths.isNotEmpty()) { "install: no paths" }
         val serial = selectedSerial.value ?: return@launch
         _busy.value = true; _error.value = null; _message.value = null
         try {
-            repo.install(serial, listOf(apkPath), InstallFlags(reinstall = true, allowTest = false, downgrade = false, grantPerms = false))
-            _message.value = Strings.t("install_success").format(java.io.File(apkPath).name)
+            repo.install(serial, paths, flags)
+            _message.value = Strings.t("install_success").format(paths.joinToString(", "))
             load()
         }
         catch (e: Exception) { _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error") }

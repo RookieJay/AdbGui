@@ -35,6 +35,7 @@ import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
+import androidx.compose.material.Checkbox
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
@@ -60,6 +61,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Color
 import com.adbgui.core.domain.Extra
 import com.adbgui.core.domain.ExtraType
+import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.desktop.ui.i18n.Strings
 import java.awt.Toolkit
@@ -95,6 +97,14 @@ fun AppConsoleScreen(
     var confirmUninstall by remember { mutableStateOf<String?>(null) }
     var confirmClearData by remember { mutableStateOf<String?>(null) }
     var dragOver by remember { mutableStateOf(false) }
+    // Install flags — local Compose state delegates; survive across recomposition, and the
+    // drop-target closure below reads the current values at drop time (state delegates are
+    // stable objects whose .value is read live each call, so the remember{object} captures the
+    // delegates, not stale booleans).
+    var reinstall by remember { mutableStateOf(true) }
+    var allowTest by remember { mutableStateOf(false) }
+    var downgrade by remember { mutableStateOf(false) }
+    var grantPerms by remember { mutableStateOf(false) }
 
     // Drop APK files anywhere on the console to install — the modern path the button-picker
     // can't reliably be (the hand-rolled COM picker was removed). onEntered/Exited drive the
@@ -108,7 +118,10 @@ fun AppConsoleScreen(
                         ?.filterIsInstance<File>()
                 }.getOrNull().orEmpty().filter { it.extension.equals("apk", ignoreCase = true) }
                 if (apks.isEmpty()) return false
-                apks.forEach { vm.install(it.absolutePath) }
+                vm.install(
+                    apks.map { it.absolutePath },
+                    InstallFlags(reinstall, allowTest, downgrade, grantPerms),
+                )
                 return true
             }
             override fun onEntered(event: DragAndDropEvent) { dragOver = true }
@@ -151,16 +164,32 @@ fun AppConsoleScreen(
                 Button(
                     enabled = !busy,
                     onClick = {
-                        val chosen = com.adbgui.desktop.platform.FileDialogs.pickFile(
+                        val chosen = com.adbgui.desktop.platform.FileDialogs.pickFiles(
                             title = Strings.t("select_apk"),
-                            currentPath = null,
                             filePattern = "*.apk",
                         )
-                        if (chosen != null) vm.install(chosen)
+                        if (chosen != null && chosen.isNotEmpty()) {
+                            vm.install(chosen, InstallFlags(reinstall, allowTest, downgrade, grantPerms))
+                        }
                     },
                 ) { Text(Strings.t("install_apk")) }
                 Spacer(Modifier.width(8.dp))
                 if (busy) CircularProgressIndicator(modifier = Modifier.heightIn(max = 18.dp))
+            }
+
+            // Install flags row — mirrors adb install switches; passed to both picker and drop installs.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = reinstall, onCheckedChange = { reinstall = it })
+                Text(Strings.t("flag_reinstall"))
+                Spacer(Modifier.width(8.dp))
+                Checkbox(checked = allowTest, onCheckedChange = { allowTest = it })
+                Text(Strings.t("flag_allow_test"))
+                Spacer(Modifier.width(8.dp))
+                Checkbox(checked = downgrade, onCheckedChange = { downgrade = it })
+                Text(Strings.t("flag_downgrade"))
+                Spacer(Modifier.width(8.dp))
+                Checkbox(checked = grantPerms, onCheckedChange = { grantPerms = it })
+                Text(Strings.t("flag_grant_perms"))
             }
 
             // Drop zone: visible affordance that the whole screen accepts APK drops.

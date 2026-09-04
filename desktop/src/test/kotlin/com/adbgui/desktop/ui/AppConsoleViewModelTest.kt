@@ -11,6 +11,7 @@ import com.adbgui.core.domain.AdbSource
 import com.adbgui.core.domain.DeviceSnapshot
 import com.adbgui.core.domain.Extra
 import com.adbgui.core.domain.ExtraType
+import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.log.NoopLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -37,7 +38,7 @@ class AppConsoleViewModelTest {
         runner.whenArgsContains(listOf("pm", "list"), AdbProcessResult(0, "package:com.foo\n", ""))
         val selected = MutableStateFlow<String?>("abc")
         val (repo, vm) = vm(runner, selected, this)
-        vm.install("C:/x/test.apk"); advanceUntilIdle()
+        vm.install(listOf("C:/x/test.apk"), InstallFlags(reinstall = true, allowTest = false, downgrade = false, grantPerms = false)); advanceUntilIdle()
         val msg = vm.message.value
         assertTrue(msg != null && msg.contains("test.apk"), "expected success message with apk name, got: $msg")
         vm.stop(); repo.stop()
@@ -48,9 +49,28 @@ class AppConsoleViewModelTest {
         runner.whenArgsContains(listOf("install"), AdbProcessResult(0, "Failure [INSTALL_FAILED_OLDER_SDK]\n", ""))
         val selected = MutableStateFlow<String?>("abc")
         val (repo, vm) = vm(runner, selected, this)
-        vm.install("C:/x/test.apk"); advanceUntilIdle()
+        vm.install(listOf("C:/x/test.apk"), InstallFlags(reinstall = true, allowTest = false, downgrade = false, grantPerms = false)); advanceUntilIdle()
         assertTrue(vm.error.value != null, "expected error on install failure")
         assertTrue(vm.message.value == null, "no success message on failure")
+        vm.stop(); repo.stop()
+    }
+
+    @Test fun install_multiple_calls_repo_with_paths_and_flags() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("install-multiple"), AdbProcessResult(0, "Success\n", ""))
+        runner.whenArgsContains(listOf("pm", "list"), AdbProcessResult(0, "package:com.foo\n", ""))
+        val selected = MutableStateFlow<String?>("serial1")
+        val (repo, vm) = vm(runner, selected, this)
+        val flags = InstallFlags(reinstall = true, allowTest = false, downgrade = true, grantPerms = false)
+        vm.install(listOf("/a.apk", "/b.apk"), flags); advanceUntilIdle()
+        // Verify the runner received one install-multiple call with both paths, in order.
+        val calls = runner.runs.filter { it.any { a -> a.contains("install-multiple") } }
+        assertEquals(1, calls.size, "expected exactly one install-multiple call, got ${calls.size}: ${runner.runs}")
+        val args = calls.first()
+        assertTrue(args.contains("/a.apk") && args.contains("/b.apk"), "both apks in one call: $args")
+        // Downgrade flag (-d) should be present; allowTest (-t) absent.
+        assertTrue(args.contains("-d"), "downgrade flag -d expected: $args")
+        assertTrue(!args.contains("-t"), "allowTest flag -t should be absent: $args")
         vm.stop(); repo.stop()
     }
 
