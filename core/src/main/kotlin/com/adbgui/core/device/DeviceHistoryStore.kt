@@ -19,6 +19,8 @@ data class DeviceHistoryEntry(
     val wirelessIp: String? = null,
     val wirelessPort: Int? = null,
     val lastConnectedAt: Long? = null,
+    val lastUsedAt: Long? = null,
+    val tag: String? = null,
 )
 
 class DeviceHistoryStore(
@@ -52,6 +54,22 @@ class DeviceHistoryStore(
         val existing = entries.indexOfFirst { it.serial == serial }
         if (existing >= 0) entries.map { if (it.serial == serial) it.copy(alias = alias) else it }
         else entries + DeviceHistoryEntry(serial = serial, alias = alias)
+    }
+
+    /** Stamp "last used" (selection / connect) for MRU sorting. Creates an entry for previously-
+     *  unknown serials (e.g. a USB-only device that was never wireless-connected) so MRU sort can
+     *  place it. Does NOT touch lastConnectedAt (that means "last wireless connect"). */
+    suspend fun touchLastUsed(serial: String) = mutate { entries ->
+        val idx = entries.indexOfFirst { it.serial == serial }
+        if (idx >= 0) entries.map { if (it.serial == serial) it.copy(lastUsedAt = clock()) else it }
+        else entries + DeviceHistoryEntry(serial = serial, lastUsedAt = clock())
+    }
+
+    /** Set a free-form grouping tag. null clears it. Creates an entry for unknown serials. */
+    suspend fun setTag(serial: String, tag: String?) = mutate { entries ->
+        val idx = entries.indexOfFirst { it.serial == serial }
+        if (idx >= 0) entries.map { if (it.serial == serial) it.copy(tag = tag) else it }
+        else entries + DeviceHistoryEntry(serial = serial, tag = tag)
     }
 
     suspend fun remove(serial: String) = mutate { entries -> entries.filterNot { it.serial == serial } }

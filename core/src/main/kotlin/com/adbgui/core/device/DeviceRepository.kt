@@ -58,6 +58,8 @@ class DeviceRepository(
                 wirelessIp = h?.wirelessIp,
                 wirelessPort = h?.wirelessPort,
                 lastConnectedAt = h?.lastConnectedAt,
+                lastUsedAt = h?.lastUsedAt,
+                tag = h?.tag,
             )
         }
         _devices.value = merged
@@ -68,6 +70,8 @@ class DeviceRepository(
         if (r.success) {
             val serial = "$ip:$port"
             history.upsert(serial = serial, type = DeviceType.WIRELESS, wirelessIp = ip, wirelessPort = port)
+            // A successful connect counts as "use" for MRU sort.
+            history.touchLastUsed(serial)
             recompute(tracker.devices.value)
             // Auto-name: fetch brand+model and set alias so the list shows a friendly name
             // instead of a bare serial. Only when the device has NO existing alias — never
@@ -109,6 +113,18 @@ class DeviceRepository(
 
     suspend fun setAlias(serial: String, alias: String?) {
         history.setAlias(serial, alias)
+        recompute(tracker.devices.value)
+    }
+
+    /** Stamp "last used" (selection / connect) for MRU sorting. */
+    suspend fun touchLastUsed(serial: String) {
+        history.touchLastUsed(serial)
+        recompute(tracker.devices.value)
+    }
+
+    /** Set a free-form grouping tag (null clears). */
+    suspend fun setTag(serial: String, tag: String?) {
+        history.setTag(serial, tag)
         recompute(tracker.devices.value)
     }
 

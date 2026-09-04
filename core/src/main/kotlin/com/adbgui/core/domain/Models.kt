@@ -8,6 +8,13 @@ enum class DeviceStatus { ONLINE, OFFLINE, UNAUTHORIZED, UNKNOWN }
 enum class AdbSource { OVERRIDE, BUNDLED, PATH }
 
 /**
+ * How the device list is grouped in the sidebar. Stored in settings.json.
+ * NONE = flat list, MRU-sorted.
+ */
+@Serializable
+enum class DeviceGroupBy { NONE, TYPE, STATUS, SUBNET, TAG }
+
+/**
  * Why an `adb connect` failed. Used by the UI to give an actionable hint instead of a
  * bare "Connection refused" — a stale port (device rebooted, wireless debugging port
  * randomized) and an unreachable host (device off / wrong IP) both warrant the same
@@ -26,6 +33,8 @@ data class DeviceView(
     val wirelessIp: String? = null,
     val wirelessPort: Int? = null,
     val lastConnectedAt: Long? = null,
+    val lastUsedAt: Long? = null,
+    val tag: String? = null,
 ) {
     val isLive: Boolean get() = status == DeviceStatus.ONLINE
 }

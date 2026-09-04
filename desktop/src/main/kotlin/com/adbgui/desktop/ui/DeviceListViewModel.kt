@@ -1,21 +1,63 @@
 package com.adbgui.desktop.ui
 
+import com.adbgui.core.device.DeviceGroup
+import com.adbgui.core.device.DeviceListOrganizer
 import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.domain.ConnectFailureReason
 import com.adbgui.core.domain.ConnectResult
+import com.adbgui.core.domain.DeviceGroupBy
 import com.adbgui.core.domain.DeviceView
 import com.adbgui.core.domain.PairResult
+import com.adbgui.core.settings.Settings
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-class DeviceListViewModel(private val repo: DeviceRepository, private val scope: CoroutineScope) {
+/**
+ * One renderable row in the device list. LazyColumn flattens groups into a stream of these so
+ * group headers and device rows share a single scroll + scrollbar (and MRU order is preserved
+ * top-to-bottom within each group).
+ */
+sealed class DeviceListItem {
+    data class Header(val key: String, val count: Int) : DeviceListItem()
+    data class Device(val view: DeviceView) : DeviceListItem()
+}
+
+class DeviceListViewModel(
+    private val repo: DeviceRepository,
+    private val scope: CoroutineScope,
+    settings: StateFlow<Settings>,
+) {
+    /**
+     * Flat list of renderable items (group headers + device rows), already MRU-sorted within each
+     * group and group-ordered by [DeviceListOrganizer]. When groupBy == NONE there are no headers,
+     * just device rows. Combining repo.devices with settings means a settings change (e.g. picking
+     * "group by subnet") re-organizes the list without the repo re-emitting.
+     *
+     * Cold [Flow] (not [StateFlow]/stateIn) so constructing the VM does NOT launch a sharing
+     * coroutine in the injected scope — that coroutine would never settle under `runTest`
+     * ([UncompletedCoroutinesError]). The UI collects with an initial value via [collectAsState].
+     */
+    val items: Flow<List<DeviceListItem>> =
+        combine(repo.devices, settings) { devices, s ->
+            if (s.deviceGroupBy == DeviceGroupBy.NONE) {
+                DeviceListOrganizer.sortMru(devices).map { DeviceListItem.Device(it) }
+            } else {
+                DeviceListOrganizer.groupBy(devices, s.deviceGroupBy).flatMap { g ->
+                    listOf(DeviceListItem.Header(g.key, g.devices.size)) + g.devices.map { DeviceListItem.Device(it) }
+                }
+            }
+        }
+
+    /** The raw device list (still useful for callers that need devices without group headers). */
     val devices: StateFlow<List<DeviceView>> = repo.devices
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -73,6 +115,8 @@ class DeviceListViewModel(private val repo: DeviceRepository, private val scope:
     }
 
     fun setAlias(serial: String, alias: String?) { scope.launch { repo.setAlias(serial, alias) } }
+    fun setTag(serial: String, tag: String?) { scope.launch { repo.setTag(serial, tag) } }
+    fun touchLastUsed(serial: String) { scope.launch { repo.touchLastUsed(serial) } }
     fun forget(serial: String) { scope.launch { repo.forgetDevice(serial) } }
     fun clearError() { _error.value = null }
 

@@ -10,9 +10,13 @@ import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbSource
 import com.adbgui.core.domain.ConnectFailureReason
 import com.adbgui.core.domain.ConnectResult
+import com.adbgui.core.domain.DeviceGroupBy
 import com.adbgui.core.domain.DeviceSnapshot
+import com.adbgui.core.domain.DeviceStatus
+import com.adbgui.core.domain.DeviceType
 import com.adbgui.core.domain.PairResult
 import com.adbgui.core.log.NoopLogger
+import com.adbgui.core.settings.Settings
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.i18n.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +40,7 @@ class DeviceListViewModelTest {
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 1.2.3.4:5555", ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
-        val vm = DeviceListViewModel(repo, this)
+        val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
         var result: ConnectResult? = null
         var dismissed = false
         val dismissJob = launch { vm.dismissConnect.collect { dismissed = true } }
@@ -78,7 +82,7 @@ class DeviceListViewModelTest {
         // regardless. The key point: pair success alone must not raise an error.
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
-        val vm = DeviceListViewModel(repo, this)
+        val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
         var pairResult: PairResult? = null
         vm.pair("1.2.3.4", 4321, "123456") { pairResult = it }
         val deadline = System.currentTimeMillis() + 5_000
@@ -110,7 +114,7 @@ class DeviceListViewModelTest {
         )
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
-        val vm = DeviceListViewModel(repo, this)
+        val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
         var result: ConnectResult? = null
         vm.connect("1.2.3.4", 5555) { result = it }
         val deadline = System.currentTimeMillis() + 5_000
@@ -128,5 +132,108 @@ class DeviceListViewModelTest {
         assertTrue(err.contains("端口可能已变"), "expected hint, got: $err")
         assertTrue(err.contains("Connection refused"), "expected raw adb text, got: $err")
         repo.stop()
+    }
+
+    @Test
+    fun items_none_mode_is_mru_sorted_no_headers() = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(
+                DeviceSnapshot("usb1", DeviceStatus.ONLINE),
+                DeviceSnapshot("wl1", DeviceStatus.ONLINE),
+            ))
+        }
+        val dir = Files.createTempDirectory("items")
+        var clockVal = 0L
+        val history = DeviceHistoryStore(dir, clock = { clockVal }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        history.upsert("usb1", DeviceType.USB, null, null)
+        clockVal = 100L; history.touchLastUsed("usb1")
+        clockVal = 200L
+        history.upsert("wl1", DeviceType.WIRELESS, "10.0.0.1", 5555)
+        history.touchLastUsed("wl1")
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val settingsFlow = MutableStateFlow(Settings(deviceGroupBy = DeviceGroupBy.NONE))
+        val vm = DeviceListViewModel(repo, this, settingsFlow)
+        val collected = mutableListOf<List<DeviceListItem>>()
+        val job = launch { vm.items.collect { collected.add(it) } }
+        advanceUntilIdle()
+        val last = collected.last()
+        // No headers in NONE mode; MRU order → wl1 (200) before usb1 (100).
+        assertTrue(last.all { it is DeviceListItem.Device }, "NONE mode must have no headers: $last")
+        assertEquals(listOf("wl1", "usb1"), last.map { (it as DeviceListItem.Device).view.serial })
+        job.cancel(); repo.stop()
+    }
+
+    @Test
+    fun items_type_mode_emits_headers_and_groups() = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(
+                DeviceSnapshot("usb1", DeviceStatus.ONLINE),
+                DeviceSnapshot("wl1", DeviceStatus.ONLINE),
+            ))
+        }
+        val dir = Files.createTempDirectory("items2")
+        var clockVal = 0L
+        val history = DeviceHistoryStore(dir, clock = { clockVal }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        history.upsert("usb1", DeviceType.USB, null, null)
+        clockVal = 100L; history.touchLastUsed("usb1")
+        clockVal = 200L
+        history.upsert("wl1", DeviceType.WIRELESS, "10.0.0.1", 5555)
+        history.touchLastUsed("wl1")
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val settingsFlow = MutableStateFlow(Settings(deviceGroupBy = DeviceGroupBy.TYPE))
+        val vm = DeviceListViewModel(repo, this, settingsFlow)
+        val collected = mutableListOf<List<DeviceListItem>>()
+        val job = launch { vm.items.collect { collected.add(it) } }
+        advanceUntilIdle()
+        val last = collected.last()
+        // USB group first, then Wireless; each preceded by a header.
+        assertEquals(
+            listOf("type_usb", "usb1", "type_wireless", "wl1"),
+            last.map { item -> when (item) {
+                is DeviceListItem.Header -> item.key
+                is DeviceListItem.Device -> item.view.serial
+            } },
+        )
+        job.cancel(); repo.stop()
+    }
+
+    @Test
+    fun items_tag_mode_untagged_bucket_last() = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(
+                DeviceSnapshot("usb1", DeviceStatus.ONLINE),
+                DeviceSnapshot("wl1", DeviceStatus.ONLINE),
+            ))
+        }
+        val dir = Files.createTempDirectory("items3")
+        var clockVal = 0L
+        val history = DeviceHistoryStore(dir, clock = { clockVal }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        history.upsert("usb1", DeviceType.USB, null, null)
+        clockVal = 100L; history.touchLastUsed("usb1")
+        clockVal = 200L
+        history.upsert("wl1", DeviceType.WIRELESS, "10.0.0.1", 5555)
+        history.touchLastUsed("wl1")
+        history.setTag("wl1", "lab")
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val settingsFlow = MutableStateFlow(Settings(deviceGroupBy = DeviceGroupBy.TAG))
+        val vm = DeviceListViewModel(repo, this, settingsFlow)
+        val collected = mutableListOf<List<DeviceListItem>>()
+        val job = launch { vm.items.collect { collected.add(it) } }
+        advanceUntilIdle()
+        val last = collected.last()
+        assertEquals(
+            listOf("lab", "wl1", "tag_none", "usb1"),
+            last.map { item -> when (item) {
+                is DeviceListItem.Header -> item.key
+                is DeviceListItem.Device -> item.view.serial
+            } },
+        )
+        job.cancel(); repo.stop()
     }
 }

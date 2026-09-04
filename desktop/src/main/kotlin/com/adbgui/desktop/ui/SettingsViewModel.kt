@@ -1,6 +1,7 @@
 package com.adbgui.desktop.ui
 
 import com.adbgui.core.log.LogLevel
+import com.adbgui.core.domain.DeviceGroupBy
 import com.adbgui.core.domain.ScrcpyLaunchProfile
 import com.adbgui.core.settings.Settings
 import com.adbgui.core.settings.SettingsStore
@@ -31,6 +32,10 @@ class SettingsViewModel(private val store: SettingsStore, private val scope: Cor
     }
     fun setScrcpyLaunch(profile: ScrcpyLaunchProfile) = scope.launch {
         store.update { it.copy(scrcpyLaunch = profile) }
+        refresh()
+    }
+    fun setDeviceGroupBy(mode: DeviceGroupBy) = scope.launch {
+        store.update { it.copy(deviceGroupBy = mode) }
         refresh()
     }
     private suspend fun refresh() { _settings.value = store.load() }

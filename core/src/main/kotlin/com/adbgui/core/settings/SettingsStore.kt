@@ -1,5 +1,6 @@
 package com.adbgui.core.settings
 
+import com.adbgui.core.domain.DeviceGroupBy
 import com.adbgui.core.domain.RemoteButton
 import com.adbgui.core.domain.ScrcpyLaunchProfile
 import com.adbgui.core.log.LogLevel
@@ -26,6 +27,7 @@ data class Settings(
     val scrcpyDownloadUrl: String? = null,  // null = GitHub releases
     val scrcpyMode: String = "EXTERNAL",  // EMBEDDED / EXTERNAL
     val scrcpyLaunch: ScrcpyLaunchProfile = ScrcpyLaunchProfile(),
+    val deviceGroupBy: DeviceGroupBy = DeviceGroupBy.NONE,
     val remoteButtons: List<RemoteButton> = listOf(
         RemoteButton("vol_up", "音量+", 24),
         RemoteButton("vol_down", "音量−", 25),

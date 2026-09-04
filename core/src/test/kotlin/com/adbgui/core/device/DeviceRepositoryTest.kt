@@ -114,4 +114,61 @@ class DeviceRepositoryTest {
         assertEquals("我的手机", h?.alias)
         repo.stop()
     }
+
+    @Test
+    fun recompute_maps_lastUsedAt_and_tag_from_history() = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE)))
+        }
+        val dir = Files.createTempDirectory("rep3")
+        val history = DeviceHistoryStore(dir, clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        history.upsert("abc", DeviceType.USB, null, null)
+        history.touchLastUsed("abc")
+        history.setTag("abc", "lab")
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val v = repo.devices.value.first { it.serial == "abc" }
+        assertEquals("lab", v.tag)
+        assertEquals(0L, v.lastUsedAt) // history store clock=0 → touchLastUsed stamped 0
+        repo.stop()
+    }
+
+    @Test
+    fun touchLastUsed_updates_history_and_view() = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE)))
+        }
+        val dir = Files.createTempDirectory("rep4")
+        // History store owns the timestamp clock; touchLastUsed stamps with THIS clock.
+        val history = DeviceHistoryStore(dir, clock = { 4242L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        history.upsert("abc", DeviceType.USB, null, null)
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        repo.touchLastUsed("abc")
+        val v = repo.devices.value.first { it.serial == "abc" }
+        assertEquals(4242L, v.lastUsedAt)
+        // Persisted too:
+        val h = history.load().first { it.serial == "abc" }
+        assertEquals(4242L, h.lastUsedAt)
+        repo.stop()
+    }
+
+    @Test
+    fun setTag_updates_history_and_view() = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE)))
+        }
+        val dir = Files.createTempDirectory("rep5")
+        val history = DeviceHistoryStore(dir, clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        history.upsert("abc", DeviceType.USB, null, null)
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        repo.setTag("abc", "lab")
+        val v = repo.devices.value.first { it.serial == "abc" }
+        assertEquals("lab", v.tag)
+        repo.stop()
+    }
 }

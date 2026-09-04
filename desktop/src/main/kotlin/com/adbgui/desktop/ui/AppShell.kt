@@ -51,6 +51,7 @@ import com.adbgui.core.domain.DeviceView
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AppColors
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import java.nio.file.Path
 
 @Composable
@@ -85,6 +86,9 @@ fun AppShell(
     val devices by vm.devices.collectAsState()
     val selectedDevice = devices.firstOrNull { it.serial == selected }
     val dividerColor = AppColors.current.divider
+    // Used to stamp "last used" (MRU sort) when the user actively picks a device. Selection is
+    // the most direct signal of "use"; connect is the other (handled in the repo on success).
+    val onSelectScope = androidx.compose.runtime.rememberCoroutineScope()
 
     Row(modifier = modifier.fillMaxSize()) {
         // ---- Sidebar: device list | feature nav | settings, as three separated zones ----
@@ -95,8 +99,14 @@ fun AppShell(
             DeviceListPane(
                 vm = vm,
                 modifier = Modifier.fillMaxWidth().weight(1f),
+                settingsVm = settingsVm,
                 selected = selected,
-                onSelect = { device -> selectedSerial?.value = device.serial },
+                onSelect = { device ->
+                    selectedSerial?.value = device.serial
+                    // MRU: a user pick is the strongest "use" signal — stamp it so this device
+                    // sorts to the top on next launch. Best-effort; failures don't break selection.
+                    onSelectScope.launch { repo?.touchLastUsed(device.serial) }
+                },
                 onReconnect = { ip, port -> vm.reconnect(ip, port) },
                 onOpenConnect = { showConnect = true },
             )
