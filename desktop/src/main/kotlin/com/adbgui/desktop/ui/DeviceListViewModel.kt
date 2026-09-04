@@ -25,10 +25,13 @@ import kotlinx.coroutines.launch
  * One renderable row in the device list. LazyColumn flattens groups into a stream of these so
  * group headers and device rows share a single scroll + scrollbar (and MRU order is preserved
  * top-to-bottom within each group).
+ *
+ * [Device.groupKey] ties a device to its [Header.key] so the UI can hide a collapsed group's
+ * device rows without recomputing the whole list from the data layer.
  */
 sealed class DeviceListItem {
     data class Header(val key: String, val count: Int) : DeviceListItem()
-    data class Device(val view: DeviceView) : DeviceListItem()
+    data class Device(val view: com.adbgui.core.domain.DeviceView, val groupKey: String) : DeviceListItem()
 }
 
 class DeviceListViewModel(
@@ -49,10 +52,11 @@ class DeviceListViewModel(
     val items: Flow<List<DeviceListItem>> =
         combine(repo.devices, settings) { devices, s ->
             if (s.deviceGroupBy == DeviceGroupBy.NONE) {
-                DeviceListOrganizer.sortMru(devices).map { DeviceListItem.Device(it) }
+                DeviceListOrganizer.sortMru(devices).map { DeviceListItem.Device(it, "") }
             } else {
                 DeviceListOrganizer.groupBy(devices, s.deviceGroupBy).flatMap { g ->
-                    listOf(DeviceListItem.Header(g.key, g.devices.size)) + g.devices.map { DeviceListItem.Device(it) }
+                    listOf(DeviceListItem.Header(g.key, g.devices.size)) +
+                        g.devices.map { DeviceListItem.Device(it, g.key) }
                 }
             }
         }

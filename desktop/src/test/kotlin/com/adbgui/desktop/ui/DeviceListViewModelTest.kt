@@ -190,9 +190,9 @@ class DeviceListViewModelTest {
         val job = launch { vm.items.collect { collected.add(it) } }
         advanceUntilIdle()
         val last = collected.last()
-        // USB group first, then Wireless; each preceded by a header.
+        // MRU-of-group: wireless group (max lastUsedAt=200) sorts before USB group (max=100).
         assertEquals(
-            listOf("type_usb", "usb1", "type_wireless", "wl1"),
+            listOf("type_wireless", "wl1", "type_usb", "usb1"),
             last.map { item -> when (item) {
                 is DeviceListItem.Header -> item.key
                 is DeviceListItem.Device -> item.view.serial

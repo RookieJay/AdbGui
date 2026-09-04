@@ -17,9 +17,11 @@ data class DeviceGroup(val key: String, val devices: List<DeviceView>)
  * unit-testable without UI, and so the same logic could feed a future CLI/sorting elsewhere.
  *
  * Sort policy: most-recently-used first (by `lastUsedAt`), nulls last. Within a group, devices
- * are MRU-sorted; group order is a stable, per-mode sensible default (online before offline, USB
- * before wireless, subnets numerically ascending with USB/no-IP last, tags alphabetical with
- * untagged last).
+ * are MRU-sorted. **Group order is also driven by MRU**: a group sorts by the most-recently-used
+ * member's `lastUsedAt`, descending. This makes "the group containing the device you just used"
+ * always rise to the top — the user's strongest signal — regardless of grouping mode. Groups
+ * whose members all have null `lastUsedAt` sort last, falling back to a per-mode stable base
+ * order (e.g. USB before wireless, subnets numerically, tags alphabetical) for tie-breaking.
  */
 object DeviceListOrganizer {
     /**
@@ -43,50 +45,59 @@ object DeviceListOrganizer {
 
     fun groupBy(devices: List<DeviceView>, mode: DeviceGroupBy): List<DeviceGroup> {
         if (devices.isEmpty()) return emptyList()
-        return when (mode) {
-            DeviceGroupBy.NONE -> listOf(DeviceGroup("", sortMru(devices)))
-            DeviceGroupBy.TYPE -> groupByType(devices)
-            DeviceGroupBy.STATUS -> groupByStatus(devices)
-            DeviceGroupBy.SUBNET -> groupBySubnet(devices)
-            DeviceGroupBy.TAG -> groupByTag(devices)
+        val buckets: List<Pair<String, List<DeviceView>>> = when (mode) {
+            DeviceGroupBy.NONE -> return listOf(DeviceGroup("", sortMru(devices)))
+            DeviceGroupBy.TYPE -> typeBuckets(devices)
+            DeviceGroupBy.STATUS -> statusBuckets(devices)
+            DeviceGroupBy.SUBNET -> subnetBuckets(devices)
+            DeviceGroupBy.TAG -> tagBuckets(devices)
         }
+        // MRU-of-group ordering: a group's rank is its most-recently-used member's lastUsedAt.
+        // sortedByDescending is stable, so ties (incl. all-null groups) keep the base bucket
+        // order above as a tiebreaker.
+        return buckets
+            .sortedByDescending { (_, devs) ->
+                devs.mapNotNull { it.lastUsedAt }.maxOrNull() ?: Long.MIN_VALUE
+            }
+            .map { DeviceGroup(it.first, it.second) }
     }
 
-    private fun groupByType(devices: List<DeviceView>): List<DeviceGroup> {
+    private fun typeBuckets(devices: List<DeviceView>): List<Pair<String, List<DeviceView>>> {
         val byType = sortMru(devices).groupBy { it.type }
-        val buckets = linkedMapOf<String, List<DeviceView>>()
-        byType[DeviceType.USB]?.let { buckets["type_usb"] = it }
-        byType[DeviceType.WIRELESS]?.let { buckets["type_wireless"] = it }
-        byType[null]?.let { buckets["type_unknown"] = it }
-        return buckets.map { DeviceGroup(it.key, it.value) }
+        val out = mutableListOf<Pair<String, List<DeviceView>>>()
+        byType[DeviceType.USB]?.let { out.add("type_usb" to it) }
+        byType[DeviceType.WIRELESS]?.let { out.add("type_wireless" to it) }
+        byType[null]?.let { out.add("type_unknown" to it) }
+        return out
     }
 
-    private fun groupByStatus(devices: List<DeviceView>): List<DeviceGroup> {
+    private fun statusBuckets(devices: List<DeviceView>): List<Pair<String, List<DeviceView>>> {
         val sorted = sortMru(devices)
         val online = sorted.filter { it.status == DeviceStatus.ONLINE }
         val offline = sorted.filter { it.status != DeviceStatus.ONLINE }
-        val buckets = linkedMapOf<String, List<DeviceView>>()
-        if (online.isNotEmpty()) buckets["status_online"] = online
-        if (offline.isNotEmpty()) buckets["status_offline"] = offline
-        return buckets.map { DeviceGroup(it.key, it.value) }
+        val out = mutableListOf<Pair<String, List<DeviceView>>>()
+        if (online.isNotEmpty()) out.add("status_online" to online)
+        if (offline.isNotEmpty()) out.add("status_offline" to offline)
+        return out
     }
 
-    private fun groupBySubnet(devices: List<DeviceView>): List<DeviceGroup> {
+    private fun subnetBuckets(devices: List<DeviceView>): List<Pair<String, List<DeviceView>>> {
         // /24 = first three octets of the wireless IP. USB / malformed / missing IP → "subnet_none"
-        // bucket, ordered last. Numeric ascending by octet tuple so 10.x < 192.x.
+        // bucket. Base order: subnets numerically ascending by octet tuple (10.x < 192.x), then
+        // the none bucket — but MRU ordering is applied on top, so a group wins if its max
+        // lastUsedAt is larger, regardless of this base order.
         val keyed = sortMru(devices).map { d -> d to subnetKey(d) }
         val none = keyed.filter { it.second == null }.map { it.first }
         val bySubnet = keyed.filter { it.second != null }
             .groupBy { it.second!! }
             .map { (subnet, list) -> subnet to list.map { it.first } }
-        // Sort subnet keys numerically by octet tuple.
         val sortedSubnets = bySubnet.sortedBy { (subnet, _) ->
             val parts = subnet.split(".").map { it.toIntOrNull() ?: 0 }
-            // Pack into a single long for stable numeric ordering (3 octets fit easily).
             ((parts.getOrNull(0) ?: 0).toLong() shl 16) or ((parts.getOrNull(1) ?: 0).toLong() shl 8) or (parts.getOrNull(2) ?: 0).toLong()
         }
-        val out = sortedSubnets.map { DeviceGroup(it.first, it.second) }
-        return if (none.isNotEmpty()) out + DeviceGroup("subnet_none", none) else out
+        val out = sortedSubnets.toMutableList()
+        if (none.isNotEmpty()) out.add("subnet_none" to none)
+        return out
     }
 
     /** Returns the /24 key "a.b.c", or null for USB / missing / malformed IP. */
@@ -94,19 +105,20 @@ object DeviceListOrganizer {
         val ip = d.wirelessIp ?: return null
         val parts = ip.split(".")
         if (parts.size < 3) return null
-        // Require all three leading octets be numeric; otherwise treat as no-IP.
         if (parts[0].toIntOrNull() == null || parts[1].toIntOrNull() == null || parts[2].toIntOrNull() == null) return null
         return "${parts[0]}.${parts[1]}.${parts[2]}"
     }
 
-    private fun groupByTag(devices: List<DeviceView>): List<DeviceGroup> {
+    private fun tagBuckets(devices: List<DeviceView>): List<Pair<String, List<DeviceView>>> {
         val sorted = sortMru(devices)
         val tagged = sorted.filter { !it.tag.isNullOrBlank() }
         val untagged = sorted.filter { it.tag.isNullOrBlank() }
-        val byTag = tagged.groupBy { it.tag!! }
-        // Case-insensitive alphabetical, but preserve original case in the key.
-        val sortedTags = byTag.entries.sortedBy { it.key.lowercase() }
-        val out = sortedTags.map { DeviceGroup(it.key, it.value) }
-        return if (untagged.isNotEmpty()) out + DeviceGroup("tag_none", untagged) else out
+        // Base order: case-insensitive alphabetical by tag; untagged bucket last. MRU ordering
+        // is applied on top — so if an untagged device was used most recently, that bucket still
+        // sorts first.
+        val sortedTags = tagged.groupBy { it.tag!! }.entries.sortedBy { it.key.lowercase() }
+        val out = sortedTags.map { it.key to it.value }.toMutableList()
+        if (untagged.isNotEmpty()) out.add("tag_none" to untagged)
+        return out
     }
 }

@@ -36,9 +36,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -72,10 +74,18 @@ fun DeviceListPane(
 ) {
     var showPair by remember { mutableStateOf(false) }
     val items by vm.items.collectAsState(initial = emptyList())
+    val allDevices by vm.devices.collectAsState()
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
     val settings = settingsVm?.settings?.collectAsState()?.value ?: com.adbgui.core.settings.Settings()
     var groupMenuOpen by remember { mutableStateOf(false) }
+    // Collapsed groups: transient (per session), default expanded. Keyed by group key so it
+    // survives a settings round-trip as long as the same group key reappears.
+    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
+    // Existing tags across all known devices — offered as quick-pick chips when setting a tag.
+    val existingTags = remember(allDevices) {
+        allDevices.mapNotNull { it.tag }.filter { it.isNotBlank() }.distinct()
+    }
 
     Surface(modifier = modifier, color = MaterialTheme.colors.surface) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -129,18 +139,32 @@ fun DeviceListPane(
                         onSecondaryAction = { showPair = true },
                     )
                 } else {
+                    // Hide device rows whose group is collapsed; headers stay so the user can
+                    // expand again. (NONE mode has no headers and groupKey="" is never toggled,
+                    // so all rows stay visible.)
+                    val visibleItems = items.filterNot {
+                        it is DeviceListItem.Device && collapsed[it.groupKey] == true
+                    }
                     val listState = rememberLazyListState()
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(vertical = 4.dp),
                     ) {
-                        items(items, key = { item -> item.key() }) { item ->
+                        items(visibleItems, key = { item -> item.key() }) { item ->
                             when (item) {
-                                is DeviceListItem.Header -> GroupHeaderRow(item)
+                                is DeviceListItem.Header -> GroupHeaderRow(
+                                    header = item,
+                                    collapsed = collapsed[item.key] == true,
+                                    onToggle = {
+                                        val now = collapsed[item.key] == true
+                                        collapsed[item.key] = !now
+                                    },
+                                )
                                 is DeviceListItem.Device -> DeviceRow(
                                     device = item.view,
                                     selected = selected,
+                                    existingTags = existingTags,
                                     onRename = { newAlias -> vm.setAlias(item.view.serial, newAlias) },
                                     onSetTag = { newTag -> vm.setTag(item.view.serial, newTag) },
                                     onForget = { vm.forget(item.view.serial) },
@@ -176,13 +200,24 @@ fun DeviceListPane(
 }
 
 @Composable
-private fun GroupHeaderRow(header: DeviceListItem.Header) {
-    // A sticky-feeling section header: label + count. Light surface tint separates it from rows.
+private fun GroupHeaderRow(
+    header: DeviceListItem.Header,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+) {
+    // A sticky-feeling section header: collapse chevron + label + count. Click toggles the group.
     Row(
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colors.background)
-            .padding(horizontal = 12.dp, vertical = 4.dp),
+            .clickable { onToggle() }
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            if (collapsed) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
+            contentDescription = if (collapsed) Strings.t("expand") else Strings.t("collapse"),
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(4.dp))
         Text(
             groupLabel(header.key) + Strings.t("group_count").format(header.count),
             style = MaterialTheme.typography.caption,
@@ -222,6 +257,7 @@ private fun DeviceListItem.key(): String = when (this) {
 private fun DeviceRow(
     device: DeviceView,
     selected: String? = null,
+    existingTags: List<String> = emptyList(),
     onRename: (String?) -> Unit,
     onSetTag: (String?) -> Unit,
     onForget: () -> Unit,
@@ -355,12 +391,41 @@ private fun DeviceRow(
             onDismissRequest = { showTagDialog = false },
             title = { Text(Strings.t("set_tag")) },
             text = {
-                TextField(
-                    value = tagDraft,
-                    onValueChange = { tagDraft = it },
-                    singleLine = true,
-                    placeholder = { Text(Strings.t("tag_placeholder")) },
-                )
+                Column {
+                    TextField(
+                        value = tagDraft,
+                        onValueChange = { tagDraft = it },
+                        singleLine = true,
+                        placeholder = { Text(Strings.t("tag_placeholder")) },
+                    )
+                    // Quick-pick chips for tags already in use on other devices — saves typing
+                    // and keeps spelling consistent so "group by tag" actually coalesces.
+                    if (existingTags.isNotEmpty()) {
+                        Spacer(Modifier.size(8.dp))
+                        Text(
+                            Strings.t("tag_suggestions"),
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                        )
+                        Spacer(Modifier.size(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            existingTags.forEach { t ->
+                                val active = t == device.tag
+                                Surface(
+                                    shape = MaterialTheme.shapes.small,
+                                    color = if (active) MaterialTheme.colors.primary.copy(alpha = 0.18f) else MaterialTheme.colors.onSurface.copy(alpha = 0.08f),
+                                    modifier = Modifier.clickable { tagDraft = t },
+                                ) {
+                                    Text(
+                                        t,
+                                        style = MaterialTheme.typography.caption,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {

@@ -76,6 +76,7 @@ object Strings {
         "set_tag" to "设置标签",
         "tag_label" to "标签",
         "tag_placeholder" to "输入分组标签（留空清除）",
+        "tag_suggestions" to "已有标签",
         // Connect dialog
         "connect_title" to "连接设备",
         "ip_address" to "IP 地址",
@@ -442,6 +443,7 @@ object Strings {
         "set_tag" to "Set tag",
         "tag_label" to "Tag",
         "tag_placeholder" to "Group tag (leave empty to clear)",
+        "tag_suggestions" to "Existing tags",
         // Connect dialog
         "connect_title" to "Connect to device",
         "ip_address" to "IP address",
