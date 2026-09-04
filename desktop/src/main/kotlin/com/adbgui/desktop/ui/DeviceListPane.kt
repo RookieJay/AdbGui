@@ -34,6 +34,7 @@ import androidx.compose.material.TextButton
 import androidx.compose.material.TextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -81,6 +82,10 @@ fun DeviceListPane(
     val busy by vm.busy.collectAsState()
     val settings = settingsVm?.settings?.collectAsState()?.value ?: com.adbgui.core.settings.Settings()
     var groupMenuOpen by remember { mutableStateOf(false) }
+    // Tag pending deletion (null = no dialog). Set by a tag-group header's delete button;
+    // confirming clears that tag from every device bearing it in one shot — saves unsetting it
+    // per-device.
+    var tagToDelete by remember { mutableStateOf<String?>(null) }
     // Collapsed groups: transient (per session), default expanded. Keyed by group key so it
     // survives a settings round-trip as long as the same group key reappears.
     val collapsed = remember { mutableStateMapOf<String, Boolean>() }
@@ -166,14 +171,23 @@ fun DeviceListPane(
                     ) {
                         items(visibleItems, key = { item -> item.key() }) { item ->
                             when (item) {
-                                is DeviceListItem.Header -> GroupHeaderRow(
-                                    header = item,
-                                    collapsed = collapsed[item.key] == true,
-                                    onToggle = {
-                                        val now = collapsed[item.key] == true
-                                        collapsed[item.key] = !now
-                                    },
-                                )
+                                is DeviceListItem.Header -> {
+                                    // Tag groups (but not the "tag_none" bucket) can be deleted
+                                    // outright — clears that tag from every device bearing it.
+                                    val canDeleteTag =
+                                        settings.deviceGroupBy == DeviceGroupBy.TAG && item.key != "tag_none"
+                                    GroupHeaderRow(
+                                        header = item,
+                                        collapsed = collapsed[item.key] == true,
+                                        onToggle = {
+                                            val now = collapsed[item.key] == true
+                                            collapsed[item.key] = !now
+                                        },
+                                        onDeleteTag = if (canDeleteTag) {
+                                            { tagToDelete = item.key }
+                                        } else null,
+                                    )
+                                }
                                 is DeviceListItem.Device -> DeviceRow(
                                     device = item.view,
                                     selected = selected,
@@ -210,6 +224,21 @@ fun DeviceListPane(
             onDismiss = { showPair = false; vm.clearError() },
         )
     }
+
+    tagToDelete?.let { tag ->
+        AlertDialog(
+            onDismissRequest = { tagToDelete = null },
+            title = { Text(Strings.t("delete_tag_confirm_title")) },
+            text = { Text(Strings.t("delete_tag_confirm_body").format(tag)) },
+            confirmButton = {
+                DangerButton(onClick = {
+                    tagToDelete = null
+                    allDevices.filter { it.tag == tag }.forEach { vm.setTag(it.serial, null) }
+                }) { Text(Strings.t("delete")) }
+            },
+            dismissButton = { TextButton(onClick = { tagToDelete = null }) { Text(Strings.t("cancel")) } },
+        )
+    }
 }
 
 @Composable
@@ -217,42 +246,58 @@ private fun GroupHeaderRow(
     header: DeviceListItem.Header,
     collapsed: Boolean,
     onToggle: () -> Unit,
+    onDeleteTag: (() -> Unit)? = null,
 ) {
     // A sticky-feeling section header: collapse chevron + label + online/total counts. The
     // online dot+count stays visible when the group is collapsed, so the user can still tell
-    // which group has a connected device without expanding every group.
+    // which group has a connected device without expanding every group. The toggle is scoped to
+    // the label block so a click on the delete button (when present) doesn't also collapse.
     Row(
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colors.background)
-            .clickable { onToggle() }
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            if (collapsed) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
-            contentDescription = if (collapsed) Strings.t("expand") else Strings.t("collapse"),
-            modifier = Modifier.size(16.dp),
-        )
-        Spacer(Modifier.width(4.dp))
-        Text(
-            groupLabel(header.key),
-            style = MaterialTheme.typography.caption,
-            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-        )
-        Spacer(Modifier.width(6.dp))
-        if (header.onlineCount > 0) {
-            StatusDot(isLive = true)
-            Spacer(Modifier.width(2.dp))
+        Row(
+            modifier = Modifier.weight(1f).clickable { onToggle() },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (collapsed) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
+                contentDescription = if (collapsed) Strings.t("expand") else Strings.t("collapse"),
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(4.dp))
             Text(
-                "${header.onlineCount}/${header.count}",
+                groupLabel(header.key),
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
             )
-        } else {
-            Text(
-                Strings.t("group_count").format(header.count),
-                style = MaterialTheme.typography.caption,
-                color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
-            )
+            Spacer(Modifier.width(6.dp))
+            if (header.onlineCount > 0) {
+                StatusDot(isLive = true)
+                Spacer(Modifier.width(2.dp))
+                Text(
+                    "${header.onlineCount}/${header.count}",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                )
+            } else {
+                Text(
+                    Strings.t("group_count").format(header.count),
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.4f),
+                )
+            }
+        }
+        if (onDeleteTag != null) {
+            IconButton(onClick = onDeleteTag, modifier = Modifier.size(20.dp)) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = Strings.t("delete_tag"),
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                )
+            }
         }
     }
 }

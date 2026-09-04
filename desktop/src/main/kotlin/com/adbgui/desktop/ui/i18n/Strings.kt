@@ -79,6 +79,10 @@ object Strings {
         "tag_suggestions" to "已有标签",
         "expand_all" to "展开全部",
         "collapse_all" to "折叠全部",
+        "delete_tag" to "删除标签",
+        "delete_tag_confirm_title" to "删除标签？",
+        "delete_tag_confirm_body" to "将从所有设备移除标签 \"%s\"？",
+        "delete" to "删除",
         // Connect dialog
         "connect_title" to "连接设备",
         "ip_address" to "IP 地址",
@@ -448,6 +452,10 @@ object Strings {
         "tag_suggestions" to "Existing tags",
         "expand_all" to "Expand all",
         "collapse_all" to "Collapse all",
+        "delete_tag" to "Delete tag",
+        "delete_tag_confirm_title" to "Delete tag?",
+        "delete_tag_confirm_body" to "Remove tag \"%s\" from all devices?",
+        "delete" to "Delete",
         // Connect dialog
         "connect_title" to "Connect to device",
         "ip_address" to "IP address",
