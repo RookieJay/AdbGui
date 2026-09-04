@@ -2,7 +2,7 @@
 
 - **日期**：2026-09-04
 - **状态**：设计草案，待用户复核后转 writing-plans
-- **范围**：四个独立增强 —— A(bugreport) + B(install-multiple + flags) + C(am start 构建器) + D(权限 grant/revoke)
+- **范围**：五个增强 —— A(bugreport) + B(install-multiple + flags) + C(am start 构建器) + D(权限 grant/revoke) + E(应用详情 version/path/libs)；其中 E 与 D 共用 `dumpsys package` parser + fixture
 - **依据**：对照《ADB 用法大全》(WanAndroid #2310) 命令速查表 + 本项目 CHANGELOG/roadmap；CLAUDE.md 架构红线
 - **参照既有实现**：`CommandRunner`、`AppConsoleViewModel`/`AppConsoleScreen`、`SystemOpsViewModel`、`InstallResultParser`、`Extra`/`ExtraType`、截图保存/Open 链接模式
 
@@ -10,7 +10,7 @@
 
 WanAndroid #2310《ADB 用法大全》是中文安卓社区广泛引用的 ADB 命令速查表。对照本应用现状（CHANGELOG 各 v2 节 + roadmap），绝大多数命令已覆盖：连接管理、应用安装/卸载/清数据/停止/启动、截图、logcat、shell、文件 push/pull、scrcpy 投屏+录制、reboot/root/remount、adb pair、系统信息查询页、端口转发、CDP 调试、文本输入、按键模拟。
 
-本批次补齐速查表里尚未覆盖、且对开发/测试人员真实高频的四类能力：
+本批次补齐速查表里尚未覆盖、且对开发/测试人员真实高频的能力：
 
 | # | 能力 | 速查表对应 | 价值 |
 |---|---|---|---|
@@ -18,6 +18,9 @@ WanAndroid #2310《ADB 用法大全》是中文安卓社区广泛引用的 ADB �
 | B | `adb install-multiple` + flags | 安装变体 | split APK/app bundle 安装；降级/test/授权安装 |
 | C | `am start` 带 action+data+extras | Deep link 启动 | 测试 deep link / 带参启动指定 Activity |
 | D | `pm grant` / `pm revoke` | 运行时权限 | 测权限流免手动去设置页 |
+| E | 应用详情（version/path/libs） | `dumpsys package` 只读 | 列出 app 的 versionName/versionCode、安装路径、原生库 `.so` |
+
+E 与 D 同源（都解析 `adb shell dumpsys package <pkg>`），共用一个 parser + 一份 fixture，见 §6。
 
 ### 现状修正（文档失同步）
 
@@ -25,11 +28,11 @@ roadmap 文档 `2026-08-21-gap-analysis-and-roadmap.md` 与 CLAUDE.md「v1 范�
 
 ## 2. 架构红线（不可破，逐条确认）
 
-1. **`:core` 不依赖 UI** —— A/B/C/D 的新 `CommandRunner` 方法纯 adb 交互，无 Compose/awt import。✅
+1. **`:core` 不依赖 UI** —— A/B/C/D+E 的新 `CommandRunner` 方法纯 adb 交互，无 Compose/awt import。✅
 2. **UI 不直接碰 adb** —— 所有新方法经 `DeviceRepository` 透传，ViewModel 只回调 repo。✅
 3. **`:core` 不起真 adb** —— 走 `AdbProcessRunner`；测试用 `FakeAdbProcessRunner` 注入录制输出。✅
 4. **平台差异藏接口背后** —— bugreport 的保存目录对话框走 `:desktop/platform/FileDialogs`（既有接口）。✅
-5. **解析与执行分离** —— D 的 `DumpsysPackagePermissionsParser` 是纯函数 object；`CommandRunner` 调它。✅
+5. **解析与执行分离** —— D+E 的 `DumpsysPackageParser` 是纯函数 object；`CommandRunner` 调它。✅
 
 ## 3. A — bugreport（System Ops 页）
 
@@ -131,11 +134,13 @@ TDD：
 - Component 段处理：用户只填 component → `startActivity(component=...)`；只填 action+data → deep link；都填 → 一起传。
 - i18n：字段标签 + 段标题。
 
-## 6. D — 权限 grant/revoke（App Console Advanced，最大且最脆）
+## 6. D+E — dumpsys package 共用：应用详情（E）+ 权限 grant/revoke（D）
 
-### 6.1 core
+E（应用详情：version/path/libs）与 D（权限）都解析同一条 `adb shell dumpsys package <pkg>` 的输出，挖不同字段。为避免两个 parser 重复解析同一 stdout、避免 UI 连用详情+权限时跑两次 dumpsys，**两者共用一个 parser + 一份 fixture + 一个 CommandRunner 方法**。E 的 nativeLibs 来自 `ls nativeLibraryDir`（复用既有 `LsParser`），不依赖 dumpsys。
 
-`PermissionInfo` data class（`domain/`）：
+### 6.1 共用 core：DumpsysPackageParser + dumpsysPackage
+
+`PermissionInfo`（同原 D §6.1）：
 ```kotlin
 data class PermissionInfo(
     val name: String,
@@ -145,15 +150,32 @@ data class PermissionInfo(
 )
 ```
 
-`DumpsysPackagePermissionsParser` —— 纯函数 object（`core/adb/`）：
-- 输入：`adb shell dumpsys package <pkg>` 的完整 stdout。
-- 解析段：`requested permissions:`（声明）、`install permissions:`（安装期授权，granted=true/false）、`runtime permissions:`（运行期，granted=true/false）。
-- 输出：`List<PermissionInfo>`，runtime 段的标 `runtime=true`，install 段的 `runtime=false`。requested 段仅作完整性参考（同名的在 install/runtime 已有 granted 状态）。
-- **fixture 强制真实录制**（CLAUDE.md §4）：`core/src/test/resources/fixtures/dumpsys_package_<variant>.txt`，首行注释标设备型号+manufacturer+Android 版本+SDK+build id+录制日期+命令（`adb shell dumpsys package <pkg>`）。**至少 2 个变体**（如 Android 11 phone + Android 13+ TV；现代 Android 用 `runtime permissions:` 段，老版本格式不同）。**不许手写 fixture**。
+`DumpsysPackage` data class（`domain/`，NEW 聚合体）：
+```kotlin
+data class DumpsysPackage(
+    val versionName: String?,
+    val versionCode: Long?,
+    val codePath: String?,          // /data/app/.../base.apk 或 app 目录
+    val publicSourceDir: String?,   // base apk 路径
+    val nativeLibraryDir: String?,
+    val primaryCpuAbi: String?,
+    val permissions: List<PermissionInfo>,
+)
+```
 
-`CommandRunner.listPermissions(serial: String, pkg: String): List<PermissionInfo>`
-- `runShellCmd(serial, "dumpsys package $pkg")`（已 `sanitizeShellOutput`）→ parser。
-- pkg 守卫：过 `^[A-Za-z0-9._]+$` 正则（同 SystemInfoViewModel 的包名守卫，纵深防御）。
+`DumpsysPackageParser` —— 纯函数 object（`core/adb/`），**由原 `DumpsysPackagePermissionsParser` 改名扩签名**：
+- 输入：`adb shell dumpsys package <pkg>` 完整 stdout。
+- 解析 permissions 段（requested/install/runtime）照旧 → `List<PermissionInfo>`（runtime 段标 `runtime=true`）；新增 `versionName=` / `versionCode=` / `codePath=` / `publicSourceDir=` / `nativeLibraryDir=` / `primaryCpuAbi=` 行（均出现在 `Packages:` 段 key=value 形式）。
+- 输出：`DumpsysPackage`。
+- 缺字段记 `null`，不静默吞；整个输出找不到 `Packages:` 段视为解析失败，parser 抛解析失败信号（用既有异常类型或返回 `null`，具体在 plan 阶段按 `:core` 既有 parser 失败惯例定），`CommandRunner` 包成 `AdbCommandException`（带 adb 原文兜底，不静默吞）。
+- **fixture 共用**（CLAUDE.md §4）：`core/src/test/resources/fixtures/dumpsys_package_<variant>.txt`，首行注释标设备型号+manufacturer+Android 版本+SDK+build id+录制日期+命令（`adb shell dumpsys package <pkg>`）。**≥2 个变体**（如 Android 11 phone + Android 13+ TV；现代 Android `runtime permissions:` 段，老版本格式不同）。**E 和 D 共用同一批 fixture**——录一次即覆盖两边字段。不许手写 fixture。
+
+`CommandRunner.dumpsysPackage(serial: String, pkg: String): DumpsysPackage`
+- `runShellCmd(serial, "dumpsys package $pkg")`（已 sanitizeShellOutput）→ `DumpsysPackageParser.parse(stdout)`。
+- pkg 守卫：`^[A-Za-z0-9._]+$`（同 SystemInfoViewModel 包名守卫，纵深防御）；非法 → IllegalArgumentException。
+- 非零退出抛 `AdbCommandException`（含 stderr）。
+
+`CommandRunner.listPermissions(serial: String, pkg: String): List<PermissionInfo>` = `dumpsysPackage(serial, pkg).permissions`（薄包装，保留以方便 D 的 VM 单测语义；UI 也可直接调 `dumpsysPackage` 取 `.permissions`）。
 
 `CommandRunner.grant(serial: String, pkg: String, perm: String): String`
 - `runCmd(serial, listOf("shell", "pm", "grant", pkg, perm)).stdout`；非零抛 `AdbCommandException`（某些权限非 runtime 或已授予会报错，透传 adb 原文）。
@@ -161,17 +183,48 @@ data class PermissionInfo(
 `CommandRunner.revoke(serial: String, pkg: String, perm: String): String`
 - `pm revoke`，同上。
 
-TDD：
-- parser 测试读 fixture：`dumpsys_package_android13.txt` → 断言含 `android.permission.CAMERA` runtime granted=false 等。
-- `listPermissions_passes_pkg_to_dumpsys` —— fake runner 断言命令是 `shell dumpsys package <pkg>` + 返回 parser 结果。
-- `listPermissions_rejects_invalid_pkg` —— 非法包名抛 IllegalArgumentException。
-- `grant`/`revoke` 透传 + 非零抛异常。
+TDD（`DumpsysPackageParserTest` + `CommandRunnerTest`）：
+- parser 读 fixture：`dumpsys_package_android13.txt` → 断言 `versionName/versionCode/codePath/nativeLibraryDir` 正确 **且** `permissions` 含 `android.permission.CAMERA` runtime granted=false（原 D 断言并入，一次断言两边字段）。
+- `dumpsysPackage_passes_pkg_to_dumpsys` —— fake runner 断言命令是 `shell dumpsys package <pkg>` + 返回 parser 结果。
+- `dumpsysPackage_rejects_invalid_pkg` —— 非法包名抛 IllegalArgumentException。
+- `grant`/`revoke` 透传 + 非零抛异常（不变）。
 
-### 6.2 desktop
+### 6.2 E — 应用详情（App Console 行内展开，lazy）
+
+`PackageDetail` data class（`domain/`，UI 视图，扁平、不含 permissions，与 `DumpsysPackage` 解耦）：
+```kotlin
+data class PackageDetail(
+    val versionName: String?,
+    val versionCode: Long?,
+    val codePath: String?,
+    val publicSourceDir: String?,
+    val nativeLibraryDir: String?,
+    val primaryCpuAbi: String?,
+    val nativeLibs: List<String>,   // .so 文件名
+)
+```
+
+`CommandRunner.listNativeLibs(serial: String, dir: String): List<String>`
+- 复用既有 `ls(serial, dir)`（`LsParser`），取文件名以 `.so` 结尾者；`dir` 为空或目录不存在 → 空列表（不抛）。
+- 守卫：`dir` 须为绝对路径且不含 shell 元字符（`^[^\s;&|`'$<>]+$`）；不合法 → 空列表 + 日志 warn（不抛，避免一个坏路径打断整行详情）。
+
+`DeviceRepository.packageDetail(serial: String, pkg: String): PackageDetail`
+- 调 `dumpsysPackage` → 取 version/path/libDir/abi；若 `nativeLibraryDir` 非空调 `listNativeLibs` 拼装 `PackageDetail`；否则 `nativeLibs = emptyList()`。
+- 一次 dumpsys + 至多一次 ls。
+
+desktop：
+- `AppConsoleViewModel`：三个独立状态（对齐 §3.2 bugreport 模式）：`_detailBusy: MutableStateFlow<Boolean>`、`_detail: MutableStateFlow<PackageDetail?>`、`_detailError: MutableStateFlow<String?>`；`fun loadDetail(pkg)` + 切换选中包时清空。错误内联，不弹窗。
+- `AppConsoleScreen` / `PackageSelectRow`：行尾加展开箭头；展开后在该行下方显示 version（`versionName (versionCode)`）、codePath / publicSourceDir（带复制按钮）、primaryCpuAbi、nativeLibs 列表（`.so` 文件名）；无 nativeLibraryDir 的 app 显示"无原生库"；busy 显示 inline spinner；失败红条 + adb 原文折叠。
+- 行内详情与 Advanced 面板权限段独立加载，但底层都走 `dumpsysPackage`；VM 可缓存最近一次 `DumpsysPackage` 避免连看时双 dumpsys（可选优化，非 v1 必须）。
+
+TDD：VM 状态机单测（加载成功 / 加载失败 / 无 native lib / 切换包清空 detail）。`listNativeLibs` 复用 `LsParser` 既有测试覆盖，无需新 fixture。
+
+### 6.3 D desktop — 权限 UI
 
 `AppConsoleViewModel`：
 - `_permissions: MutableStateFlow<List<PermissionInfo>>`、`_permissionsBusy`、`_permissionsError`。
-- `fun loadPermissions(pkg: String)`、`fun togglePermission(pkg: String, perm: String, grant: Boolean)`（grant=true 调 grant，false 调 revoke；成功后局部更新 `_permissions` 对应项的 granted，避免整表重拉）。
+- `fun loadPermissions(pkg: String)`：调 `repo.listPermissions`（= `dumpsysPackage(...).permissions`）。
+- `fun togglePermission(pkg: String, perm: String, grant: Boolean)`（grant=true 调 grant，false 调 revoke；成功后局部更新 `_permissions` 对应项的 granted，避免整表重拉）。
 - 状态机单测：加载成功/失败、toggle 成功局部更新 granted、toggle 失败 `_error` + granted 不变。
 
 `AppConsoleScreen` AdvancedPanel 加"权限"段：
@@ -180,19 +233,22 @@ TDD：
 - toggle 复选框 → `vm.togglePermission`；busy 时禁用。
 - i18n：段标题/加载/状态。
 
-### 6.3 D 的前置约束（流程）
+### 6.4 D+E 的前置约束（流程）
 
-parser 脆弱 + 跨版本变体 → **fixture 未就位前不写 parser**（避免手写 fixture 踩 CLAUDE.md §4 红线）。D 在计划里排在 A/B/C 之后；若用户尚未录制 fixture，D 的 parser 部分标记 blocked，先做 `grant`/`revoke`（无 fixture 依赖）+ UI 骨架（用空权限列表），待 fixture 录制后补 parser。
+parser 脆弱 + 跨版本变体 → **fixture 未就位前不写 parser**（避免手写 fixture 踩 CLAUDE.md §4 红线）。E 和 D 共用 fixture，录制一次即可解锁两者。fixture 未到时：
+- D：`grant`/`revoke`（无 fixture 依赖）+ 权限 UI 骨架（空列表）可先做。
+- E：`listNativeLibs`（复用 LsParser，无 fixture 依赖）+ 详情 UI 骨架（version/path 占位"加载中/无数据"，nativeLibs 空）可先做；`dumpsysPackage` 的 version/path 字段待 fixture。
+- 排期：D+E 绑定排在 A/B/C 之后；fixture 录制是一次性真机操作（录 `dumpsys package <某三方包>`，D 和 E 同时受益）。
 
 ## 7. 跨切面
 
-- **i18n**：所有新文案走 `Strings.t`（zh+en）。新增 key 约估：A ~6、B ~6、C ~5、D ~8。
-- **测试**：`:core` TDD 全覆盖（CommandRunnerTest + DumpsysPackagePermissionsParserTest）；`:desktop` VM 状态机单测。Compose 快照测试不强制。
+- **i18n**：所有新文案走 `Strings.t`（zh+en）。新增 key 约估：A ~6、B ~6、C ~5、D ~8、E ~6（version/path/libs/无原生库/复制等）。
+- **测试**：`:core` TDD 全覆盖（CommandRunnerTest + DumpsysPackageParserTest）；`:desktop` VM 状态机单测（含 E 的详情状态机）。Compose 快照测试不强制。
 - **platform/FileDialogs**：A 需要选目录；B 需要多选文件。检查既有 `FileDialog` 能力，缺则补 `pickDirectory` / `pickFiles`（platform 层，`:core` 接口在既有 `PathProbe`/文件对话框抽象里——实现确认中，plan 阶段核实）。
-- **提交节奏**：每项独立提交，Conventional Commits：`feat(core): bugreport` / `feat(core,desktop): install-multiple + flags` / `feat(core,desktop): am start builder` / `feat(core,desktop): permission grant/revoke`。
-- **顺序**：B → C → A → D（B 顺手修 split-apk bug 价值高且独立；C 复用既有 Extras UI 抽取，中；A 独立 System Ops；D 最后，依赖 fixture）。每项可独立交付/合并。
-- **技术债不扩**：不引入占位代码（D 的 UI 骨架在 fixture 未到前不渲染"假数据"，权限列表空就空）；重构移除旧 `install` 签名时同时删声明与所有引用。
-- **错误处理**：命令失败内联红条 + adb 原文折叠（既有模式）；bugreport 长时 spinner + 可取消；权限 toggle 失败不中断整表。
+- **提交节奏**：每项独立提交，Conventional Commits：`feat(core): bugreport` / `feat(core,desktop): install-multiple + flags` / `feat(core,desktop): am start builder` / `feat(core,desktop): dumpsys-package 详情+权限`（D+E 合并 parser，一次提交或拆 core/desktop 两次）。E 的 nativeLibs 复用 LsParser 不单列。
+- **顺序**：B → C → A → D+E（B 顺手修 split-apk bug 价值高且独立；C 复用既有 Extras UI 抽取，中；A 独立 System Ops；D+E 最后，共用 fixture，绑一起录一次 dumpsys 录制）。每项可独立交付/合并，唯 D+E 在 parser/fixture 上耦合。
+- **技术债不扩**：不引入占位代码（D+E 的 UI 骨架在 fixture 未到前不渲染"假数据"，权限列表空就空、详情字段占位"加载中/无数据"而非假版本号）；重构移除旧 `install` 签名时同时删声明与所有引用；`DumpsysPackagePermissionsParser` 改名为 `DumpsysPackageParser` 时删旧名。
+- **错误处理**：命令失败内联红条 + adb 原文折叠（既有模式）；bugreport 长时 spinner + 可取消；权限 toggle 失败不中断整表；E 详情加载失败内联、不弹窗。
 
 ## 8. 实现顺序与依赖
 
@@ -200,27 +256,27 @@ parser 脆弱 + 跨版本变体 → **fixture 未就位前不写 parser**（避�
 B (install-multiple) ──┐
 C (am start) ─────────┤── 独立，可并行
 A (bugreport) ────────┘
-D (permissions) ── 依赖 fixture 录制；grant/revoke+UI 骨架可先做，parser 待 fixture
+D+E (dumpsys package 详情+权限) ── 共用 parser+fixture；fixture 录制前 grant/revoke+listNativeLibs+UI 骨架可先做，dumpsysPackage 字段待 fixture
 ```
 
-每项 bounded，可按需挑顺序。建议 B 先（含 bug 修复价值）。
+每项 bounded，可按需挑顺序。建议 B 先（含 bug 修复价值）；D+E 绑一起最后做。
 
 ## 9. 待决问题
 
 - `FileDialogs` 是否已有 `pickDirectory` / `pickFiles` 多选？plan 阶段第一步核实；缺则在 platform 层补（Windows 实现 + `:core` 接口如有必要）。
 - **bugreport 的超时与取消语义**：既有 `AdbProcessRunner.run`（文本版）据 CHANGELOG 无 timeout（仅 `runBinary` 加了）；bugreport 走 `run` 时——(a) 协程 `cancel()` 是否真正终止 adb 子进程（`run` 实现是否响应 cancellation）需 plan 阶段读 `JvmAdbProcessRunner.run` 确认；若不响应，则给 `run` 加 `timeoutMs` 参数（对齐 `runBinary` 的 async 读 + `withTimeoutOrNull` + 强杀），或 bugreport 改走 `runBinary` 再解析 stdout 文本。这是 A 的实现前提。
-- D 的 fixture：用户需在 ≥2 台不同 Android 版本设备上录制 `adb shell dumpsys package <某三方包>` 输出。若无法立即录制，D 降级为"grant/revoke + 手输权限名"临时形态？——当前设计坚持完整 GUI + 真实 fixture，不手写；fixture 未到则 D 整体后置。
+- D+E 的 fixture：用户需在 ≥2 台不同 Android 版本设备上录制 `adb shell dumpsys package <某三方包>` 输出。**同一批 fixture 服务 D（permissions 段）和 E（version/path/nativeLibraryDir 段）**，录一次两边受益。若无法立即录制，D+E 的 `dumpsysPackage` 字段（version/path/perms 解析）整体后置；`grant`/`revoke` + `listNativeLibs`（复用 LsParser，无 fixture 依赖）+ 两边 UI 骨架可先做。当前设计坚持完整 GUI + 真实 fixture，不手写。
 
 ## 10. 红线检查清单（对照 CLAUDE.md）
 
-- [ ] `:core` 新方法无 UI import
-- [ ] UI 只经 `DeviceRepository` 回调
+- [ ] `:core` 新方法无 UI import（含 E 的 `listNativeLibs`、`dumpsysPackage`）
+- [ ] UI 只经 `DeviceRepository` 回调（E 的 `packageDetail` 也透传）
 - [ ] `:core` 不起真 adb，走 `AdbProcessRunner`，测试用 Fake
 - [ ] 平台差异在 `:desktop/platform`
-- [ ] 解析（D 的 parser）与执行（CommandRunner）分离
+- [ ] 解析（D+E 合并的 `DumpsysPackageParser`）与执行（CommandRunner）分离；旧名 `DumpsysPackagePermissionsParser` 已删
 - [ ] `:core` I/O 注入 Dispatcher（bugreport 的 `runner.run` 已走既有 runner，无新 Dispatcher 硬编码；新 store 无）
-- [ ] 无死代码（删旧 `install` 签名 + 所有引用）
+- [ ] 无死代码（删旧 `install` 签名 + 所有引用；`DumpsysPackagePermissionsParser` 改名后旧名不残留）
 - [ ] 跨线程可变状态标记（ViewModel 的 `bugreportJob` 在主线程 scope，无需 `@Volatile`；如引入后台 job 句柄则标注）
-- [ ] D 的 fixture 真实录制 + 首行注释完备
-- [ ] TDD：`:core` 先红测后绿测
-- [ ] i18n 全覆盖 zh+en
+- [ ] D+E 的 fixture 真实录制（同一批 `dumpsys_package_*.txt` 服务两边）+ 首行注释完备
+- [ ] TDD：`:core` 先红测后绿测（`DumpsysPackageParserTest` 一次断言 version/path + permissions）
+- [ ] i18n 全覆盖 zh+en（含 E 的 version/path/libs/无原生库文案）
