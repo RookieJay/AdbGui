@@ -92,6 +92,8 @@ fun AppConsoleScreen(
     val broadcastResult by vm.broadcastResult.collectAsState()
     val providerResult by vm.providerResult.collectAsState()
     var selectedPkg by remember { mutableStateOf<String?>(null) }
+    var expandedPkg by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(selectedPkg) { vm.clearDetail(); expandedPkg = null }
     var search by remember { mutableStateOf("") }
     var advancedOpen by remember { mutableStateOf(false) }
     var confirmUninstall by remember { mutableStateOf<String?>(null) }
@@ -255,8 +257,20 @@ fun AppConsoleScreen(
                             PackageSelectRow(
                                 pkg = pkg,
                                 isSelected = pkg.name == selectedPkg,
+                                expanded = expandedPkg == pkg.name,
+                                onToggleExpand = {
+                                    if (expandedPkg == pkg.name) {
+                                        expandedPkg = null
+                                    } else {
+                                        expandedPkg = pkg.name
+                                        vm.loadDetail(pkg.name)
+                                    }
+                                },
                                 onClick = { selectedPkg = pkg.name },
                             )
+                            if (expandedPkg == pkg.name) {
+                                AppDetailBlock(vm)
+                            }
                             Divider()
                         }
                     }
@@ -308,9 +322,14 @@ fun AppConsoleScreen(
                             busy = busy,
                             broadcastResult = broadcastResult,
                             providerResult = providerResult,
+                            permissions = vm.permissions.collectAsState().value,
+                            permissionsBusy = vm.permissionsBusy.collectAsState().value,
+                            permissionsError = vm.permissionsError.collectAsState().value,
                             onStartActivity = { action, data, component, extras -> vm.startActivity(action, data, component, extras) },
                             onSendBroadcast = { action, uri, extras -> vm.sendBroadcast(action, uri, extras) },
                             onQueryProvider = { uri, where -> vm.queryProvider(uri, where) },
+                            onLoadPermissions = { vm.loadPermissions(sel) },
+                            onTogglePermission = { p, g -> vm.togglePermission(sel, p, g) },
                         )
                     }
                 }
@@ -351,6 +370,8 @@ fun AppConsoleScreen(
 private fun PackageSelectRow(
     pkg: PackageInfo,
     isSelected: Boolean,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
     onClick: () -> Unit,
 ) {
     Row(
@@ -367,10 +388,51 @@ private fun PackageSelectRow(
                 Text(Strings.t("system"), style = MaterialTheme.typography.caption)
             }
         }
+        IconButton(onClick = onToggleExpand) {
+            Icon(
+                if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                contentDescription = Strings.t(if (expanded) "collapse" else "expand"),
+                modifier = Modifier.size(18.dp),
+            )
+        }
         IconButton(onClick = {
             Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(pkg.name), null)
         }) {
             Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun AppDetailBlock(vm: AppConsoleViewModel) {
+    val detail by vm.detail.collectAsState()
+    val busy by vm.detailBusy.collectAsState()
+    val err by vm.detailError.collectAsState()
+    Column(Modifier.padding(start = 24.dp, top = 4.dp, bottom = 4.dp)) {
+        Text(Strings.t("app_detail"), style = MaterialTheme.typography.caption)
+        if (busy) CircularProgressIndicator(modifier = Modifier.size(16.dp))
+        err?.let { InlineMessageBanner(Strings.t("adb_error"), MessageKind.Error, details = it, initiallyExpanded = true) }
+        detail?.let { d ->
+            Text("${Strings.t("version")}: ${d.versionName ?: "?"} (${d.versionCode ?: "?"})", style = MaterialTheme.typography.body2)
+            d.primaryCpuAbi?.let { Text("${Strings.t("abi")}: $it", style = MaterialTheme.typography.body2) }
+            d.codePath?.let { path ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${Strings.t("code_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+            d.publicSourceDir?.let { path ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${Strings.t("apk_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+            val libsText = if (d.nativeLibs.isEmpty()) Strings.t("no_native_libs") else d.nativeLibs.joinToString(" ")
+            Text("${Strings.t("native_libs")}: $libsText", style = MaterialTheme.typography.body2)
         }
     }
 }
@@ -381,9 +443,14 @@ private fun AdvancedPanel(
     busy: Boolean,
     broadcastResult: String?,
     providerResult: String?,
+    permissions: List<com.adbgui.core.domain.PermissionInfo>,
+    permissionsBusy: Boolean,
+    permissionsError: String?,
     onStartActivity: (String?, String?, String?, List<Extra>) -> Unit,
     onSendBroadcast: (String, String?, List<Extra>) -> Unit,
     onQueryProvider: (String, String?) -> Unit,
+    onLoadPermissions: () -> Unit,
+    onTogglePermission: (String, Boolean) -> Unit,
 ) {
     // am start
     var amComponent by remember { mutableStateOf("") }
@@ -516,6 +583,39 @@ private fun AdvancedPanel(
             providerResult?.let {
                 Text(Strings.t("provider_result"), style = MaterialTheme.typography.caption)
                 SelectableText(it)
+            }
+
+            Divider()
+
+            // --- permissions (D) ---
+            Text(Strings.t("permissions"), style = MaterialTheme.typography.subtitle2)
+            Button(
+                enabled = !permissionsBusy,
+                onClick = { onLoadPermissions() },
+            ) { Text(if (permissionsBusy) Strings.t("loading") else Strings.t("load_permissions")) }
+            permissionsError?.let {
+                InlineMessageBanner(Strings.t("adb_error"), MessageKind.Error, details = it, initiallyExpanded = true)
+            }
+            if (permissions.isNotEmpty()) {
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp)) {
+                    items(permissions, key = { it.name }) { p ->
+                        if (p.runtime) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = p.granted,
+                                    enabled = !permissionsBusy,
+                                    onCheckedChange = { onTogglePermission(p.name, it) },
+                                )
+                                Text(p.name, style = MaterialTheme.typography.body2)
+                            }
+                        } else {
+                            Text(
+                                "${p.name} (${if (p.granted) Strings.t("granted") else Strings.t("not_granted")})",
+                                style = MaterialTheme.typography.caption,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

@@ -2,9 +2,12 @@ package com.adbgui.desktop.ui
 
 import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.domain.AdbCommandException
+import com.adbgui.core.domain.DumpsysPackage
 import com.adbgui.core.domain.Extra
 import com.adbgui.core.domain.InstallFlags
+import com.adbgui.core.domain.PackageDetail
 import com.adbgui.core.domain.PackageInfo
+import com.adbgui.core.domain.PermissionInfo
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -30,6 +33,19 @@ class AppConsoleViewModel(
     val broadcastResult: StateFlow<String?> = _broadcastResult.asStateFlow()
     private val _providerResult = MutableStateFlow<String?>(null)
     val providerResult: StateFlow<String?> = _providerResult.asStateFlow()
+    private val _detail = MutableStateFlow<PackageDetail?>(null)
+    val detail: StateFlow<PackageDetail?> = _detail.asStateFlow()
+    private val _detailBusy = MutableStateFlow(false)
+    val detailBusy: StateFlow<Boolean> = _detailBusy.asStateFlow()
+    private val _detailError = MutableStateFlow<String?>(null)
+    val detailError: StateFlow<String?> = _detailError.asStateFlow()
+    private val _permissions = MutableStateFlow<List<PermissionInfo>>(emptyList())
+    val permissions: StateFlow<List<PermissionInfo>> = _permissions.asStateFlow()
+    private val _permissionsBusy = MutableStateFlow(false)
+    val permissionsBusy: StateFlow<Boolean> = _permissionsBusy.asStateFlow()
+    private val _permissionsError = MutableStateFlow<String?>(null)
+    val permissionsError: StateFlow<String?> = _permissionsError.asStateFlow()
+    private val _cachedDumpsys = MutableStateFlow<Pair<String, DumpsysPackage>?>(null)  // (pkg, parsed)
 
     fun load() = scope.launch {
         val serial = selectedSerial.value
@@ -125,6 +141,57 @@ class AppConsoleViewModel(
         try { val out = repo.queryProvider(serial, uri, where); _providerResult.value = out }
         catch (e: Exception) { _error.value = if (e is AdbCommandException) "${e.message}\n--- adb stderr ---\n${e.stderr}" else (e.message ?: "unknown error") }
         finally { _busy.value = false }
+    }
+
+    fun loadDetail(pkg: String) = scope.launch {
+        val serial = selectedSerial.value ?: return@launch
+        _detailBusy.value = true; _detailError.value = null
+        try {
+            val dp = cachedOrLoad(serial, pkg)
+            val libDir = dp.nativeLibraryDir
+            val libs = if (libDir != null) repo.listNativeLibs(serial, libDir) else emptyList()
+            _detail.value = PackageDetail(
+                versionName = dp.versionName, versionCode = dp.versionCode,
+                codePath = dp.codePath, publicSourceDir = dp.publicSourceDir,
+                nativeLibraryDir = dp.nativeLibraryDir, primaryCpuAbi = dp.primaryCpuAbi,
+                nativeLibs = libs,
+            )
+        } catch (e: AdbCommandException) { _detailError.value = "${e.message}\n--- adb stderr ---\n${e.stderr}" }
+        finally { _detailBusy.value = false }
+    }
+
+    fun loadPermissions(pkg: String) = scope.launch {
+        val serial = selectedSerial.value ?: return@launch
+        _permissionsBusy.value = true; _permissionsError.value = null
+        try { _permissions.value = cachedOrLoad(serial, pkg).permissions }
+        catch (e: AdbCommandException) { _permissionsError.value = "${e.message}\n--- adb stderr ---\n${e.stderr}" }
+        finally { _permissionsBusy.value = false }
+    }
+
+    fun togglePermission(pkg: String, perm: String, grant: Boolean) = scope.launch {
+        val serial = selectedSerial.value ?: return@launch
+        try {
+            if (grant) repo.grant(serial, pkg, perm) else repo.revoke(serial, pkg, perm)
+            _permissions.value = _permissions.value.map { if (it.name == perm) it.copy(granted = grant) else it }
+            _cachedDumpsys.value?.let { (p, dp) ->
+                if (p == pkg) _cachedDumpsys.value = pkg to dp.copy(
+                    permissions = dp.permissions.map { if (it.name == perm) it.copy(granted = grant) else it }
+                )
+            }
+        } catch (e: AdbCommandException) { _permissionsError.value = "${e.message}\n--- adb stderr ---\n${e.stderr}" }
+    }
+
+    fun clearDetail() {
+        _detail.value = null; _detailError.value = null
+        _permissions.value = emptyList(); _permissionsError.value = null
+        _cachedDumpsys.value = null
+    }
+
+    private suspend fun cachedOrLoad(serial: String, pkg: String): DumpsysPackage {
+        _cachedDumpsys.value?.let { (p, dp) -> if (p == pkg) return dp }
+        val dp = repo.dumpsysPackage(serial, pkg)
+        _cachedDumpsys.value = pkg to dp
+        return dp
     }
 
     private val refreshJob: Job = scope.launch { selectedSerial.collect { load() } }
