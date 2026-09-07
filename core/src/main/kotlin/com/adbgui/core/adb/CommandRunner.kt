@@ -5,6 +5,7 @@ import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.BugreportResult
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceProps
+import com.adbgui.core.domain.DumpsysPackage
 import com.adbgui.core.domain.Extra
 import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.domain.InstallResult
@@ -109,9 +110,29 @@ class CommandRunner(
     // to guard `adb shell ls -la <dir>` against shell-injection-shaped input.
     private val safePathRegex = Regex("^[^\\s;&|`'$<>]+$")
 
+    // Package-name guard for dumpsysPackage (and any future per-package adb command). Allows letters,
+    // digits, dot, underscore — the Android package-name charset. Rejects spaces / shell metachars
+    // so a malformed caller cannot shape `adb shell dumpsys package <pkg>` into a sh injection.
+    private val pkgRegex = Regex("^[A-Za-z0-9._]+$")
+
     suspend fun listPackages(serial: String): List<PackageInfo> {
         val r = runCmd(serial, listOf("shell", "pm", "list", "packages", "-3"))
         return PackageListParser.parse(r.stdout, thirdPartyOnly = true)
+    }
+
+    /** `adb shell dumpsys package <pkg>` → parsed [DumpsysPackage]. Throws [AdbCommandException]
+     *  if the output has no parseable `Package [` / `Packages:` section (e.g. package not installed
+     *  on the device). `runShellCmd` sanitizes the pty's `\r`/ANSI artifacts before parsing. */
+    suspend fun dumpsysPackage(serial: String, pkg: String): DumpsysPackage {
+        require(pkgRegex.matches(pkg)) { "invalid package name: $pkg" }
+        val out = runShellCmd(serial, "dumpsys package $pkg")
+        val parsed = DumpsysPackageParser.parse(out)
+            ?: throw AdbCommandException(
+                command = "adb -s $serial shell dumpsys package $pkg",
+                exitCode = -1,
+                stderr = "no Package section in dumpsys output; stdout head=${out.take(200)}",
+            )
+        return parsed
     }
 
     suspend fun install(serial: String, paths: List<String>, flags: InstallFlags): InstallResult {
@@ -306,14 +327,29 @@ class CommandRunner(
      *  `adb shell ls -la <dir>` from being a shell-injection vector (adb's modern shell protocol
      *  sends argv without `sh -c` re-parsing, but a path with `;`/`&`/backticks is still suspect
      *  and never a real lib path). On any ls failure (bad dir, offline) returns empty list —
-     *  native libs are best-effort display, not a critical path. */
+     *  native libs are best-effort display, not a critical path.
+     *
+     *  Handles two on-device layouts:
+     *  - Android >=10: `.so` files live directly in `nativeLibraryDir`.
+     *  - Android <=9: `.so` files live in `/lib/<abi>/` (e.g. `/lib/arm/`), one level below
+     *    `legacyNativeLibraryDir`. The flat `ls` of the dir returns subdirectory entries (e.g.
+     *    `arm`) and no `.so`; recurse one level into each immediate subdir to collect `.so`. */
     suspend fun listNativeLibs(serial: String, dir: String): List<String> {
         if (!safePathRegex.matches(dir)) {
             logger.warn("listNativeLibs: rejecting dir: $dir")
             return emptyList()
         }
         val out = runCatching { ls(serial, dir) }.getOrElse { return emptyList() }
-        return LsParser.parse(out).map { it.name }.filter { it.endsWith(".so") }
+        val entries = LsParser.parse(out)
+        val direct = entries.map { it.name }.filter { it.endsWith(".so") }
+        if (direct.isNotEmpty()) return direct
+        // Android <=9 abi-subdir layout: .so files live in /lib/<abi>/ subdir.
+        val subdirs = entries.filter { it.isDirectory }
+        return subdirs.flatMap { sd ->
+            runCatching { LsParser.parse(ls(serial, "$dir/${sd.name}")) }
+                .getOrDefault(emptyList())
+                .map { it.name }.filter { it.endsWith(".so") }
+        }
     }
 
     suspend fun checkSymlinkDirs(serial: String, paths: List<String>): List<Boolean> {

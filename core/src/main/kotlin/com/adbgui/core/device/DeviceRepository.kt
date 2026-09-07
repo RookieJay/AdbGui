@@ -104,6 +104,25 @@ class DeviceRepository(
     suspend fun adbVersion(): String = commands.adbVersion()
     suspend fun runShellCmd(serial: String, cmd: String): String = commands.runShellCmd(serial, cmd)
     suspend fun listPackages(serial: String): List<PackageInfo> = commands.listPackages(serial)
+    suspend fun dumpsysPackage(serial: String, pkg: String): com.adbgui.core.domain.DumpsysPackage =
+        commands.dumpsysPackage(serial, pkg)
+
+    /** Orchestrates [CommandRunner.dumpsysPackage] + [CommandRunner.listNativeLibs] into a flat
+     *  [com.adbgui.core.domain.PackageDetail] view for the app-detail panel. Native libs are
+     *  fetched only when `nativeLibraryDir` is non-null (apps without native code return empty). */
+    suspend fun packageDetail(serial: String, pkg: String): com.adbgui.core.domain.PackageDetail {
+        val dp = commands.dumpsysPackage(serial, pkg)
+        val libs = if (dp.nativeLibraryDir != null) commands.listNativeLibs(serial, dp.nativeLibraryDir) else emptyList()
+        return com.adbgui.core.domain.PackageDetail(
+            versionName = dp.versionName,
+            versionCode = dp.versionCode,
+            codePath = dp.codePath,
+            publicSourceDir = dp.publicSourceDir,
+            nativeLibraryDir = dp.nativeLibraryDir,
+            primaryCpuAbi = dp.primaryCpuAbi,
+            nativeLibs = libs,
+        )
+    }
     suspend fun install(serial: String, paths: List<String>, flags: InstallFlags): InstallResult =
         commands.install(serial, paths, flags)
     suspend fun uninstall(serial: String, pkg: String): Boolean = commands.uninstall(serial, pkg)

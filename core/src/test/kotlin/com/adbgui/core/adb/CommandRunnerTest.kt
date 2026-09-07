@@ -119,9 +119,64 @@ class CommandRunnerTest {
 
     @Test
     fun listNativeLibs_bad_dir_returns_empty() = runTest {
-        val cr = CommandRunner({ adb }, FakeAdbProcessRunner(), NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val runner = FakeAdbProcessRunner()
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         assertEquals(emptyList(), cr.listNativeLibs("abc", "bad dir; rm -rf"))
+        assertTrue(runner.runs.isEmpty(), "ls should not be invoked when dir fails the path guard")
     }
+
+    @Test
+    fun dumpsysPackage_passes_pkg_to_dumpsys_and_parses() = runTest {
+        val runner = FakeAdbProcessRunner()
+        // Real fixture: Hisense Android 9, com.dangbeimarket v6.0.7 (legacyNativeLibraryDir layout).
+        val stdout = javaClass.classLoader!!.getResource("fixtures/dumpsys_package_hisense_android9.txt")!!
+            .readText().lineSequence().dropWhile { it.startsWith("#") }.joinToString("\n")
+        runner.whenArgsContains(listOf("dumpsys", "package"), AdbProcessResult(0, stdout, ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val pkg = cr.dumpsysPackage("abc", "com.dangbeimarket")
+        // runShellCmd passes the whole "dumpsys package com.dangbeimarket" as a single shell arg
+        // (so the device's sh parses it); assert on the joined argv so the check holds regardless
+        // of whether the command is split into separate argv tokens or sent as one string.
+        val argv = runner.runs.last().joinToString(" ")
+        assertTrue(argv.contains("-s abc shell dumpsys package com.dangbeimarket"), "argv=$argv")
+        assertEquals("6.0.7", pkg.versionName)
+    }
+
+    @Test
+    fun dumpsysPackage_rejects_invalid_pkg() = runTest {
+        val cr = CommandRunner({ adb }, FakeAdbProcessRunner(), NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<IllegalArgumentException> { cr.dumpsysPackage("abc", "bad pkg!") }
+    }
+
+    @Test
+    fun dumpsysPackage_throws_when_no_packages_section() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("dumpsys", "package"), AdbProcessResult(0, "garbage\nno Packages section", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.dumpsysPackage("abc", "com.x") }
+    }
+
+    @Test
+    fun listNativeLibs_recurses_into_abi_subdir() = runTest {
+        val runner = FakeAdbProcessRunner()
+        // Real Hisense layout: .so files live in /lib/arm/, not directly in legacyNativeLibraryDir.
+        // FakeAdbProcessRunner matches first-wins by keyword substring. The two ls calls differ in
+        // path arg: shallow "/data/app/x/lib/" vs deep "/data/app/x/lib/arm/". The shallow arg
+        // contains "/lib" but NOT "arm"; the deep arg contains both. So the "arm" rule (added FIRST)
+        // matches only the deep call and returns .so files; the "/lib" rule (added SECOND) matches
+        // the shallow call and returns the subdir entry. If "/lib" were first, the deep call would
+        // wrongly match it and return the subdir entry (no .so) -> empty result.
+        runner.whenArgsContains(listOf("arm"), AdbProcessResult(0,
+            "-rwxr-xr-x 1 system system 1234 2020-01-01 12:00 libfoo.so\n" +
+            "-rwxr-xr-x 1 system system 5678 2020-01-01 12:00 libbar.so\n", ""))
+        runner.whenArgsContains(listOf("/lib"), AdbProcessResult(0,
+            "drwxr-xr-x 2 system system 4096 2020-01-01 12:00 arm\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val libs = cr.listNativeLibs("abc", "/data/app/x/lib")
+        assertTrue(libs.contains("libfoo.so"), "expected libfoo.so from abi subdir, got: $libs")
+        assertTrue(libs.contains("libbar.so"))
+    }
+
 
     @Test
     fun install_single_with_flags_builds_correct_argv() = runTest {
