@@ -105,6 +105,10 @@ class CommandRunner(
         val ANSI_CSI = Regex("\\[[0-9;?]*[A-Za-z]")
     }
 
+    // Rejects paths containing shell metacharacters / whitespace — used by listNativeLibs
+    // to guard `adb shell ls -la <dir>` against shell-injection-shaped input.
+    private val safePathRegex = Regex("^[^\\s;&|`'$<>]+$")
+
     suspend fun listPackages(serial: String): List<PackageInfo> {
         val r = runCmd(serial, listOf("shell", "pm", "list", "packages", "-3"))
         return PackageListParser.parse(r.stdout, thirdPartyOnly = true)
@@ -133,6 +137,12 @@ class CommandRunner(
         val r = runCmd(serial, listOf("shell", "pm", "uninstall", pkg))
         return r.stdout.contains("Success")
     }
+
+    suspend fun grant(serial: String, pkg: String, perm: String): String =
+        runCmd(serial, listOf("shell", "pm", "grant", pkg, perm)).stdout
+
+    suspend fun revoke(serial: String, pkg: String, perm: String): String =
+        runCmd(serial, listOf("shell", "pm", "revoke", pkg, perm)).stdout
 
     suspend fun clearData(serial: String, pkg: String): Boolean {
         val r = runCmd(serial, listOf("shell", "pm", "clear", pkg))
@@ -289,6 +299,21 @@ class CommandRunner(
         // `ls -la /sdcard/` follows the link and lists the directory contents.
         val p = if (path.endsWith("/")) path else "$path/"
         return runCmd(serial, listOf("shell", "ls", "-la", p)).stdout
+    }
+
+    /** List `.so` files in a device directory (typically a package's `nativeLibraryDir`).
+     *  Reuses [LsParser] — no new parser. The `dir` is validated against [safePathRegex] to keep
+     *  `adb shell ls -la <dir>` from being a shell-injection vector (adb's modern shell protocol
+     *  sends argv without `sh -c` re-parsing, but a path with `;`/`&`/backticks is still suspect
+     *  and never a real lib path). On any ls failure (bad dir, offline) returns empty list —
+     *  native libs are best-effort display, not a critical path. */
+    suspend fun listNativeLibs(serial: String, dir: String): List<String> {
+        if (!safePathRegex.matches(dir)) {
+            logger.warn("listNativeLibs: rejecting dir: $dir")
+            return emptyList()
+        }
+        val out = runCatching { ls(serial, dir) }.getOrElse { return emptyList() }
+        return LsParser.parse(out).map { it.name }.filter { it.endsWith(".so") }
     }
 
     suspend fun checkSymlinkDirs(serial: String, paths: List<String>): List<Boolean> {

@@ -76,6 +76,54 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun grant_passes_pkg_and_perm() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pm", "grant"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.grant("abc", "com.x", "android.permission.CAMERA")
+        val argv = runner.runs.last()
+        assertTrue(argv.containsAll(listOf("-s", "abc", "shell", "pm", "grant", "com.x", "android.permission.CAMERA")))
+    }
+
+    @Test
+    fun grant_failure_throws() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pm", "grant"), AdbProcessResult(1, "", "not a runtime permission"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.grant("abc", "com.x", "android.permission.CAMERA") }
+    }
+
+    @Test
+    fun revoke_passes_pkg_and_perm() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pm", "revoke"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.revoke("abc", "com.x", "android.permission.CAMERA")
+        val argv = runner.runs.last()
+        assertTrue(argv.containsAll(listOf("-s", "abc", "shell", "pm", "revoke", "com.x", "android.permission.CAMERA")))
+    }
+
+    @Test
+    fun listNativeLibs_filters_so_files() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("ls"), AdbProcessResult(0,
+            "-rw-r--r-- 1 root root 1234 2020-01-01 12:00 libfoo.so\n" +
+            "-rw-r--r-- 1 root root 5678 2020-01-01 12:00 libbar.so\n" +
+            "drwxr-xr-x 2 root root 4096 2020-01-01 12:00 .\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val libs = cr.listNativeLibs("abc", "/data/app/.../lib/arm64")
+        assertTrue(libs.contains("libfoo.so"))
+        assertTrue(libs.contains("libbar.so"))
+        assertTrue(libs.none { !it.endsWith(".so") })
+    }
+
+    @Test
+    fun listNativeLibs_bad_dir_returns_empty() = runTest {
+        val cr = CommandRunner({ adb }, FakeAdbProcessRunner(), NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertEquals(emptyList(), cr.listNativeLibs("abc", "bad dir; rm -rf"))
+    }
+
+    @Test
     fun install_single_with_flags_builds_correct_argv() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("install"), AdbProcessResult(0, "Success", ""))
