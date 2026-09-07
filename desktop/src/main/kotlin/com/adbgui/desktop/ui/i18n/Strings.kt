@@ -362,6 +362,15 @@ object Strings {
         "cdp_col_time" to "时间",
         "cdp_clear_network" to "清空网络",
         "cdp_jump_latest" to "跳到最新",
+        // Updates
+        "update_section" to "更新",
+        "update_source" to "更新源",
+        "update_check_now" to "立即检查",
+        "update_checking" to "正在检查…",
+        "update_no_update" to "已是最新版本",
+        "update_available" to "发现新版本：%s",
+        "update_error" to "检查失败：%s",
+        "update_current_version" to "当前版本：%s",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -711,6 +720,15 @@ Click "Remove All" when done to clean up.""",
         "cdp_col_time" to "Time",
         "cdp_clear_network" to "Clear network",
         "cdp_jump_latest" to "Jump to latest",
+        // Updates
+        "update_section" to "Updates",
+        "update_source" to "Update source",
+        "update_check_now" to "Check now",
+        "update_checking" to "Checking…",
+        "update_no_update" to "Up to date",
+        "update_available" to "New version available: %s",
+        "update_error" to "Check failed: %s",
+        "update_current_version" to "Current version: %s",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)
