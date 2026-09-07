@@ -22,7 +22,7 @@ compose.desktop.application {
     nativeDistributions {
         targetFormats(TargetFormat.Msi, TargetFormat.AppImage)
         packageName = "AdbGui"
-        packageVersion = "1.0.0"
+        packageVersion = "1.0.0"  // keep in sync with AppMeta.APP_VERSION
         windows {
             dirChooser = true
             perUserInstall = true
