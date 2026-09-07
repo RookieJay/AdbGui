@@ -8,6 +8,8 @@ import com.adbgui.core.update.UpdateDownloader
 import com.adbgui.core.update.UpdateManifestFetcher
 import com.adbgui.desktop.platform.MsiUpgrader
 import com.adbgui.desktop.platform.PortableUpdateNotifier
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -15,6 +17,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class UpdateViewModelTest {
@@ -24,6 +27,13 @@ class UpdateViewModelTest {
 
     private class FakeDownloader(private val result: UpdateDownloadResult) : UpdateDownloader {
         override suspend fun download(url: String, sha256: String, onProgress: (Float) -> Unit) = result
+    }
+
+    private class CancellingDownloader : UpdateDownloader {
+        override suspend fun download(url: String, sha256: String, onProgress: (Float) -> Unit): UpdateDownloadResult {
+            delay(1)
+            throw CancellationException("cancelled")
+        }
     }
 
     private class FakeMsiUpgrader : MsiUpgrader() {
@@ -122,5 +132,15 @@ class UpdateViewModelTest {
         vm.checkForUpdates(); advanceUntilIdle()
         vm.openDownloadPage()
         assertEquals("https://example.com/AdbGui-1.1.0.msi", notifier.opened)
+    }
+
+    @Test fun cancel_download_restores_available() = runTest {
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
+            downloader = CancellingDownloader())
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate()
+        advanceUntilIdle()
+        val s = vm.state.value
+        assertTrue(s is UpdateState.Available, "expected Available after cancel, got $s")
     }
 }

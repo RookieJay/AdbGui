@@ -9,6 +9,7 @@ import com.adbgui.core.update.UpdateManifest
 import com.adbgui.core.update.UpdateSourceRegistry
 import com.adbgui.desktop.platform.MsiUpgrader
 import com.adbgui.desktop.platform.PortableUpdateNotifier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,22 +71,27 @@ class UpdateViewModel(
         store.update { it.copy(update = it.update.copy(sourceId = id)) }
     }
 
-    fun downloadUpdate(): Job = scope.launch {
-        val m = (_state.value as? UpdateState.Available)?.manifest ?: return@launch
-        _state.value = UpdateState.Downloading(0f)
-        val result = downloader.download(m.url, m.sha256) { p ->
-            _state.value = UpdateState.Downloading(p)
-        }
-        when (result) {
-            is UpdateDownloadResult.Success -> _state.value = UpdateState.Ready(result.msiPath, m)
-            is UpdateDownloadResult.HashMismatch -> _state.value = UpdateState.Error("sha256 校验失败")
-            is UpdateDownloadResult.NetworkError -> _state.value = UpdateState.Error(result.message ?: "unknown")
-            is UpdateDownloadResult.Cancelled -> {
-                lastManifest = m
+    fun downloadUpdate(): Job {
+        val m = (_state.value as? UpdateState.Available)?.manifest
+            ?: return Job().apply { complete() }
+        return scope.launch {
+            _state.value = UpdateState.Downloading(0f)
+            val result = try {
+                downloader.download(m.url, m.sha256) { p ->
+                    _state.value = UpdateState.Downloading(p)
+                }
+            } catch (e: CancellationException) {
                 _state.value = UpdateState.Available(m)
+                throw e
             }
-        }
-    }.also { downloadJob = it }
+            when (result) {
+                is UpdateDownloadResult.Success -> _state.value = UpdateState.Ready(result.msiPath, m)
+                is UpdateDownloadResult.HashMismatch -> _state.value = UpdateState.Error("sha256 校验失败")
+                is UpdateDownloadResult.NetworkError -> _state.value = UpdateState.Error(result.message ?: "unknown")
+                is UpdateDownloadResult.Cancelled -> _state.value = UpdateState.Available(m)
+            }
+        }.also { downloadJob = it }
+    }
 
     fun cancelDownload() {
         downloadJob?.cancel()
@@ -101,6 +107,8 @@ class UpdateViewModel(
     }
 
     fun openDownloadPage() {
+        val s = _state.value
+        if (s !is UpdateState.Available && s !is UpdateState.Ready) return
         val m = lastManifest ?: return
         notifier.openDownloadPage(m.url)
     }
