@@ -1,6 +1,5 @@
 package com.adbgui.core.update
 
-import com.adbgui.core.domain.UpdateVersion
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse

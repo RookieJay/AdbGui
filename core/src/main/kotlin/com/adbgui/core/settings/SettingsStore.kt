@@ -18,7 +18,6 @@ data class WindowBounds(val x: Int, val y: Int, val w: Int, val h: Int)
 @Serializable
 data class UpdateSettings(
     val sourceId: String = "github-official",
-    val checkOnStartup: Boolean = true,
     val lastCheckAt: String? = null,
     val lastCheckError: String? = null,
 )

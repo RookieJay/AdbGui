@@ -1,6 +1,7 @@
 package com.adbgui.core.update
 
 import com.adbgui.core.log.Logger
+import kotlinx.coroutines.CancellationException
 
 class UpdateChecker(
     private val fetcher: UpdateManifestFetcher,
@@ -11,6 +12,8 @@ class UpdateChecker(
         logger.info("update: checking source=${source.id} current=$currentVersion")
         val raw = try {
             fetcher.fetch(source.manifestUrl)
+        } catch (t: CancellationException) {
+            throw t
         } catch (t: Throwable) {
             logger.warn("update: fetch failed source=${source.id}", t)
             return UpdateCheckResult.Error("fetch failed: ${t.message}")
