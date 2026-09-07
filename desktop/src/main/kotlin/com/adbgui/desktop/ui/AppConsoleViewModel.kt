@@ -194,6 +194,6 @@ class AppConsoleViewModel(
         return dp
     }
 
-    private val refreshJob: Job = scope.launch { selectedSerial.collect { load() } }
+    private val refreshJob: Job = scope.launch { selectedSerial.collect { clearDetail(); load() } }
     fun stop() { refreshJob.cancel() }
 }

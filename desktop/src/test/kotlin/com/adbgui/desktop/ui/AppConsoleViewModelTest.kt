@@ -232,4 +232,24 @@ class AppConsoleViewModelTest {
         assertNull(vm.permissions.value.takeIf { it.isNotEmpty() })  // permissions cleared too
         vm.stop(); repo.stop()
     }
+
+    @Test fun switching_serial_clears_dumpsys_cache() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("dumpsys", "package"), AdbProcessResult(0, fixture("dumpsys_package_hisense_android9.txt"), ""))
+        runner.whenArgsContains(listOf("arm"), AdbProcessResult(0, "-rwxr-xr-x 1 system system 1 2020-01-01 12:00 libx.so\n", ""))
+        runner.whenArgsContains(listOf("lib"), AdbProcessResult(0, "drwxr-xr-x 2 system system 1 2020-01-01 12:00 arm\n", ""))
+        runner.whenArgsContains(listOf("pm", "list"), AdbProcessResult(0, "package:com.dangbeimarket\n", ""))
+        val selected = MutableStateFlow<String?>("serial1")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.loadDetail("com.dangbeimarket"); advanceUntilIdle()
+        assertNotNull(vm.detail.value)
+        // switch device
+        selected.value = "serial2"; advanceUntilIdle()
+        assertNull(vm.detail.value, "detail must be cleared on serial switch")
+        vm.loadDetail("com.dangbeimarket"); advanceUntilIdle()
+        // dumpsys called again (cache was cleared) — 2 dumpsys calls total
+        val dumpsysCalls = runner.runs.count { it.any { a -> a.contains("dumpsys") } }
+        assertEquals(2, dumpsysCalls, "expected dumpsys re-called after serial switch, got $dumpsysCalls")
+        vm.stop(); repo.stop()
+    }
 }

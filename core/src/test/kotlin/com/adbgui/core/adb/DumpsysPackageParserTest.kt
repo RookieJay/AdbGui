@@ -1,6 +1,5 @@
 package com.adbgui.core.adb
 
-import com.adbgui.core.domain.PermissionInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
