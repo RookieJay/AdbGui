@@ -58,4 +58,17 @@ class SettingsStoreTest {
         val loaded = SettingsStore(dir).load()
         assertEquals(profile, loaded.scrcpyLaunch)
     }
+
+    @Test
+    fun update_settings_default_and_round_trip() = runTest {
+        val dir = Files.createTempDirectory("upd")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val default = store.load()
+        assertEquals("github-official", default.update.sourceId)
+        assertNull(default.update.lastCheckAt)
+        store.save(default.copy(update = default.update.copy(sourceId = "github-mirror", lastCheckAt = "2026-09-03T10:00:00Z")))
+        val reloaded = store.load()
+        assertEquals("github-mirror", reloaded.update.sourceId)
+        assertEquals("2026-09-03T10:00:00Z", reloaded.update.lastCheckAt)
+    }
 }

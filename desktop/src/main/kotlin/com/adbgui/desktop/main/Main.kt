@@ -102,6 +102,7 @@ fun main() = application {
             AppShell(
                 vm = vm,
                 settingsVm = settingsVm,
+                updateVm = root.updateViewModel,
                 configDir = root.configDir,
                 deviceOverviewDeviceInfoVm = deviceInfoVm,
                 deviceOverviewRemoteVm = remoteVm,
