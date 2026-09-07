@@ -34,16 +34,16 @@ class UpdateViewModel(
         when (result) {
             is UpdateCheckResult.NoUpdate -> {
                 _state.value = UpdateState.NoUpdate
-                persistResult(settings.update.sourceId, nowIso, null)
+                persistResult(nowIso, null)
             }
             is UpdateCheckResult.UpdateAvailable -> {
                 val m = result.manifest
                 _state.value = UpdateState.Available(m.version, m.notes, m.url)
-                persistResult(settings.update.sourceId, nowIso, null)
+                persistResult(nowIso, null)
             }
             is UpdateCheckResult.Error -> {
                 _state.value = UpdateState.Error(result.message)
-                persistResult(settings.update.sourceId, nowIso, result.message)
+                persistResult(nowIso, result.message)
             }
         }
     }
@@ -52,7 +52,7 @@ class UpdateViewModel(
         store.update { it.copy(update = it.update.copy(sourceId = id)) }
     }
 
-    private suspend fun persistResult(sourceId: String, at: String, err: String?) {
+    private suspend fun persistResult(at: String, err: String?) {
         store.update { it.copy(update = it.update.copy(lastCheckAt = at, lastCheckError = err)) }
     }
 }

@@ -2,11 +2,8 @@ package com.adbgui.desktop.ui.update
 
 import com.adbgui.core.log.NoopLogger
 import com.adbgui.core.settings.SettingsStore
-import com.adbgui.core.update.UpdateCheckResult
 import com.adbgui.core.update.UpdateChecker
-import com.adbgui.core.update.UpdateManifest
 import com.adbgui.core.update.UpdateManifestFetcher
-import com.adbgui.core.update.UpdateSource
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
