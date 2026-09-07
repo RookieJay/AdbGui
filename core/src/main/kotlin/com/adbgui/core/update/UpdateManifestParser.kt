@@ -7,16 +7,11 @@ object UpdateManifestParser {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun parse(text: String): UpdateManifest {
-        val cleaned = stripComments(text)
-        val m = runCatching { json.decodeFromString<UpdateManifest>(cleaned) }
+        val m = runCatching { json.decodeFromString<UpdateManifest>(text) }
             .getOrElse { throw UpdateManifestParseException(text, "json decode failed", it) }
         validate(m, text)
         return m
     }
-
-    /** Strip `//` line comments (fixture header convention; not valid JSON). */
-    private fun stripComments(text: String): String =
-        text.lineSequence().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")
 
     private fun validate(m: UpdateManifest, raw: String) {
         if (m.version.isBlank()) throw fail(raw, "version missing")

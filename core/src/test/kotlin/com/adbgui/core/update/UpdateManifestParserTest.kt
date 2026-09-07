@@ -8,6 +8,8 @@ class UpdateManifestParserTest {
     private fun readFixture(name: String): String =
         UpdateManifestParserTest::class.java.getResourceAsStream("/fixtures/update/$name")!!
             .bufferedReader().use { it.readText() }
+            // Strip `//` line comments (fixture header convention; not valid JSON).
+            .lineSequence().filterNot { it.trimStart().startsWith("//") }.joinToString("\n")
 
     @Test fun parses_valid_manifest() {
         val m = UpdateManifestParser.parse(readFixture("manifest_valid.json"))
