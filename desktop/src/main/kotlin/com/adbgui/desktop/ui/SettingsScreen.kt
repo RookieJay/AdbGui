@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.Divider
+import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.RadioButton
@@ -305,8 +306,47 @@ fun SettingsScreen(
                         Strings.t("update_no_update"),
                         style = MaterialTheme.typography.caption,
                     )
-                    is UpdateState.Available -> Text(
-                        Strings.t("update_available").format(s.manifest.version),
+                    is UpdateState.Available -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val notes = s.manifest.notes
+                        Text(
+                            Strings.t("update_available").format(s.manifest.version),
+                            style = MaterialTheme.typography.caption,
+                        )
+                        if (notes != null) {
+                            Text(notes, style = MaterialTheme.typography.caption)
+                        }
+                        Button(onClick = { updateVm.downloadUpdate() }) {
+                            Text(Strings.t("update_download_install"))
+                        }
+                        TextButton(onClick = { updateVm.openDownloadPage() }) {
+                            Text(Strings.t("update_open_page"))
+                        }
+                    }
+                    is UpdateState.Downloading -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val pct = (s.progress * 100).toInt()
+                        Text(
+                            Strings.t("update_downloading").format(pct),
+                            style = MaterialTheme.typography.caption,
+                        )
+                        LinearProgressIndicator(progress = s.progress)
+                        Button(onClick = { updateVm.cancelDownload() }) {
+                            Text(Strings.t("update_cancel_download"))
+                        }
+                    }
+                    is UpdateState.Ready -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            Strings.t("update_available").format(s.manifest.version),
+                            style = MaterialTheme.typography.caption,
+                        )
+                        Button(onClick = { updateVm.installNow() }) {
+                            Text(Strings.t("update_install_now"))
+                        }
+                        TextButton(onClick = { updateVm.openDownloadPage() }) {
+                            Text(Strings.t("update_open_page"))
+                        }
+                    }
+                    UpdateState.Installing -> Text(
+                        Strings.t("update_installing"),
                         style = MaterialTheme.typography.caption,
                     )
                     is UpdateState.Error -> Text(
@@ -314,7 +354,6 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.caption,
                     )
                     UpdateState.Idle -> Unit
-                    else -> Unit
                 }
             }
         }
