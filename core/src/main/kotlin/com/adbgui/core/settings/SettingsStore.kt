@@ -16,6 +16,14 @@ import java.nio.file.StandardCopyOption
 data class WindowBounds(val x: Int, val y: Int, val w: Int, val h: Int)
 
 @Serializable
+data class UpdateSettings(
+    val sourceId: String = "github-official",
+    val checkOnStartup: Boolean = true,
+    val lastCheckAt: String? = null,
+    val lastCheckError: String? = null,
+)
+
+@Serializable
 data class Settings(
     val adbPathOverride: String? = null,
     val logLevel: LogLevel = LogLevel.INFO,
@@ -33,6 +41,7 @@ data class Settings(
         RemoteButton("power", "电源", 26),
         RemoteButton("app_switch", "应用切换", 187),
     ),
+    val update: UpdateSettings = UpdateSettings(),
 )
 
 class SettingsStore(private val configDir: Path, private val io: CoroutineDispatcher = Dispatchers.IO) {
