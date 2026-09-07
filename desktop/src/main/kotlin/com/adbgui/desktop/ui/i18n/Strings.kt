@@ -377,6 +377,8 @@ object Strings {
         "update_install_now" to "立即安装",
         "update_installing" to "正在启动安装…",
         "update_open_page" to "打开下载页",
+        "update_download_error" to "下载失败：%s",
+        "update_hash_error" to "校验失败：文件可能损坏",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -741,6 +743,8 @@ Click "Remove All" when done to clean up.""",
         "update_install_now" to "Install now",
         "update_installing" to "Starting installer…",
         "update_open_page" to "Open download page",
+        "update_download_error" to "Download failed: %s",
+        "update_hash_error" to "Verification failed: file may be corrupt",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)

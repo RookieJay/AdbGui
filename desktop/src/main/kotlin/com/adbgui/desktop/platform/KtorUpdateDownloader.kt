@@ -7,6 +7,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.contentLength
+import io.ktor.http.isSuccess
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,11 @@ class KtorUpdateDownloader(
         val finalFile = updatesDir.resolve("$sha256.msi")
         try {
             val resp = client.get(url)
+            if (!resp.status.isSuccess()) {
+                Files.deleteIfExists(partFile)
+                logger.warn("update: http ${resp.status.value} for $url")
+                return@withContext UpdateDownloadResult.NetworkError("HTTP ${resp.status.value}")
+            }
             val channel = resp.bodyAsChannel()
             val total = resp.contentLength()?.takeIf { it > 0 } ?: -1L
             var read = 0L

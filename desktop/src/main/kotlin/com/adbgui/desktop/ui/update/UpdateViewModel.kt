@@ -9,6 +9,7 @@ import com.adbgui.core.update.UpdateManifest
 import com.adbgui.core.update.UpdateSourceRegistry
 import com.adbgui.desktop.platform.MsiUpgrader
 import com.adbgui.desktop.platform.PortableUpdateNotifier
+import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -72,6 +73,7 @@ class UpdateViewModel(
     }
 
     fun downloadUpdate(): Job {
+        downloadJob?.takeIf { it.isActive }?.let { return it }
         val m = (_state.value as? UpdateState.Available)?.manifest
             ?: return Job().apply { complete() }
         return scope.launch {
@@ -86,8 +88,8 @@ class UpdateViewModel(
             }
             when (result) {
                 is UpdateDownloadResult.Success -> _state.value = UpdateState.Ready(result.msiPath, m)
-                is UpdateDownloadResult.HashMismatch -> _state.value = UpdateState.Error("sha256 校验失败")
-                is UpdateDownloadResult.NetworkError -> _state.value = UpdateState.Error(result.message ?: "unknown")
+                is UpdateDownloadResult.HashMismatch -> _state.value = UpdateState.Error(Strings.t("update_hash_error"))
+                is UpdateDownloadResult.NetworkError -> _state.value = UpdateState.Error(Strings.t("update_download_error").format(result.message ?: "unknown"))
                 is UpdateDownloadResult.Cancelled -> _state.value = UpdateState.Available(m)
             }
         }.also { downloadJob = it }
@@ -98,12 +100,16 @@ class UpdateViewModel(
     }
 
     fun installNow() {
-        val state = _state.value
-        if (state is UpdateState.Ready) {
-            _state.value = UpdateState.Installing
-            msiUpgrader.launch(state.msiPath)
-            exit(0)
+        val s = _state.value
+        if (s !is UpdateState.Ready) return
+        _state.value = UpdateState.Installing
+        try {
+            msiUpgrader.launch(s.msiPath)
+        } catch (t: Throwable) {
+            _state.value = UpdateState.Error(t.message ?: "install failed")
+            return
         }
+        exit(0)
     }
 
     fun openDownloadPage() {
