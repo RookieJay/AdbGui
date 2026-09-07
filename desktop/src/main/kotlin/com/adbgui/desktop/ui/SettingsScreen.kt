@@ -306,7 +306,7 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.caption,
                     )
                     is UpdateState.Available -> Text(
-                        Strings.t("update_available").format(s.version),
+                        Strings.t("update_available").format(s.manifest.version),
                         style = MaterialTheme.typography.caption,
                     )
                     is UpdateState.Error -> Text(
@@ -314,6 +314,7 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.caption,
                     )
                     UpdateState.Idle -> Unit
+                    else -> Unit
                 }
             }
         }

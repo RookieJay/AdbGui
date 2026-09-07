@@ -12,7 +12,10 @@ import com.adbgui.core.update.UpdateChecker
 import com.adbgui.desktop.platform.AppMeta
 import com.adbgui.desktop.platform.FileLogger
 import com.adbgui.desktop.platform.JvmAdbProcessRunner
+import com.adbgui.desktop.platform.KtorUpdateDownloader
 import com.adbgui.desktop.platform.KtorUpdateManifestFetcher
+import com.adbgui.desktop.platform.MsiUpgrader
+import com.adbgui.desktop.platform.PortableUpdateNotifier
 import com.adbgui.desktop.platform.ResourceBundledAdbProvider
 import com.adbgui.desktop.platform.SystemPathProbe
 import com.adbgui.desktop.platform.WindowsConfigDirProvider
@@ -41,7 +44,10 @@ class CompositionRoot {
     // Update check wiring (Task 10)
     val updateFetcher = KtorUpdateManifestFetcher()
     val updateChecker = UpdateChecker(updateFetcher, AppMeta.APP_VERSION, logger)
-    val updateViewModel = UpdateViewModel(updateChecker, settings, scope)
+    val updateDownloader = KtorUpdateDownloader(configDir, logger = logger)
+    val msiUpgrader = MsiUpgrader()
+    val portableNotifier = PortableUpdateNotifier()
+    val updateViewModel = UpdateViewModel(updateChecker, settings, scope, updateDownloader, msiUpgrader, portableNotifier)
 
     // NOTE: the initial locale is set on the UI thread in Main (see Main.kt) — do NOT set
     // Strings here on the background scope, which would create the Compose state off the UI
