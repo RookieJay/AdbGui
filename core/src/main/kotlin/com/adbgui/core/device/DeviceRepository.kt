@@ -7,6 +7,7 @@ import com.adbgui.core.domain.DeviceSnapshot
 import com.adbgui.core.domain.DeviceStatus
 import com.adbgui.core.domain.DeviceType
 import com.adbgui.core.domain.DeviceView
+import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.domain.InstallResult
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.core.log.Logger
@@ -103,8 +104,11 @@ class DeviceRepository(
     suspend fun adbVersion(): String = commands.adbVersion()
     suspend fun runShellCmd(serial: String, cmd: String): String = commands.runShellCmd(serial, cmd)
     suspend fun listPackages(serial: String): List<PackageInfo> = commands.listPackages(serial)
-    suspend fun install(serial: String, apkPath: String, reinstall: Boolean): InstallResult =
-        commands.install(serial, apkPath, reinstall)
+    suspend fun dumpsysPackage(serial: String, pkg: String): com.adbgui.core.domain.DumpsysPackage =
+        commands.dumpsysPackage(serial, pkg)
+
+    suspend fun install(serial: String, paths: List<String>, flags: InstallFlags): InstallResult =
+        commands.install(serial, paths, flags)
     suspend fun uninstall(serial: String, pkg: String): Boolean = commands.uninstall(serial, pkg)
     suspend fun clearData(serial: String, pkg: String): Boolean = commands.clearData(serial, pkg)
     suspend fun deviceProps(serial: String): DeviceProps = commands.deviceProps(serial)
@@ -146,10 +150,13 @@ class DeviceRepository(
     suspend fun inputText(serial: String, text: String) = commands.inputText(serial, text)
     suspend fun forceStop(serial: String, pkg: String): String = commands.forceStop(serial, pkg)
     suspend fun startApp(serial: String, pkg: String): String = commands.startApp(serial, pkg)
-    suspend fun startAppActivity(serial: String, pkg: String, activity: String): String = commands.startAppActivity(serial, pkg, activity)
+    suspend fun startActivity(serial: String, action: String?, data: String?, component: String?, extras: List<com.adbgui.core.domain.Extra>): String = commands.startActivity(serial, action, data, component, extras)
     suspend fun sendBroadcast(serial: String, action: String, uri: String?, extras: List<com.adbgui.core.domain.Extra>): String = commands.sendBroadcast(serial, action, uri, extras)
     suspend fun queryProvider(serial: String, uri: String, where: String?): String = commands.queryProvider(serial, uri, where)
     suspend fun ls(serial: String, path: String): String = commands.ls(serial, path)
+    suspend fun grant(serial: String, pkg: String, perm: String): String = commands.grant(serial, pkg, perm)
+    suspend fun revoke(serial: String, pkg: String, perm: String): String = commands.revoke(serial, pkg, perm)
+    suspend fun listNativeLibs(serial: String, dir: String): List<String> = commands.listNativeLibs(serial, dir)
     suspend fun checkSymlinkDirs(serial: String, paths: List<String>): List<Boolean> = commands.checkSymlinkDirs(serial, paths)
     suspend fun push(serial: String, localPath: String, devicePath: String) = commands.push(serial, localPath, devicePath)
     suspend fun pull(serial: String, devicePath: String, localPath: String) = commands.pull(serial, devicePath, localPath)
@@ -161,4 +168,6 @@ class DeviceRepository(
     suspend fun removeForward(serial: String, local: com.adbgui.core.domain.ForwardSpec) =
         commands.removeForward(serial, local)
     suspend fun removeAllForwards(serial: String) = commands.removeAllForwards(serial)
+    suspend fun bugreport(serial: String, destDir: String): com.adbgui.core.domain.BugreportResult =
+        commands.bugreport(serial, destDir)
 }

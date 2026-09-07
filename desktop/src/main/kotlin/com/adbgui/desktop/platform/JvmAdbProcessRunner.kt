@@ -18,14 +18,22 @@ import java.nio.charset.StandardCharsets
 class JvmAdbProcessRunner : AdbProcessRunner {
     override suspend fun run(adb: AdbBinary, args: List<String>, timeoutMs: Long?): AdbProcessResult = withContext(Dispatchers.IO) {
         val proc = ProcessBuilder(listOf(adb.path) + args).redirectErrorStream(false).start()
+        // Mirror runBinary: read stdout/stderr on child jobs so a timeout or coroutine cancellation
+        // can interrupt the wait and destroy the process. The previous blocking readText() calls
+        // ran before waitFor(), so they hung past any timeout and ignored cancellation — the bug
+        // for long-running commands like `adb bugreport`.
         // adb output is UTF-8 (Android is UTF-8); decode explicitly — the JVM default charset
         // is MS936/GBK on Chinese Windows, which mangles non-ASCII (box-drawing, CJK process
         // names) into "?". Matches startStream below, which already uses UTF_8.
-        val stdout = proc.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
-        val stderr = proc.errorStream.bufferedReader(StandardCharsets.UTF_8).readText()
-        val finished = if (timeoutMs != null) withTimeoutOrNull(timeoutMs) { proc.waitFor() } else proc.waitFor()
+        val stdoutDeferred = async { proc.inputStream.bufferedReader(StandardCharsets.UTF_8).readText() }
+        val stderrDeferred = async { proc.errorStream.bufferedReader(StandardCharsets.UTF_8).readText() }
+        // Wait on a deferred so withTimeoutOrNull/coroutine cancellation can interrupt the wait
+        // (proc.waitFor() is a blocking JVM call that ignores cancellation; awaiting it on a
+        // child job makes the timeout actually fire, mirroring runBinary's readDeferred.await()).
+        val waitDeferred = async { proc.waitFor() }
+        val finished = if (timeoutMs != null) withTimeoutOrNull(timeoutMs) { waitDeferred.await() } else waitDeferred.await()
         if (finished == null) { proc.destroyForcibly(); throw RuntimeException("adb timeout: ${args.joinToString(" ")}") }
-        AdbProcessResult(proc.exitValue(), stdout, stderr)
+        AdbProcessResult(proc.exitValue(), stdoutDeferred.await(), stderrDeferred.await())
     }
 
     override suspend fun runBinary(adb: AdbBinary, args: List<String>, timeoutMs: Long?): ByteArray = withContext(Dispatchers.IO) {

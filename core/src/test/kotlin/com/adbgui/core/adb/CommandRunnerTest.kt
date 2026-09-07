@@ -3,6 +3,9 @@ package com.adbgui.core.adb
 import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbCommandException
 import com.adbgui.core.domain.AdbSource
+import com.adbgui.core.domain.Extra
+import com.adbgui.core.domain.ExtraType
+import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.log.NoopLogger
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -73,12 +76,143 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun grant_passes_pkg_and_perm() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pm", "grant"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.grant("abc", "com.x", "android.permission.CAMERA")
+        val argv = runner.runs.last()
+        assertTrue(argv.containsAll(listOf("-s", "abc", "shell", "pm", "grant", "com.x", "android.permission.CAMERA")))
+    }
+
+    @Test
+    fun grant_failure_throws() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pm", "grant"), AdbProcessResult(1, "", "not a runtime permission"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.grant("abc", "com.x", "android.permission.CAMERA") }
+    }
+
+    @Test
+    fun revoke_passes_pkg_and_perm() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pm", "revoke"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.revoke("abc", "com.x", "android.permission.CAMERA")
+        val argv = runner.runs.last()
+        assertTrue(argv.containsAll(listOf("-s", "abc", "shell", "pm", "revoke", "com.x", "android.permission.CAMERA")))
+    }
+
+    @Test
+    fun listNativeLibs_filters_so_files() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("ls"), AdbProcessResult(0,
+            "-rw-r--r-- 1 root root 1234 2020-01-01 12:00 libfoo.so\n" +
+            "-rw-r--r-- 1 root root 5678 2020-01-01 12:00 libbar.so\n" +
+            "drwxr-xr-x 2 root root 4096 2020-01-01 12:00 .\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val libs = cr.listNativeLibs("abc", "/data/app/.../lib/arm64")
+        assertTrue(libs.contains("libfoo.so"))
+        assertTrue(libs.contains("libbar.so"))
+        assertTrue(libs.none { !it.endsWith(".so") })
+    }
+
+    @Test
+    fun listNativeLibs_bad_dir_returns_empty() = runTest {
+        val runner = FakeAdbProcessRunner()
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertEquals(emptyList(), cr.listNativeLibs("abc", "bad dir; rm -rf"))
+        assertTrue(runner.runs.isEmpty(), "ls should not be invoked when dir fails the path guard")
+    }
+
+    @Test
+    fun dumpsysPackage_passes_pkg_to_dumpsys_and_parses() = runTest {
+        val runner = FakeAdbProcessRunner()
+        // Real fixture: Hisense Android 9, com.dangbeimarket v6.0.7 (legacyNativeLibraryDir layout).
+        val stdout = javaClass.classLoader!!.getResource("fixtures/dumpsys_package_hisense_android9.txt")!!
+            .readText().lineSequence().dropWhile { it.startsWith("#") }.joinToString("\n")
+        runner.whenArgsContains(listOf("dumpsys", "package"), AdbProcessResult(0, stdout, ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val pkg = cr.dumpsysPackage("abc", "com.dangbeimarket")
+        // runShellCmd passes the whole "dumpsys package com.dangbeimarket" as a single shell arg
+        // (so the device's sh parses it); assert on the joined argv so the check holds regardless
+        // of whether the command is split into separate argv tokens or sent as one string.
+        val argv = runner.runs.last().joinToString(" ")
+        assertTrue(argv.contains("-s abc shell dumpsys package com.dangbeimarket"), "argv=$argv")
+        assertEquals("6.0.7", pkg.versionName)
+    }
+
+    @Test
+    fun dumpsysPackage_rejects_invalid_pkg() = runTest {
+        val cr = CommandRunner({ adb }, FakeAdbProcessRunner(), NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<IllegalArgumentException> { cr.dumpsysPackage("abc", "bad pkg!") }
+    }
+
+    @Test
+    fun dumpsysPackage_throws_when_no_packages_section() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("dumpsys", "package"), AdbProcessResult(0, "garbage\nno Packages section", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.dumpsysPackage("abc", "com.x") }
+    }
+
+    @Test
+    fun listNativeLibs_recurses_into_abi_subdir() = runTest {
+        val runner = FakeAdbProcessRunner()
+        // Real Hisense layout: .so files live in /lib/arm/, not directly in legacyNativeLibraryDir.
+        // FakeAdbProcessRunner matches first-wins by keyword substring. The two ls calls differ in
+        // path arg: shallow "/data/app/x/lib/" vs deep "/data/app/x/lib/arm/". The shallow arg
+        // contains "/lib" but NOT "arm"; the deep arg contains both. So the "arm" rule (added FIRST)
+        // matches only the deep call and returns .so files; the "/lib" rule (added SECOND) matches
+        // the shallow call and returns the subdir entry. If "/lib" were first, the deep call would
+        // wrongly match it and return the subdir entry (no .so) -> empty result.
+        runner.whenArgsContains(listOf("arm"), AdbProcessResult(0,
+            "-rwxr-xr-x 1 system system 1234 2020-01-01 12:00 libfoo.so\n" +
+            "-rwxr-xr-x 1 system system 5678 2020-01-01 12:00 libbar.so\n", ""))
+        runner.whenArgsContains(listOf("/lib"), AdbProcessResult(0,
+            "drwxr-xr-x 2 system system 4096 2020-01-01 12:00 arm\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val libs = cr.listNativeLibs("abc", "/data/app/x/lib")
+        assertTrue(libs.contains("libfoo.so"), "expected libfoo.so from abi subdir, got: $libs")
+        assertTrue(libs.contains("libbar.so"))
+    }
+
+
+    @Test
+    fun install_single_with_flags_builds_correct_argv() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("install"), AdbProcessResult(0, "Success", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.install("abc", listOf("/x.apk"), InstallFlags(reinstall = true, allowTest = true, downgrade = false, grantPerms = false))
+        val argv = runner.runs.last()
+        assertTrue(argv.containsAll(listOf("-s","abc","install","-r","-t","/x.apk")))
+        assertTrue(!argv.contains("-d") && !argv.contains("-g"))
+    }
+
+    @Test
+    fun install_multiple_builds_install_multiple_argv() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("install-multiple"), AdbProcessResult(0, "Success", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.install("abc", listOf("/a.apk","/b.apk"), InstallFlags(reinstall = true, allowTest = false, downgrade = true, grantPerms = true))
+        val argv = runner.runs.last()
+        assertTrue(argv.contains("install-multiple"))
+        assertTrue(argv.containsAll(listOf("-r","-d","-g","/a.apk","/b.apk")))
+    }
+
+    @Test
+    fun install_empty_paths_throws_argument() = runTest {
+        val runner = FakeAdbProcessRunner()
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<IllegalArgumentException> { cr.install("abc", emptyList(), InstallFlags(reinstall = true, allowTest = false, downgrade = false, grantPerms = false)) }
+    }
+
+    @Test
     fun install_failure_throws_with_raw_stderr() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("install"), AdbProcessResult(1, "Failure [INSTALL_FAILED_OLDER_SDK]", ""))
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val ex = assertFailsWith<RuntimeException> { cr.install("abc", "x.apk", reinstall = true) }
-        // AdbCommandException is a RuntimeException; check message carries context
+        val ex = assertFailsWith<RuntimeException> { cr.install("abc", listOf("x.apk"), InstallFlags(reinstall = true, allowTest = false, downgrade = false, grantPerms = false)) }
         assert(ex.message!!.contains("install"))
     }
 
@@ -231,14 +365,6 @@ class CommandRunnerTest {
         runner.whenArgsContains(listOf("monkey"), AdbProcessResult(0, "Events injected", ""))
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         cr.startApp("abc", "com.foo")
-    }
-
-    @Test
-    fun startAppActivity_passes_am_start_n() = runTest {
-        val runner = FakeAdbProcessRunner()
-        runner.whenArgsContains(listOf("am", "start"), AdbProcessResult(0, "Starting:", ""))
-        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        cr.startAppActivity("abc", "com.foo", "MainActivity")
     }
 
     @Test
@@ -418,5 +544,53 @@ class CommandRunnerTest {
         )
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         assertFailsWith<AdbCommandException> { cr.fixLogcatDisabled("s1") }
+    }
+
+    @Test
+    fun startActivity_with_action_and_data_builds_argv() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("am","start"), AdbProcessResult(0, "Starting: Intent { ... }", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.startActivity("abc", action = "android.intent.action.VIEW", data = "myapp://x", component = null, extras = emptyList())
+        val argv = runner.runs.last()
+        assertTrue(argv.containsAll(listOf("-s","abc","shell","am","start","-a","android.intent.action.VIEW","-d","myapp://x")))
+    }
+
+    @Test
+    fun startActivity_with_component_and_extras_builds_argv() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("am","start"), AdbProcessResult(0, "Starting", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.startActivity("abc", action = null, data = null, component = "com.x/.Main", extras = listOf(Extra(ExtraType.STRING,"k","v")))
+        val argv = runner.runs.last()
+        assertTrue(argv.containsAll(listOf("-n","com.x/.Main","--es","k","v")))
+    }
+
+    @Test
+    fun startActivity_failure_throws() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("am","start"), AdbProcessResult(1, "", "Error"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.startActivity("abc", action = "VIEW", data = null, component = null, extras = emptyList()) }
+    }
+
+    @Test
+    fun bugreport_returns_zip_path_from_stdout() = runTest {
+        // `adb -s <serial> bugreport <destDir>` is a host command. adb prints
+        // "Bug report is stored at <zipPath>"; we parse the zip path from stdout.
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("bugreport"), AdbProcessResult(0,
+            "Bug report is processed\r\nBug report is stored at /tmp/bugreport-2026-09-04.zip\r\n", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val r = cr.bugreport("abc", "/tmp")
+        assertEquals("/tmp/bugreport-2026-09-04.zip", r.zipPath)
+    }
+
+    @Test
+    fun bugreport_nonzero_throws() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("bugreport"), AdbProcessResult(1, "", "device offline"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.bugreport("abc", "/tmp") }
     }
 }

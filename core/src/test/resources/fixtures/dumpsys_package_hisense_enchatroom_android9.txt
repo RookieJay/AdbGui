@@ -1,0 +1,498 @@
+# 来源：Hisense VIDAA_TV (model VIDAA_TV, device MTK9632) + manufacturer=hisense + Android 9 (SDK 28, build PPR2.180905.006.A1 dev-keys) + 录制日期 2026-09-07 + 命令: adb shell dumpsys package com.speech.enchatroom
+# 包名: com.speech.enchatroom (v1.07.62.209.0.000, versionCode 107622090, armeabi-v7a)
+# 说明：与 dumpsys_package_hisense_android9.txt 同设备（Android 9），但本包 runtime permissions: 段非空（13 项，含 ACCESS_FINE_LOCATION granted=true 等），用于验证权限段状态机 install/runtime 分类。仍用 legacyNativeLibraryDir=/resourcePath=（非跨版本变体）。
+Activity Resolver Table:
+  Schemes:
+      hispeech:
+        8f67452 com.speech.enchatroom/.SplashActivity filter cfc7690
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "hispeech"
+          Authority: "enchatroom": -1
+          Path: "PatternMatcher{LITERAL: /main}"
+
+  Non-Data Actions:
+      android.intent.action.room.aiagent:
+        1ccb323 com.speech.enchatroom/com.hispeech.chatroom.aiAgent.AiAgentActivity filter 95a6bbc
+          Action: "android.intent.action.room.aiagent"
+          Category: "android.intent.category.DEFAULT"
+      android.intent.action.room.enchat3d:
+        2cf2020 com.speech.enchatroom/com.hispeech.chatroom.enchat3d.EnChat3DActivity filter 7bb5745
+          Action: "android.intent.action.room.enchat3d"
+          Category: "android.intent.category.DEFAULT"
+      android.intent.action.enchatroom_history:
+        6ba9dd9 com.speech.enchatroom/.ChatHistoryActivity filter e5bbaf
+          Action: "android.intent.action.enchatroom_history"
+          Category: "android.intent.category.DEFAULT"
+      android.intent.action.enchatroom_result:
+        863839e com.speech.enchatroom/.ChatResultActivity filter ddb578e
+          Action: "android.intent.action.enchatroom_result"
+          Category: "android.intent.category.DEFAULT"
+      android.intent.action.enchatroom_main:
+        ead5e7f com.speech.enchatroom/.MainActivity filter 6fe8b89
+          Action: "android.intent.action.enchatroom_main"
+          Category: "android.intent.category.DEFAULT"
+
+Receiver Resolver Table:
+  Non-Data Actions:
+      android.intent.action.BATTERY_OKAY:
+        7d61e4c com.speech.enchatroom/androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryNotLowProxy filter e0707b6
+          Action: "android.intent.action.BATTERY_OKAY"
+          Action: "android.intent.action.BATTERY_LOW"
+      android.intent.action.ACTION_POWER_DISCONNECTED:
+        e2e3e95 com.speech.enchatroom/androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryChargingProxy filter fd7c351
+          Action: "android.intent.action.ACTION_POWER_CONNECTED"
+          Action: "android.intent.action.ACTION_POWER_DISCONNECTED"
+      android.intent.action.DEVICE_STORAGE_LOW:
+        d003baa com.speech.enchatroom/androidx.work.impl.background.systemalarm.ConstraintProxy$StorageNotLowProxy filter a1becb7
+          Action: "android.intent.action.DEVICE_STORAGE_LOW"
+          Action: "android.intent.action.DEVICE_STORAGE_OK"
+      android.net.conn.CONNECTIVITY_CHANGE:
+        ac3639b com.speech.enchatroom/androidx.work.impl.background.systemalarm.ConstraintProxy$NetworkStateProxy filter c8dbc24
+          Action: "android.net.conn.CONNECTIVITY_CHANGE"
+      android.intent.action.DEVICE_STORAGE_OK:
+        d003baa com.speech.enchatroom/androidx.work.impl.background.systemalarm.ConstraintProxy$StorageNotLowProxy filter a1becb7
+          Action: "android.intent.action.DEVICE_STORAGE_LOW"
+          Action: "android.intent.action.DEVICE_STORAGE_OK"
+      android.intent.action.BATTERY_LOW:
+        7d61e4c com.speech.enchatroom/androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryNotLowProxy filter e0707b6
+          Action: "android.intent.action.BATTERY_OKAY"
+          Action: "android.intent.action.BATTERY_LOW"
+      android.intent.action.TIMEZONE_CHANGED:
+        26cd338 com.speech.enchatroom/androidx.work.impl.background.systemalarm.RescheduleReceiver filter f84438d
+          Action: "android.intent.action.BOOT_COMPLETED"
+          Action: "android.intent.action.TIME_SET"
+          Action: "android.intent.action.TIMEZONE_CHANGED"
+      android.intent.action.TIME_SET:
+        26cd338 com.speech.enchatroom/androidx.work.impl.background.systemalarm.RescheduleReceiver filter f84438d
+          Action: "android.intent.action.BOOT_COMPLETED"
+          Action: "android.intent.action.TIME_SET"
+          Action: "android.intent.action.TIMEZONE_CHANGED"
+      android.intent.action.BOOT_COMPLETED:
+        26cd338 com.speech.enchatroom/androidx.work.impl.background.systemalarm.RescheduleReceiver filter f84438d
+          Action: "android.intent.action.BOOT_COMPLETED"
+          Action: "android.intent.action.TIME_SET"
+          Action: "android.intent.action.TIMEZONE_CHANGED"
+      android.intent.action.ACTION_POWER_CONNECTED:
+        e2e3e95 com.speech.enchatroom/androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryChargingProxy filter fd7c351
+          Action: "android.intent.action.ACTION_POWER_CONNECTED"
+          Action: "android.intent.action.ACTION_POWER_DISCONNECTED"
+      androidx.work.diagnostics.REQUEST_DIAGNOSTICS:
+        6012f11 com.speech.enchatroom/androidx.work.impl.diagnostics.DiagnosticsReceiver filter af89d53
+          Action: "androidx.work.diagnostics.REQUEST_DIAGNOSTICS"
+      androidx.work.impl.background.systemalarm.UpdateProxies:
+        2fe6876 com.speech.enchatroom/androidx.work.impl.background.systemalarm.ConstraintProxyUpdateReceiver filter 3f3e942
+          Action: "androidx.work.impl.background.systemalarm.UpdateProxies"
+
+Registered ContentProviders:
+  com.speech.enchatroom/androidx.lifecycle.ProcessLifecycleOwnerInitializer:
+    Provider{b6a9e77 com.speech.enchatroom/androidx.lifecycle.ProcessLifecycleOwnerInitializer}
+  com.speech.enchatroom/androidx.work.impl.WorkManagerInitializer:
+    Provider{fb7eae4 com.speech.enchatroom/androidx.work.impl.WorkManagerInitializer}
+
+ContentProvider Authorities:
+  [com.speech.enchatroom.workmanager-init]:
+    Provider{fb7eae4 com.speech.enchatroom/androidx.work.impl.WorkManagerInitializer}
+      applicationInfo=ApplicationInfo{b38ab4d com.speech.enchatroom}
+  [com.speech.enchatroom.lifecycle-process]:
+    Provider{b6a9e77 com.speech.enchatroom/androidx.lifecycle.ProcessLifecycleOwnerInitializer}
+      applicationInfo=ApplicationInfo{b38ab4d com.speech.enchatroom}
+
+Key Set Manager:
+  [com.speech.enchatroom]
+      Signing KeySets: 1
+
+Packages:
+  Package [com.speech.enchatroom] (b22873d):
+    userId=1000
+    sharedUser=SharedUserSetting{5e09602 android.uid.system/1000}
+    pkg=Package{5e0ab13 com.speech.enchatroom}
+    codePath=/data/app/com.speech.enchatroom-cWUd4NHKuEfkWnWXuFmANw==
+    resourcePath=/data/app/com.speech.enchatroom-cWUd4NHKuEfkWnWXuFmANw==
+    legacyNativeLibraryDir=/data/app/com.speech.enchatroom-cWUd4NHKuEfkWnWXuFmANw==/lib
+    primaryCpuAbi=armeabi-v7a
+    secondaryCpuAbi=null
+    versionCode=107622090 minSdk=19 targetSdk=28
+    versionName=1.07.62.209.0.000
+    splits=[base]
+    apkSigningVersion=2
+    applicationInfo=ApplicationInfo{b38ab4d com.speech.enchatroom}
+    flags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP LARGE_HEAP ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION PARTIALLY_DIRECT_BOOT_AWARE ]
+    dataDir=/data/user/0/com.speech.enchatroom
+    supportsScreens=[small, medium, large, xlarge, resizeable, anyDensity]
+    usesOptionalLibraries:
+      org.apache.http.legacy
+    usesLibraryFiles:
+      /system/framework/org.apache.http.legacy.boot.jar
+    timeStamp=2026-07-24 15:23:44
+    firstInstallTime=2026-07-24 15:23:51
+    lastUpdateTime=2026-07-24 15:23:51
+    installerPackageName=com.keylab.speech.core.vidaa
+    signatures=PackageSignatures{87ad150 version:2, signatures:[3df208fa], past signatures:[]}
+    installPermissionsFixed=true
+    pkgFlags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP LARGE_HEAP ]
+    requested permissions:
+      android.permission.SYSTEM_ALERT_WINDOW
+      android.permission.WRITE_EXTERNAL_STORAGE
+      android.permission.INTERNET
+      android.permission.WRITE_SETTINGS
+      android.permission.WRITE_SECURE_SETTINGS
+      android.permission.MOUNT_UNMOUNT_FILESYSTEMS
+      android.permission.ACCESS_NETWORK_STATE
+      android.permission.ACCESS_WIFI_STATE
+      android.permission.READ_PHONE_STATE
+      android.permission.READ_EXTERNAL_STORAGE
+      android.permission.WAKE_LOCK
+      android.permission.RECEIVE_BOOT_COMPLETED
+      android.permission.FOREGROUND_SERVICE
+    install permissions:
+      android.permission.REAL_GET_TASKS: granted=true
+      android.permission.ACCESS_CACHE_FILESYSTEM: granted=true
+      android.permission.REMOTE_AUDIO_PLAYBACK: granted=true
+      android.permission.WRITE_SETTINGS: granted=true
+      android.permission.CONFIGURE_WIFI_DISPLAY: granted=true
+      android.permission.CONFIGURE_DISPLAY_COLOR_MODE: granted=true
+      android.permission.ACCESS_WIMAX_STATE: granted=true
+      com.hisense.permission.RECEIVE_HISENSE_BOOT_COMPLETED: granted=true
+      android.permission.RESTART_PACKAGES: granted=true
+      android.permission.USE_CREDENTIALS: granted=true
+      android.permission.BIND_DEVICE_ADMIN: granted=true
+      android.permission.MODIFY_AUDIO_SETTINGS: granted=true
+      android.permission.ACCESS_CHECKIN_PROPERTIES: granted=true
+      android.permission.GET_APP_OPS_STATS: granted=true
+      android.permission.USE_RESERVED_DISK: granted=true
+      android.permission.MANAGE_ACCOUNTS: granted=true
+      android.permission.CONTROL_WIFI_DISPLAY: granted=true
+      android.permission.SYSTEM_ALERT_WINDOW: granted=true
+      android.permission.GET_TOP_ACTIVITY_INFO: granted=true
+      android.permission.CLEAR_APP_USER_DATA: granted=true
+      android.permission.INSTALL_PACKAGES: granted=true
+      android.permission.MANAGE_VOICE_KEYPHRASES: granted=true
+      android.permission.SHUTDOWN: granted=true
+      android.permission.NFC: granted=true
+      android.permission.INTERNAL_SYSTEM_WINDOW: granted=true
+      com.hisense.vidaaassistant.permission.ACCESS_COMMUNICATION: granted=true
+      android.permission.NETWORK_SETTINGS: granted=true
+      android.permission.START_ANY_ACTIVITY: granted=true
+      android.permission.CHANGE_NETWORK_STATE: granted=true
+      android.permission.MASTER_CLEAR: granted=true
+      android.permission.FOREGROUND_SERVICE: granted=true
+      android.permission.WRITE_SYNC_SETTINGS: granted=true
+      android.permission.RECEIVE_BOOT_COMPLETED: granted=true
+      android.permission.PEERS_MAC_ADDRESS: granted=true
+      android.permission.DEVICE_POWER: granted=true
+      android.permission.SET_TIME_ZONE: granted=true
+      android.permission.REMOVE_TASKS: granted=true
+      android.permission.READ_PRINT_SERVICES: granted=true
+      android.permission.EXPAND_STATUS_BAR: granted=true
+      com.hisense.permission.HS_BLUETOOTH: granted=true
+      com.android.launcher.permission.UNINSTALL_SHORTCUT: granted=true
+      android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS: granted=true
+      permission.com.hisense.install_app: granted=true
+      android.permission.READ_PROFILE: granted=true
+      android.permission.BLUETOOTH: granted=true
+      android.permission.CHANGE_WIFI_MULTICAST_STATE: granted=true
+      android.permission.WRITE_MEDIA_STORAGE: granted=true
+      android.permission.GET_TASKS: granted=true
+      android.permission.ACCESS_SURFACE_FLINGER: granted=true
+      android.permission.AUTHENTICATE_ACCOUNTS: granted=true
+      android.permission.INTERNET: granted=true
+      android.permission.RETRIEVE_WINDOW_CONTENT: granted=true
+      android.permission.REORDER_TASKS: granted=true
+      android.permission.BLUETOOTH_ADMIN: granted=true
+      android.permission.CONTROL_VPN: granted=true
+      android.permission.MANAGE_FINGERPRINT: granted=true
+      android.permission.ACCESS_INSTANT_APPS: granted=true
+      android.permission.GET_PACKAGE_SIZE: granted=true
+      android.permission.MANAGE_USB: granted=true
+      android.permission.INTERACT_ACROSS_USERS_FULL: granted=true
+      android.permission.STOP_APP_SWITCHES: granted=true
+      android.permission.BATTERY_STATS: granted=true
+      android.permission.PACKAGE_USAGE_STATS: granted=true
+      android.permission.MOUNT_UNMOUNT_FILESYSTEMS: granted=true
+      android.permission.TETHER_PRIVILEGED: granted=true
+      android.permission.WRITE_SECURE_SETTINGS: granted=true
+      android.permission.BIND_NOTIFICATION_LISTENER_SERVICE: granted=true
+      android.permission.MOVE_PACKAGE: granted=true
+      android.permission.SET_ACTIVITY_WATCHER: granted=true
+      android.permission.READ_SEARCH_INDEXABLES: granted=true
+      android.permission.ACCESS_LOCATION_EXTRA_COMMANDS: granted=true
+      android.permission.TRIGGER_TIME_ZONE_RULES_CHECK: granted=true
+      android.permission.ACCESS_DOWNLOAD_MANAGER: granted=true
+      android.permission.BROADCAST_STICKY: granted=true
+      android.permission.BLUETOOTH_PRIVILEGED: granted=true
+      android.permission.HARDWARE_TEST: granted=true
+      com.ju.widget.permission.WIDGET_SERVICE: granted=true
+      android.intent.category.MASTER_CLEAR.permission.C2D_MESSAGE: granted=true
+      com.hisense.vidaaassistant.permission.ANTI_VIRUS: granted=true
+      android.permission.BIND_JOB_SERVICE: granted=true
+      com.hisense.service.message.WRITE_DATABASE: granted=true
+      android.permission.CONFIRM_FULL_BACKUP: granted=true
+      android.permission.CAPTURE_SECURE_VIDEO_OUTPUT: granted=true
+      android.permission.SET_TIME: granted=true
+      android.permission.WRITE_APN_SETTINGS: granted=true
+      android.permission.CHANGE_WIFI_STATE: granted=true
+      android.permission.MANAGE_USERS: granted=true
+      android.permission.SET_PREFERRED_APPLICATIONS: granted=true
+      android.permission.DELETE_CACHE_FILES: granted=true
+      android.permission.ACCESS_NETWORK_STATE: granted=true
+      android.permission.BACKUP: granted=true
+      android.permission.CHANGE_CONFIGURATION: granted=true
+      android.permission.USER_ACTIVITY: granted=true
+      android.permission.LOCAL_MAC_ADDRESS: granted=true
+      android.permission.READ_LOGS: granted=true
+      android.permission.COPY_PROTECTED_DATA: granted=true
+      android.permission.INTERACT_ACROSS_USERS: granted=true
+      android.permission.SET_KEYBOARD_LAYOUT: granted=true
+      com.hisense.shoppingguide.permission.READ_CONTENT: granted=true
+      android.permission.READ_DREAM_STATE: granted=true
+      android.permission.MANAGE_APP_OPS_RESTRICTIONS: granted=true
+      android.permission.KILL_BACKGROUND_PROCESSES: granted=true
+      android.permission.MANAGE_USER_OEM_UNLOCK_STATE: granted=true
+      android.permission.USE_FINGERPRINT: granted=true
+      android.permission.REQUEST_NETWORK_SCORES: granted=true
+      android.permission.WRITE_USER_DICTIONARY: granted=true
+      android.permission.READ_SYNC_STATS: granted=true
+      android.permission.WRITE_DREAM_STATE: granted=true
+      android.permission.REBOOT: granted=true
+      android.permission.REQUEST_DELETE_PACKAGES: granted=true
+      android.permission.OEM_UNLOCK_STATE: granted=true
+      android.permission.MANAGE_DEVICE_ADMINS: granted=true
+      android.permission.CLEAR_APP_CACHE: granted=true
+      android.permission.CHANGE_APP_IDLE_STATE: granted=true
+      android.permission.BIND_SETTINGS_SUGGESTIONS_SERVICE: granted=true
+      android.permission.TEST_BLACKLISTED_PASSWORD: granted=true
+      android.permission.MANAGE_NETWORK_POLICY: granted=true
+      android.permission.SET_POINTER_SPEED: granted=true
+      android.permission.MANAGE_NOTIFICATIONS: granted=true
+      android.permission.SEND_SHOW_SUSPENDED_APP_DETAILS: granted=true
+      android.permission.CONNECTIVITY_INTERNAL: granted=true
+      android.permission.READ_SYNC_SETTINGS: granted=true
+      android.permission.BROADCAST_PACKAGE_REMOVED: granted=true
+      android.permission.OVERRIDE_WIFI_CONFIG: granted=true
+      android.permission.FORCE_STOP_PACKAGES: granted=true
+      android.permission.HIDE_NON_SYSTEM_OVERLAY_WINDOWS: granted=true
+      android.permission.CAPTURE_VIDEO_OUTPUT: granted=true
+      android.permission.ACCESS_NOTIFICATIONS: granted=true
+      android.permission.VIBRATE: granted=true
+      com.android.certinstaller.INSTALL_AS_USER: granted=true
+      android.permission.BIND_ACCESSIBILITY_SERVICE: granted=true
+      android.permission.MANAGE_ACTIVITY_STACKS: granted=true
+      android.permission.READ_USER_DICTIONARY: granted=true
+      com.hisense.tv.aivirtualassistant.provider.ACCESS_DATA: granted=true
+      android.permission.MANAGE_SCOPED_ACCESS_DIRECTORY_PERMISSIONS: granted=true
+      android.permission.GET_DETAILED_TASKS: granted=true
+      android.permission.ACCESS_WIFI_STATE: granted=true
+      android.permission.MANAGE_APP_OPS_MODES: granted=true
+      android.permission.CHANGE_WIMAX_STATE: granted=true
+      com.hisense.vidaaassistant.permission.START_CONNECTION_DIAGNOSIS: granted=true
+      android.permission.REQUEST_INSTALL_PACKAGES: granted=true
+      android.permission.MODIFY_PHONE_STATE: granted=true
+      com.android.launcher.permission.INSTALL_SHORTCUT: granted=true
+      android.permission.STATUS_BAR: granted=true
+      android.permission.READ_FRAME_BUFFER: granted=true
+      android.permission.DUMP: granted=true
+      android.permission.LOCATION_HARDWARE: granted=true
+      com.hisense.livetv.epgdata.WRITE_PERMISSION: granted=true
+      android.permission.WAKE_LOCK: granted=true
+      android.permission.INJECT_EVENTS: granted=true
+      android.permission.BIND_NETWORK_RECOMMENDATION_SERVICE: granted=true
+      com.hisense.service.message.READ_DATABASE: granted=true
+      android.permission.SET_SCREEN_COMPATIBILITY: granted=true
+      android.permission.MEDIA_CONTENT_CONTROL: granted=true
+      android.permission.DELETE_PACKAGES: granted=true
+    User 0: ceDataInode=-4294835391 installed=true hidden=false suspended=false stopped=true notLaunched=true enabled=0 instant=false virtual=false
+
+Shared users:
+  SharedUser [android.uid.system] (5e09602):
+    userId=1000
+    install permissions:
+      android.permission.REAL_GET_TASKS: granted=true
+      android.permission.ACCESS_CACHE_FILESYSTEM: granted=true
+      android.permission.REMOTE_AUDIO_PLAYBACK: granted=true
+      android.permission.WRITE_SETTINGS: granted=true
+      android.permission.CONFIGURE_WIFI_DISPLAY: granted=true
+      android.permission.CONFIGURE_DISPLAY_COLOR_MODE: granted=true
+      android.permission.ACCESS_WIMAX_STATE: granted=true
+      com.hisense.permission.RECEIVE_HISENSE_BOOT_COMPLETED: granted=true
+      android.permission.RESTART_PACKAGES: granted=true
+      android.permission.USE_CREDENTIALS: granted=true
+      android.permission.BIND_DEVICE_ADMIN: granted=true
+      android.permission.MODIFY_AUDIO_SETTINGS: granted=true
+      android.permission.ACCESS_CHECKIN_PROPERTIES: granted=true
+      android.permission.GET_APP_OPS_STATS: granted=true
+      android.permission.USE_RESERVED_DISK: granted=true
+      android.permission.MANAGE_ACCOUNTS: granted=true
+      android.permission.CONTROL_WIFI_DISPLAY: granted=true
+      android.permission.SYSTEM_ALERT_WINDOW: granted=true
+      android.permission.GET_TOP_ACTIVITY_INFO: granted=true
+      android.permission.CLEAR_APP_USER_DATA: granted=true
+      android.permission.INSTALL_PACKAGES: granted=true
+      android.permission.MANAGE_VOICE_KEYPHRASES: granted=true
+      android.permission.SHUTDOWN: granted=true
+      android.permission.NFC: granted=true
+      android.permission.INTERNAL_SYSTEM_WINDOW: granted=true
+      com.hisense.vidaaassistant.permission.ACCESS_COMMUNICATION: granted=true
+      android.permission.NETWORK_SETTINGS: granted=true
+      android.permission.START_ANY_ACTIVITY: granted=true
+      android.permission.CHANGE_NETWORK_STATE: granted=true
+      android.permission.MASTER_CLEAR: granted=true
+      android.permission.FOREGROUND_SERVICE: granted=true
+      android.permission.WRITE_SYNC_SETTINGS: granted=true
+      android.permission.RECEIVE_BOOT_COMPLETED: granted=true
+      android.permission.PEERS_MAC_ADDRESS: granted=true
+      android.permission.DEVICE_POWER: granted=true
+      android.permission.SET_TIME_ZONE: granted=true
+      android.permission.REMOVE_TASKS: granted=true
+      android.permission.READ_PRINT_SERVICES: granted=true
+      android.permission.EXPAND_STATUS_BAR: granted=true
+      com.hisense.permission.HS_BLUETOOTH: granted=true
+      com.android.launcher.permission.UNINSTALL_SHORTCUT: granted=true
+      android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS: granted=true
+      permission.com.hisense.install_app: granted=true
+      android.permission.READ_PROFILE: granted=true
+      android.permission.BLUETOOTH: granted=true
+      android.permission.CHANGE_WIFI_MULTICAST_STATE: granted=true
+      android.permission.WRITE_MEDIA_STORAGE: granted=true
+      android.permission.GET_TASKS: granted=true
+      android.permission.ACCESS_SURFACE_FLINGER: granted=true
+      android.permission.AUTHENTICATE_ACCOUNTS: granted=true
+      android.permission.INTERNET: granted=true
+      android.permission.RETRIEVE_WINDOW_CONTENT: granted=true
+      android.permission.REORDER_TASKS: granted=true
+      android.permission.BLUETOOTH_ADMIN: granted=true
+      android.permission.CONTROL_VPN: granted=true
+      android.permission.MANAGE_FINGERPRINT: granted=true
+      android.permission.ACCESS_INSTANT_APPS: granted=true
+      android.permission.GET_PACKAGE_SIZE: granted=true
+      android.permission.MANAGE_USB: granted=true
+      android.permission.INTERACT_ACROSS_USERS_FULL: granted=true
+      android.permission.STOP_APP_SWITCHES: granted=true
+      android.permission.BATTERY_STATS: granted=true
+      android.permission.PACKAGE_USAGE_STATS: granted=true
+      android.permission.MOUNT_UNMOUNT_FILESYSTEMS: granted=true
+      android.permission.TETHER_PRIVILEGED: granted=true
+      android.permission.WRITE_SECURE_SETTINGS: granted=true
+      android.permission.BIND_NOTIFICATION_LISTENER_SERVICE: granted=true
+      android.permission.MOVE_PACKAGE: granted=true
+      android.permission.SET_ACTIVITY_WATCHER: granted=true
+      android.permission.READ_SEARCH_INDEXABLES: granted=true
+      android.permission.ACCESS_LOCATION_EXTRA_COMMANDS: granted=true
+      android.permission.TRIGGER_TIME_ZONE_RULES_CHECK: granted=true
+      android.permission.ACCESS_DOWNLOAD_MANAGER: granted=true
+      android.permission.BROADCAST_STICKY: granted=true
+      android.permission.BLUETOOTH_PRIVILEGED: granted=true
+      android.permission.HARDWARE_TEST: granted=true
+      com.ju.widget.permission.WIDGET_SERVICE: granted=true
+      android.intent.category.MASTER_CLEAR.permission.C2D_MESSAGE: granted=true
+      com.hisense.vidaaassistant.permission.ANTI_VIRUS: granted=true
+      android.permission.BIND_JOB_SERVICE: granted=true
+      com.hisense.service.message.WRITE_DATABASE: granted=true
+      android.permission.CONFIRM_FULL_BACKUP: granted=true
+      android.permission.CAPTURE_SECURE_VIDEO_OUTPUT: granted=true
+      android.permission.SET_TIME: granted=true
+      android.permission.WRITE_APN_SETTINGS: granted=true
+      android.permission.CHANGE_WIFI_STATE: granted=true
+      android.permission.MANAGE_USERS: granted=true
+      android.permission.SET_PREFERRED_APPLICATIONS: granted=true
+      android.permission.DELETE_CACHE_FILES: granted=true
+      android.permission.ACCESS_NETWORK_STATE: granted=true
+      android.permission.BACKUP: granted=true
+      android.permission.CHANGE_CONFIGURATION: granted=true
+      android.permission.USER_ACTIVITY: granted=true
+      android.permission.LOCAL_MAC_ADDRESS: granted=true
+      android.permission.READ_LOGS: granted=true
+      android.permission.COPY_PROTECTED_DATA: granted=true
+      android.permission.INTERACT_ACROSS_USERS: granted=true
+      android.permission.SET_KEYBOARD_LAYOUT: granted=true
+      com.hisense.shoppingguide.permission.READ_CONTENT: granted=true
+      android.permission.READ_DREAM_STATE: granted=true
+      android.permission.MANAGE_APP_OPS_RESTRICTIONS: granted=true
+      android.permission.KILL_BACKGROUND_PROCESSES: granted=true
+      android.permission.MANAGE_USER_OEM_UNLOCK_STATE: granted=true
+      android.permission.USE_FINGERPRINT: granted=true
+      android.permission.REQUEST_NETWORK_SCORES: granted=true
+      android.permission.WRITE_USER_DICTIONARY: granted=true
+      android.permission.READ_SYNC_STATS: granted=true
+      android.permission.WRITE_DREAM_STATE: granted=true
+      android.permission.REBOOT: granted=true
+      android.permission.REQUEST_DELETE_PACKAGES: granted=true
+      android.permission.OEM_UNLOCK_STATE: granted=true
+      android.permission.MANAGE_DEVICE_ADMINS: granted=true
+      android.permission.CLEAR_APP_CACHE: granted=true
+      android.permission.CHANGE_APP_IDLE_STATE: granted=true
+      android.permission.BIND_SETTINGS_SUGGESTIONS_SERVICE: granted=true
+      android.permission.TEST_BLACKLISTED_PASSWORD: granted=true
+      android.permission.MANAGE_NETWORK_POLICY: granted=true
+      android.permission.SET_POINTER_SPEED: granted=true
+      android.permission.MANAGE_NOTIFICATIONS: granted=true
+      android.permission.SEND_SHOW_SUSPENDED_APP_DETAILS: granted=true
+      android.permission.CONNECTIVITY_INTERNAL: granted=true
+      android.permission.READ_SYNC_SETTINGS: granted=true
+      android.permission.BROADCAST_PACKAGE_REMOVED: granted=true
+      android.permission.OVERRIDE_WIFI_CONFIG: granted=true
+      android.permission.FORCE_STOP_PACKAGES: granted=true
+      android.permission.HIDE_NON_SYSTEM_OVERLAY_WINDOWS: granted=true
+      android.permission.CAPTURE_VIDEO_OUTPUT: granted=true
+      android.permission.ACCESS_NOTIFICATIONS: granted=true
+      android.permission.VIBRATE: granted=true
+      com.android.certinstaller.INSTALL_AS_USER: granted=true
+      android.permission.BIND_ACCESSIBILITY_SERVICE: granted=true
+      android.permission.MANAGE_ACTIVITY_STACKS: granted=true
+      android.permission.READ_USER_DICTIONARY: granted=true
+      com.hisense.tv.aivirtualassistant.provider.ACCESS_DATA: granted=true
+      android.permission.MANAGE_SCOPED_ACCESS_DIRECTORY_PERMISSIONS: granted=true
+      android.permission.GET_DETAILED_TASKS: granted=true
+      android.permission.ACCESS_WIFI_STATE: granted=true
+      android.permission.MANAGE_APP_OPS_MODES: granted=true
+      android.permission.CHANGE_WIMAX_STATE: granted=true
+      com.hisense.vidaaassistant.permission.START_CONNECTION_DIAGNOSIS: granted=true
+      android.permission.REQUEST_INSTALL_PACKAGES: granted=true
+      android.permission.MODIFY_PHONE_STATE: granted=true
+      com.android.launcher.permission.INSTALL_SHORTCUT: granted=true
+      android.permission.STATUS_BAR: granted=true
+      android.permission.READ_FRAME_BUFFER: granted=true
+      android.permission.DUMP: granted=true
+      android.permission.LOCATION_HARDWARE: granted=true
+      com.hisense.livetv.epgdata.WRITE_PERMISSION: granted=true
+      android.permission.WAKE_LOCK: granted=true
+      android.permission.INJECT_EVENTS: granted=true
+      android.permission.BIND_NETWORK_RECOMMENDATION_SERVICE: granted=true
+      com.hisense.service.message.READ_DATABASE: granted=true
+      android.permission.SET_SCREEN_COMPATIBILITY: granted=true
+      android.permission.MEDIA_CONTENT_CONTROL: granted=true
+      android.permission.DELETE_PACKAGES: granted=true
+    User 0: 
+      gids=[2001, 1065, 1005, 1002, 3002, 1023, 3003, 3001, 1007]
+      runtime permissions:
+        android.permission.ACCESS_FINE_LOCATION: granted=true
+        com.hisense.livetv.epgdata.READ_PERMISSION: granted=true, flags=[ SYSTEM_FIXED GRANTED_BY_DEFAULT ]
+        android.permission.READ_EXTERNAL_STORAGE: granted=true
+        android.permission.ACCESS_COARSE_LOCATION: granted=true
+        android.permission.READ_PHONE_STATE: granted=true
+        android.permission.CALL_PHONE: granted=true, flags=[ SYSTEM_FIXED GRANTED_BY_DEFAULT ]
+        android.permission.WRITE_CONTACTS: granted=true, flags=[ SYSTEM_FIXED GRANTED_BY_DEFAULT ]
+        android.permission.CAMERA: granted=true
+        android.permission.PROCESS_OUTGOING_CALLS: granted=true, flags=[ SYSTEM_FIXED GRANTED_BY_DEFAULT ]
+        android.permission.GET_ACCOUNTS: granted=true, flags=[ SYSTEM_FIXED GRANTED_BY_DEFAULT ]
+        android.permission.WRITE_EXTERNAL_STORAGE: granted=true
+        android.permission.RECORD_AUDIO: granted=true
+        android.permission.READ_CONTACTS: granted=true, flags=[ SYSTEM_FIXED GRANTED_BY_DEFAULT ]
+
+Package Changes:
+  Sequence number=46
+  User 0:
+    seq=37, package=com.hisense.service.hproxy
+    seq=45, package=com.ljsy.iptv
+
+
+Dexopt state:
+  [com.speech.enchatroom]
+    path: /data/app/com.speech.enchatroom-cWUd4NHKuEfkWnWXuFmANw==/base.apk
+      arm: [status=speed-profile] [reason=install]
+
+
+Compiler stats:
+  [com.speech.enchatroom]
+     base.apk - 13074

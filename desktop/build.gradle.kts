@@ -16,6 +16,13 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation(libs.coroutines.test)
 }
+// Share core's recorded adb fixtures with desktop tests (VM state-machine tests read
+// real dumpsys-package output to assert parsing + repository wiring end-to-end).
+sourceSets {
+    test {
+        resources.srcDir(project(":core").projectDir.resolve("src/test/resources"))
+    }
+}
 kotlin { jvmToolchain(21) }
 compose.desktop.application {
     mainClass = "com.adbgui.desktop.main.MainKt"

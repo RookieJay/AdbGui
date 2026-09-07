@@ -2,9 +2,12 @@ package com.adbgui.core.adb
 
 import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbCommandException
+import com.adbgui.core.domain.BugreportResult
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceProps
+import com.adbgui.core.domain.DumpsysPackage
 import com.adbgui.core.domain.Extra
+import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.domain.InstallResult
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.core.domain.RebootMode
@@ -103,19 +106,50 @@ class CommandRunner(
         val ANSI_CSI = Regex("\\[[0-9;?]*[A-Za-z]")
     }
 
+    // Rejects paths containing shell metacharacters / whitespace — used by listNativeLibs
+    // to guard `adb shell ls -la <dir>` against shell-injection-shaped input.
+    private val safePathRegex = Regex("^[^\\s;&|`'$<>]+$")
+
+    // Package-name guard for dumpsysPackage (and any future per-package adb command). Allows letters,
+    // digits, dot, underscore — the Android package-name charset. Rejects spaces / shell metachars
+    // so a malformed caller cannot shape `adb shell dumpsys package <pkg>` into a sh injection.
+    private val pkgRegex = Regex("^[A-Za-z0-9._]+$")
+
     suspend fun listPackages(serial: String): List<PackageInfo> {
         val r = runCmd(serial, listOf("shell", "pm", "list", "packages", "-3"))
         return PackageListParser.parse(r.stdout, thirdPartyOnly = true)
     }
 
-    suspend fun install(serial: String, apkPath: String, reinstall: Boolean): InstallResult {
+    /** `adb shell dumpsys package <pkg>` → parsed [DumpsysPackage]. Throws [AdbCommandException]
+     *  if the output has no parseable `Package [` / `Packages:` section (e.g. package not installed
+     *  on the device). `runShellCmd` sanitizes the pty's `\r`/ANSI artifacts before parsing. */
+    suspend fun dumpsysPackage(serial: String, pkg: String): DumpsysPackage {
+        require(pkgRegex.matches(pkg)) { "invalid package name: $pkg" }
+        val out = runShellCmd(serial, "dumpsys package $pkg")
+        val parsed = DumpsysPackageParser.parse(out)
+            ?: throw AdbCommandException(
+                command = "adb -s $serial shell dumpsys package $pkg",
+                exitCode = -1,
+                stderr = "no Package section in dumpsys output; stdout head=${out.take(200)}",
+            )
+        return parsed
+    }
+
+    suspend fun install(serial: String, paths: List<String>, flags: InstallFlags): InstallResult {
+        require(paths.isNotEmpty()) { "install: paths must not be empty" }
+        val subcmd = if (paths.size == 1) "install" else "install-multiple"
         val args = buildList {
-            add("install"); if (reinstall) add("-r"); add(apkPath)
+            add(subcmd)
+            if (flags.reinstall) add("-r")
+            if (flags.allowTest) add("-t")
+            if (flags.downgrade) add("-d")
+            if (flags.grantPerms) add("-g")
+            addAll(paths)
         }
         val r = runCmd(serial, args)
         val parsed = InstallResultParser.parse(r.stdout, r.stderr, r.exitCode)
         if (!parsed.success) {
-            throw AdbCommandException(command = "install ${args.joinToString(" ")}", exitCode = r.exitCode, stderr = r.stderr)
+            throw AdbCommandException(command = "adb -s $serial ${args.joinToString(" ")}", exitCode = r.exitCode, stderr = r.stderr)
         }
         return parsed
     }
@@ -124,6 +158,12 @@ class CommandRunner(
         val r = runCmd(serial, listOf("shell", "pm", "uninstall", pkg))
         return r.stdout.contains("Success")
     }
+
+    suspend fun grant(serial: String, pkg: String, perm: String): String =
+        runCmd(serial, listOf("shell", "pm", "grant", pkg, perm)).stdout
+
+    suspend fun revoke(serial: String, pkg: String, perm: String): String =
+        runCmd(serial, listOf("shell", "pm", "revoke", pkg, perm)).stdout
 
     suspend fun clearData(serial: String, pkg: String): Boolean {
         val r = runCmd(serial, listOf("shell", "pm", "clear", pkg))
@@ -239,8 +279,23 @@ class CommandRunner(
         return runCmd(serial, listOf("shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1")).stdout
     }
 
-    suspend fun startAppActivity(serial: String, pkg: String, activity: String): String {
-        return runCmd(serial, listOf("shell", "am", "start", "-n", "$pkg/$activity")).stdout
+    /** `am start` with optional action/data/component + extras. At least one of action/component
+     *  should be non-blank (VM guards); core doesn't enforce — adb will error if both blank. */
+    suspend fun startActivity(
+        serial: String,
+        action: String?,
+        data: String?,
+        component: String?,
+        extras: List<Extra>,
+    ): String {
+        val args = buildList {
+            add("shell"); add("am"); add("start")
+            if (!action.isNullOrBlank()) { add("-a"); add(action) }
+            if (!data.isNullOrBlank()) { add("-d"); add(data) }
+            if (!component.isNullOrBlank()) { add("-n"); add(component) }
+            extras.forEach { add(it.type.flag); add(it.key); add(it.value) }
+        }
+        return runCmd(serial, args).stdout
     }
 
     suspend fun sendBroadcast(serial: String, action: String, uri: String?, extras: List<Extra>): String {
@@ -265,6 +320,36 @@ class CommandRunner(
         // `ls -la /sdcard/` follows the link and lists the directory contents.
         val p = if (path.endsWith("/")) path else "$path/"
         return runCmd(serial, listOf("shell", "ls", "-la", p)).stdout
+    }
+
+    /** List `.so` files in a device directory (typically a package's `nativeLibraryDir`).
+     *  Reuses [LsParser] — no new parser. The `dir` is validated against [safePathRegex] to keep
+     *  `adb shell ls -la <dir>` from being a shell-injection vector (adb's modern shell protocol
+     *  sends argv without `sh -c` re-parsing, but a path with `;`/`&`/backticks is still suspect
+     *  and never a real lib path). On any ls failure (bad dir, offline) returns empty list —
+     *  native libs are best-effort display, not a critical path.
+     *
+     *  Handles two on-device layouts:
+     *  - Android >=10: `.so` files live directly in `nativeLibraryDir`.
+     *  - Android <=9: `.so` files live in `/lib/<abi>/` (e.g. `/lib/arm/`), one level below
+     *    `legacyNativeLibraryDir`. The flat `ls` of the dir returns subdirectory entries (e.g.
+     *    `arm`) and no `.so`; recurse one level into each immediate subdir to collect `.so`. */
+    suspend fun listNativeLibs(serial: String, dir: String): List<String> {
+        if (!safePathRegex.matches(dir)) {
+            logger.warn("listNativeLibs: rejecting dir: $dir")
+            return emptyList()
+        }
+        val out = runCatching { ls(serial, dir) }.getOrElse { return emptyList() }
+        val entries = LsParser.parse(out)
+        val direct = entries.map { it.name }.filter { it.endsWith(".so") }
+        if (direct.isNotEmpty()) return direct
+        // Android <=9 abi-subdir layout: .so files live in /lib/<abi>/ subdir.
+        val subdirs = entries.filter { it.isDirectory }
+        return subdirs.flatMap { sd ->
+            runCatching { LsParser.parse(ls(serial, "$dir/${sd.name}")) }
+                .getOrDefault(emptyList())
+                .map { it.name }.filter { it.endsWith(".so") }
+        }
     }
 
     suspend fun checkSymlinkDirs(serial: String, paths: List<String>): List<Boolean> {
@@ -321,6 +406,30 @@ class CommandRunner(
         runCmd(serial, listOf("forward", "--remove-all"))
     }
 
+    /** `adb -s <serial> bugreport <destDir>` — host command (not shell). adb writes
+     *  `bugreport-<date>.zip` into destDir and prints the path to stdout. Long-running (10–60s+):
+     *  passes a 180s timeout (JvmAdbProcessRunner.run honors it via async reads after T5). */
+    suspend fun bugreport(serial: String, destDir: String): BugreportResult {
+        val r = runCmd(serial, listOf("bugreport", destDir), timeoutMs = 180_000L)
+        val zip = extractBugreportPath(r.stdout, destDir)
+            ?: throw AdbCommandException(
+                command = "adb -s $serial bugreport $destDir",
+                exitCode = r.exitCode,
+                stderr = "no bugreport zip path found in stdout; destDir=$destDir; stdout head=${r.stdout.take(200)}",
+            )
+        return BugreportResult(zipPath = zip)
+    }
+
+    /** Parse the zip path from `adb bugreport` stdout ("Bug report is stored at <path>"); fall back to
+     *  scanning destDir for the newest bugreport-*.zip (real-device path; in tests stdout always carries it). */
+    private fun extractBugreportPath(stdout: String, destDir: String): String? {
+        val re = Regex("Bug report is stored at:?\\s*(\\S+)")
+        re.find(stdout)?.let { return it.groupValues[1].trim() }
+        val dir = java.io.File(destDir)
+        return dir.listFiles { f -> f.name.startsWith("bugreport-") && f.extension.equals("zip", ignoreCase = true) }
+            ?.maxByOrNull { it.lastModified() }?.absolutePath
+    }
+
     private fun extractPng(bytes: ByteArray): ByteArray? {
         val sig = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
         val start = indexOf(bytes, sig) ?: return null
@@ -337,11 +446,11 @@ class CommandRunner(
         return null
     }
 
-    private suspend fun runCmd(serial: String, args: List<String>): AdbProcessResult {
+    private suspend fun runCmd(serial: String, args: List<String>, timeoutMs: Long? = null): AdbProcessResult {
         server.ensureStarted()
         val full = buildList { add("-s"); add(serial); addAll(args) }
         val cmd = "adb ${full.joinToString(" ")}"
-        val r = runner.run(adb(), full)
+        val r = runner.run(adb(), full, timeoutMs)
         logger.debug("$cmd -> exit=${r.exitCode} err=${r.stderr.take(200)}")
         if (r.exitCode != 0) throw AdbCommandException(command = cmd, exitCode = r.exitCode, stderr = r.stderr)
         return r

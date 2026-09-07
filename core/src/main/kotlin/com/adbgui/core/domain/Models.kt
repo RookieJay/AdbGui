@@ -52,6 +52,18 @@ data class ConnectResult(
 
 data class InstallResult(val success: Boolean, val message: String, val code: String? = null)
 
+/** Result of `adb -s <serial> bugreport <destDir>`: the zip path (parsed from stdout or
+ *  scanned from destDir). */
+data class BugreportResult(val zipPath: String)
+
+/** Flags for `adb install` / `adb install-multiple`. Each maps to a standard adb switch. */
+data class InstallFlags(
+    val reinstall: Boolean,   // -r  keep data
+    val allowTest: Boolean,   // -t  test APK
+    val downgrade: Boolean,   // -d  allow downgrade
+    val grantPerms: Boolean,  // -g  grant all runtime perms
+)
+
 data class DeviceProps(
     val brand: String,
     val manufacturer: String,

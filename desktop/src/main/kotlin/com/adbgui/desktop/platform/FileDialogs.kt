@@ -58,6 +58,20 @@ object FileDialogs {
         } else null
     }
 
+    /**
+     * Multi-select open dialog. Like [pickFile] but allows selecting several files at once
+     * (Ctrl/Shift-click in the native dialog). Returns the chosen absolute paths, or `null`
+     * if the user cancelled. Used for split-APK / multi-APK install in one `install-multiple` call.
+     */
+    fun pickFiles(title: String, filePattern: String? = null): List<String>? {
+        val dlg = FileDialog(Frame(), title, FileDialog.LOAD)
+        dlg.isMultipleMode = true
+        if (filePattern != null) dlg.file = filePattern  // AWT uses filename as a pattern filter hint
+        dlg.isVisible = true
+        val files = dlg.files ?: return null
+        return if (files.isEmpty()) null else files.map { it.absolutePath }
+    }
+
     /** The directory to open the dialog at: [path] itself if it's a dir, else its parent. Null if
      *  blank/unknown so the OS picks a default. */
     private fun parentDirOf(path: String?): String? {

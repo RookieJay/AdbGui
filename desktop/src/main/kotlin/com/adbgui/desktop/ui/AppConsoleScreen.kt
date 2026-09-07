@@ -35,6 +35,7 @@ import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
+import androidx.compose.material.Checkbox
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
@@ -60,6 +61,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Color
 import com.adbgui.core.domain.Extra
 import com.adbgui.core.domain.ExtraType
+import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.desktop.ui.i18n.Strings
 import java.awt.Toolkit
@@ -90,15 +92,26 @@ fun AppConsoleScreen(
     val broadcastResult by vm.broadcastResult.collectAsState()
     val providerResult by vm.providerResult.collectAsState()
     var selectedPkg by remember { mutableStateOf<String?>(null) }
+    var expandedPkg by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(selectedPkg) { vm.clearDetail(); expandedPkg = null }
     var search by remember { mutableStateOf("") }
     var advancedOpen by remember { mutableStateOf(false) }
     var confirmUninstall by remember { mutableStateOf<String?>(null) }
     var confirmClearData by remember { mutableStateOf<String?>(null) }
     var dragOver by remember { mutableStateOf(false) }
+    // Install flags — local Compose state delegates; survive across recomposition, and the
+    // drop-target closure below reads the current values at drop time (state delegates are
+    // stable objects whose .value is read live each call, so the remember{object} captures the
+    // delegates, not stale booleans).
+    var reinstall by remember { mutableStateOf(true) }
+    var allowTest by remember { mutableStateOf(false) }
+    var downgrade by remember { mutableStateOf(false) }
+    var grantPerms by remember { mutableStateOf(false) }
 
     // Drop APK files anywhere on the console to install — the modern path the button-picker
     // can't reliably be (the hand-rolled COM picker was removed). onEntered/Exited drive the
-    // drop-zone highlight; onDrop filters to .apk files and installs each.
+    // drop-zone highlight; onDrop filters to .apk files and installs all dropped APKs in one
+    // install-multiple call so split-APKs install together.
     val dropTarget = remember {
         object : DragAndDropTarget {
             override fun onDrop(event: DragAndDropEvent): Boolean {
@@ -108,7 +121,10 @@ fun AppConsoleScreen(
                         ?.filterIsInstance<File>()
                 }.getOrNull().orEmpty().filter { it.extension.equals("apk", ignoreCase = true) }
                 if (apks.isEmpty()) return false
-                apks.forEach { vm.install(it.absolutePath) }
+                vm.install(
+                    apks.map { it.absolutePath },
+                    InstallFlags(reinstall, allowTest, downgrade, grantPerms),
+                )
                 return true
             }
             override fun onEntered(event: DragAndDropEvent) { dragOver = true }
@@ -151,16 +167,32 @@ fun AppConsoleScreen(
                 Button(
                     enabled = !busy,
                     onClick = {
-                        val chosen = com.adbgui.desktop.platform.FileDialogs.pickFile(
+                        val chosen = com.adbgui.desktop.platform.FileDialogs.pickFiles(
                             title = Strings.t("select_apk"),
-                            currentPath = null,
                             filePattern = "*.apk",
                         )
-                        if (chosen != null) vm.install(chosen)
+                        if (chosen != null && chosen.isNotEmpty()) {
+                            vm.install(chosen, InstallFlags(reinstall, allowTest, downgrade, grantPerms))
+                        }
                     },
                 ) { Text(Strings.t("install_apk")) }
                 Spacer(Modifier.width(8.dp))
                 if (busy) CircularProgressIndicator(modifier = Modifier.heightIn(max = 18.dp))
+            }
+
+            // Install flags row — mirrors adb install switches; passed to both picker and drop installs.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = reinstall, onCheckedChange = { reinstall = it })
+                Text(Strings.t("flag_reinstall"))
+                Spacer(Modifier.width(8.dp))
+                Checkbox(checked = allowTest, onCheckedChange = { allowTest = it })
+                Text(Strings.t("flag_allow_test"))
+                Spacer(Modifier.width(8.dp))
+                Checkbox(checked = downgrade, onCheckedChange = { downgrade = it })
+                Text(Strings.t("flag_downgrade"))
+                Spacer(Modifier.width(8.dp))
+                Checkbox(checked = grantPerms, onCheckedChange = { grantPerms = it })
+                Text(Strings.t("flag_grant_perms"))
             }
 
             // Drop zone: visible affordance that the whole screen accepts APK drops.
@@ -225,8 +257,20 @@ fun AppConsoleScreen(
                             PackageSelectRow(
                                 pkg = pkg,
                                 isSelected = pkg.name == selectedPkg,
+                                expanded = expandedPkg == pkg.name,
+                                onToggleExpand = {
+                                    if (expandedPkg == pkg.name) {
+                                        expandedPkg = null
+                                    } else {
+                                        expandedPkg = pkg.name
+                                        vm.loadDetail(pkg.name)
+                                    }
+                                },
                                 onClick = { selectedPkg = pkg.name },
                             )
+                            if (expandedPkg == pkg.name) {
+                                AppDetailBlock(vm)
+                            }
                             Divider()
                         }
                     }
@@ -278,9 +322,14 @@ fun AppConsoleScreen(
                             busy = busy,
                             broadcastResult = broadcastResult,
                             providerResult = providerResult,
-                            onStartActivity = { activity -> vm.startAppActivity(sel, activity) },
+                            permissions = vm.permissions.collectAsState().value,
+                            permissionsBusy = vm.permissionsBusy.collectAsState().value,
+                            permissionsError = vm.permissionsError.collectAsState().value,
+                            onStartActivity = { action, data, component, extras -> vm.startActivity(action, data, component, extras) },
                             onSendBroadcast = { action, uri, extras -> vm.sendBroadcast(action, uri, extras) },
                             onQueryProvider = { uri, where -> vm.queryProvider(uri, where) },
+                            onLoadPermissions = { vm.loadPermissions(sel) },
+                            onTogglePermission = { p, g -> vm.togglePermission(sel, p, g) },
                         )
                     }
                 }
@@ -321,6 +370,8 @@ fun AppConsoleScreen(
 private fun PackageSelectRow(
     pkg: PackageInfo,
     isSelected: Boolean,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
     onClick: () -> Unit,
 ) {
     Row(
@@ -337,10 +388,51 @@ private fun PackageSelectRow(
                 Text(Strings.t("system"), style = MaterialTheme.typography.caption)
             }
         }
+        IconButton(onClick = onToggleExpand) {
+            Icon(
+                if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                contentDescription = Strings.t(if (expanded) "collapse" else "expand"),
+                modifier = Modifier.size(18.dp),
+            )
+        }
         IconButton(onClick = {
             Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(pkg.name), null)
         }) {
             Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun AppDetailBlock(vm: AppConsoleViewModel) {
+    val detail by vm.detail.collectAsState()
+    val busy by vm.detailBusy.collectAsState()
+    val err by vm.detailError.collectAsState()
+    Column(Modifier.padding(start = 24.dp, top = 4.dp, bottom = 4.dp)) {
+        Text(Strings.t("app_detail"), style = MaterialTheme.typography.caption)
+        if (busy) CircularProgressIndicator(modifier = Modifier.size(16.dp))
+        err?.let { InlineMessageBanner(Strings.t("adb_error"), MessageKind.Error, details = it, initiallyExpanded = true) }
+        detail?.let { d ->
+            Text("${Strings.t("version")}: ${d.versionName ?: "?"} (${d.versionCode ?: "?"})", style = MaterialTheme.typography.body2)
+            d.primaryCpuAbi?.let { Text("${Strings.t("abi")}: $it", style = MaterialTheme.typography.body2) }
+            d.codePath?.let { path ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${Strings.t("code_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+            d.publicSourceDir?.let { path ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${Strings.t("apk_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+            val libsText = if (d.nativeLibs.isEmpty()) Strings.t("no_native_libs") else d.nativeLibs.joinToString(" ")
+            Text("${Strings.t("native_libs")}: $libsText", style = MaterialTheme.typography.body2)
         }
     }
 }
@@ -351,12 +443,20 @@ private fun AdvancedPanel(
     busy: Boolean,
     broadcastResult: String?,
     providerResult: String?,
-    onStartActivity: (String) -> Unit,
+    permissions: List<com.adbgui.core.domain.PermissionInfo>,
+    permissionsBusy: Boolean,
+    permissionsError: String?,
+    onStartActivity: (String?, String?, String?, List<Extra>) -> Unit,
     onSendBroadcast: (String, String?, List<Extra>) -> Unit,
     onQueryProvider: (String, String?) -> Unit,
+    onLoadPermissions: () -> Unit,
+    onTogglePermission: (String, Boolean) -> Unit,
 ) {
     // am start
-    var activity by remember { mutableStateOf("") }
+    var amComponent by remember { mutableStateOf("") }
+    var amAction by remember { mutableStateOf("") }
+    var amData by remember { mutableStateOf("") }
+    val amExtras = remember { mutableStateListOf<Triple<ExtraType, String, String>>() }
     // broadcast
     var bAction by remember { mutableStateOf("") }
     var bUri by remember { mutableStateOf("") }
@@ -371,21 +471,45 @@ private fun AdvancedPanel(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // --- am start ---
+            // --- am start (deep link / explicit component) ---
             Text(Strings.t("start_activity"), style = MaterialTheme.typography.subtitle2)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = activity,
-                    singleLine = true,
-                    onValueChange = { activity = it },
-                    label = { Text(Strings.t("activity_name")) },
-                    placeholder = { Text("$pkg/.MainActivity") },
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
+            OutlinedTextField(
+                value = amComponent,
+                singleLine = true,
+                onValueChange = { amComponent = it },
+                label = { Text(Strings.t("component")) },
+                placeholder = { Text("$pkg/.MainActivity") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = amAction,
+                singleLine = true,
+                onValueChange = { amAction = it },
+                label = { Text(Strings.t("am_action")) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = amData,
+                singleLine = true,
+                onValueChange = { amData = it },
+                label = { Text(Strings.t("am_data")) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            ExtrasEditor(amExtras)
+            Row {
                 Button(
-                    enabled = !busy && activity.isNotBlank(),
-                    onClick = { onStartActivity(activity.trim()) },
+                    enabled = !busy && (amAction.isNotBlank() || amComponent.isNotBlank()),
+                    onClick = {
+                        val extras = amExtras
+                            .filter { it.second.isNotBlank() }
+                            .map { Extra(it.first, it.second.trim(), it.third) }
+                        onStartActivity(
+                            amAction.trim().ifBlank { null },
+                            amData.trim().ifBlank { null },
+                            amComponent.trim().ifBlank { null },
+                            extras,
+                        )
+                    },
                 ) { Text(Strings.t("start_activity")) }
             }
 
@@ -411,47 +535,8 @@ private fun AdvancedPanel(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            Text(Strings.t("extras"), style = MaterialTheme.typography.caption)
-            extrasRows.forEachIndexed { index, row ->
-                val (type, key, value) = row
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    var typeExpanded by remember { mutableStateOf(false) }
-                    Box {
-                        OutlinedButton(onClick = { typeExpanded = true }) { Text(type.flag) }
-                        DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                            ExtraType.values().forEach { et ->
-                                DropdownMenuItem(onClick = {
-                                    extrasRows[index] = Triple(et, key, value)
-                                    typeExpanded = false
-                                }) { Text(et.flag) }
-                            }
-                        }
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    OutlinedTextField(
-                        value = key,
-                        singleLine = true,
-                        onValueChange = { extrasRows[index] = Triple(type, it, value) },
-                        placeholder = { Text("key") },
-                        modifier = Modifier.width(120.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    OutlinedTextField(
-                        value = value,
-                        singleLine = true,
-                        onValueChange = { extrasRows[index] = Triple(type, key, it) },
-                        placeholder = { Text("value") },
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    TextButton(onClick = { extrasRows.removeAt(index) }) { Text(Strings.t("remove")) }
-                }
-            }
+            ExtrasEditor(extrasRows)
             Row {
-                OutlinedButton(onClick = { extrasRows.add(Triple(ExtraType.STRING, "", "")) }) {
-                    Text(Strings.t("add_button"))
-                }
-                Spacer(Modifier.width(8.dp))
                 Button(
                     enabled = !busy && bAction.isNotBlank(),
                     onClick = {
@@ -499,6 +584,86 @@ private fun AdvancedPanel(
                 Text(Strings.t("provider_result"), style = MaterialTheme.typography.caption)
                 SelectableText(it)
             }
+
+            Divider()
+
+            // --- permissions (D) ---
+            Text(Strings.t("permissions"), style = MaterialTheme.typography.subtitle2)
+            Button(
+                enabled = !permissionsBusy,
+                onClick = { onLoadPermissions() },
+            ) { Text(if (permissionsBusy) Strings.t("loading") else Strings.t("load_permissions")) }
+            permissionsError?.let {
+                InlineMessageBanner(Strings.t("adb_error"), MessageKind.Error, details = it, initiallyExpanded = true)
+            }
+            if (permissions.isNotEmpty()) {
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp)) {
+                    items(permissions, key = { it.name }) { p ->
+                        if (p.runtime) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = p.granted,
+                                    enabled = !permissionsBusy,
+                                    onCheckedChange = { onTogglePermission(p.name, it) },
+                                )
+                                Text(p.name, style = MaterialTheme.typography.body2)
+                            }
+                        } else {
+                            Text(
+                                "${p.name} (${if (p.granted) Strings.t("granted") else Strings.t("not_granted")})",
+                                style = MaterialTheme.typography.caption,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtrasEditor(
+    rows: androidx.compose.runtime.snapshots.SnapshotStateList<Triple<ExtraType, String, String>>,
+) {
+    Text(Strings.t("extras"), style = MaterialTheme.typography.caption)
+    rows.forEachIndexed { index, row ->
+        val (type, key, value) = row
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            var typeExpanded by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(onClick = { typeExpanded = true }) { Text(type.flag) }
+                DropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
+                    ExtraType.values().forEach { et ->
+                        DropdownMenuItem(onClick = {
+                            rows[index] = Triple(et, key, value)
+                            typeExpanded = false
+                        }) { Text(et.flag) }
+                    }
+                }
+            }
+            Spacer(Modifier.width(4.dp))
+            OutlinedTextField(
+                value = key,
+                singleLine = true,
+                onValueChange = { rows[index] = Triple(type, it, value) },
+                placeholder = { Text("key") },
+                modifier = Modifier.width(120.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            OutlinedTextField(
+                value = value,
+                singleLine = true,
+                onValueChange = { rows[index] = Triple(type, key, it) },
+                placeholder = { Text("value") },
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(4.dp))
+            TextButton(onClick = { rows.removeAt(index) }) { Text(Strings.t("remove")) }
+        }
+    }
+    Row {
+        OutlinedButton(onClick = { rows.add(Triple(ExtraType.STRING, "", "")) }) {
+            Text(Strings.t("add_button"))
         }
     }
 }

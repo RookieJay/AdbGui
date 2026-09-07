@@ -6,11 +6,14 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
@@ -69,6 +72,9 @@ fun DeviceOverviewScreen(
                 val opsBusy by systemOpsVm.busy.collectAsState()
                 val opsMessage by systemOpsVm.message.collectAsState()
                 val opsError by systemOpsVm.error.collectAsState()
+                val brBusy by systemOpsVm.bugreportBusy.collectAsState()
+                val brResult by systemOpsVm.bugreportResult.collectAsState()
+                val brError by systemOpsVm.bugreportError.collectAsState()
                 var rebootMenuOpen by remember { mutableStateOf(false) }
                 var pendingReboot by remember { mutableStateOf<RebootMode?>(null) }
                 SectionCard(headerTitle = Strings.t("device_tools")) {
@@ -100,6 +106,44 @@ fun DeviceOverviewScreen(
                             dismissButton = {
                                 TextButton(onClick = { pendingReboot = null }) { Text(Strings.t("cancel")) }
                             },
+                        )
+                    }
+                }
+                // --- Bugreport export (long-running, independent busy flag) ---
+                SectionCard(headerTitle = Strings.t("bugreport")) {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        OutlinedButton(
+                            enabled = selectedSerial != null && !brBusy,
+                            onClick = {
+                                val dir = com.adbgui.desktop.platform.FileDialogs.pickDirectory(
+                                    title = Strings.t("bugreport_pick_dir"),
+                                    currentPath = null,
+                                )
+                                if (dir != null) systemOpsVm.bugreport(dir)
+                            },
+                        ) { Text(Strings.t("export_bugreport")) }
+                        Spacer(Modifier.width(8.dp))
+                        if (brBusy) {
+                            androidx.compose.material.CircularProgressIndicator(
+                                modifier = Modifier.heightIn(max = 18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { systemOpsVm.cancelBugreport() }) { Text(Strings.t("cancel")) }
+                        }
+                    }
+                    brError?.let { err ->
+                        InlineMessageBanner(
+                            Strings.t("adb_error"),
+                            MessageKind.Error,
+                            details = err,
+                            initiallyExpanded = true,
+                        )
+                    }
+                    brResult?.let { r ->
+                        SavedFileBanner(
+                            path = r.zipPath,
+                            onOpen = { com.adbgui.desktop.ui.openFile(java.io.File(r.zipPath)) },
+                            onReveal = { com.adbgui.desktop.ui.revealFile(java.io.File(r.zipPath)) },
                         )
                     }
                 }

@@ -1,0 +1,222 @@
+# 来源：Hisense VIDAA_TV (model VIDAA_TV, device MTK9632) + manufacturer=hisense + Android 9 (SDK 28, build PPR2.180905.006.A1 dev-keys) + 录制日期 2026-09-07 + 命令: adb shell dumpsys package com.dangbeimarket
+# 包名: com.dangbeimarket (当贝市场 v6.0.7, versionCode 613, armeabi-v7a)
+# 说明：Android 9 / SDK 28 设备，dumpsys 用 legacyNativeLibraryDir=（非 nativeLibraryDir=），versionCode 行带 minSdk/targetSdk 后缀。nativeLibs 实际在 /lib/arm/ 子目录下（7 个 .so），不在 legacyNativeLibraryDir 直接下。
+Activity Resolver Table:
+  Schemes:
+      dbsc.outerstar:
+        729258e com.dangbeimarket/.ui.outerstar.OuterStartActivity filter 8484a81
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "dbsc.outerstar"
+      dangbeistore:
+        fca71af com.dangbeimarket/.activity.NewAppUnistallActivity filter d2e0dbd
+          Action: "com.dangbeimarket.action.activity"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "dangbeistore"
+          Authority: "unistall": -1
+        42fe9bc com.dangbeimarket/.activity.NewAppUpdateActivity filter 1f99fb2
+          Action: "com.dangbeimarket.action.activity"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "dangbeistore"
+          Authority: "update": -1
+        505fd45 com.dangbeimarket/.ui.vipshop.VipShopActivity filter 7b2c8b9
+          Action: "com.dangbeimarket.ACTION_ACTIVITY"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "dangbeistore"
+          Authority: "shop": -1
+        f160c9a com.dangbeimarket/.activity.LuckyDrawActivity filter 1b45f
+          Action: "com.dangbeimarket.action.luckydraw"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "dangbeistore"
+          Authority: "luckydraw": -1
+
+  Non-Data Actions:
+      com.dangbeimarket.action.act.detail:
+        d5679cb com.dangbeimarket/.leanbackmodule.mixDetail.MixDetailActivity filter 9d49114
+          Action: "com.dangbeimarket.action.act.detail"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.action.act.myapp:
+        4efe5a8 com.dangbeimarket/.ui.myapp.MyAppActivity filter 9f7ec4e
+          Action: "com.dangbeimarket.action.act.myapp"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.action.act.theme:
+        a0e28c1 com.dangbeimarket/.ui.topic.app.ZhuangtiActivity filter 40eee7c
+          Action: "com.dangbeimarket.action.act.theme"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.action.act.latest:
+        eb85866 com.dangbeimarket/.activity.LateAddActivity filter bea7f5a
+          Action: "com.dangbeimarket.action.act.latest"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.desk.play:
+        450e7a7 com.dangbeimarket/.desk.DeskPopActivity filter b9d6b03
+          Action: "com.dangbeimarket.desk.play"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.action.act.search:
+        f31b454 com.dangbeimarket/.activity.SearchActivity filter ff3aa80
+          Action: "com.dangbeimarket.action.act.search"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.action.act.tomain:
+        a138ffd com.dangbeimarket/.activity.WelcomeActivity filter 4ca4d50
+          Action: "com.dangbeimarket.action.act.tomain"
+          Category: "android.intent.category.DEFAULT"
+      android.intent.action.MAIN:
+        a138ffd com.dangbeimarket/.activity.WelcomeActivity filter 4109713
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+          Category: "android.intent.category.LEANBACK_LAUNCHER"
+      com.dangbeimarket.action.act.theme.pic:
+        ae194f2 com.dangbeimarket/.ui.topic.pic.ZhuantiPicActivity filter 6ed8305
+          Action: "com.dangbeimarket.action.act.theme.pic"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.action.act.necssaryinstall:
+        29a5743 com.dangbeimarket/.activity.NewNecessaryInstallActivity filter e413726
+          Action: "com.dangbeimarket.action.act.necssaryinstall"
+          Category: "android.intent.category.DEFAULT"
+      com.mstar.android.intent.action.TV_INPUT_BUTTON:
+        a138ffd com.dangbeimarket/.activity.WelcomeActivity filter 9917b49
+          Action: "com.mstar.android.intent.action.TV_INPUT_BUTTON"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.action.act.rank:
+        31fc1c0 com.dangbeimarket/.activity.AppTopActivity filter f41d58b
+          Action: "com.dangbeimarket.action.act.rank"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.action.act.threelevel:
+        c0e2ef9 com.dangbeimarket/.activity.ThreeLevelActivity filter df63f67
+          Action: "com.dangbeimarket.action.act.threelevel"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.action.act.manager:
+        1f00e3e com.dangbeimarket/.ui.apkmanager.ApkManagerActivity filter 29a7668
+          Action: "com.dangbeimarket.action.act.manager"
+          Category: "android.intent.category.DEFAULT"
+      com.dangbeimarket.action.act.themeclassify:
+        981249f com.dangbeimarket/.activity.ZhuangtifengleiActivity filter ae3916f
+          Action: "com.dangbeimarket.action.act.themeclassify"
+          Category: "android.intent.category.DEFAULT"
+
+Registered ContentProviders:
+  com.dangbeimarket/com.dangbei.update.UpdateProvider:
+    Provider{71f39ec com.dangbeimarket/com.dangbei.update.UpdateProvider}
+  com.dangbeimarket/android.support.v4.content.FileProvider:
+    Provider{479c1b5 com.dangbeimarket/android.support.v4.content.FileProvider}
+  com.dangbeimarket/com.dangbei.provider.DBFileProvider:
+    Provider{7dad04a com.dangbeimarket/com.dangbei.provider.DBFileProvider}
+
+ContentProvider Authorities:
+  [com.dangbeimarket.android7.fileprovider]:
+    Provider{479c1b5 com.dangbeimarket/android.support.v4.content.FileProvider}
+      applicationInfo=ApplicationInfo{6dd6bbb com.dangbeimarket}
+  [com.dangbei.update.fileprovider]:
+    Provider{71f39ec com.dangbeimarket/com.dangbei.update.UpdateProvider}
+      applicationInfo=ApplicationInfo{6dd6bbb com.dangbeimarket}
+  [com.dangbeimarket.dbfileprovider]:
+    Provider{7dad04a com.dangbeimarket/com.dangbei.provider.DBFileProvider}
+      applicationInfo=ApplicationInfo{6dd6bbb com.dangbeimarket}
+
+Key Set Manager:
+  [com.dangbeimarket]
+      Signing KeySets: 57
+
+Packages:
+  Package [com.dangbeimarket] (bc08d8):
+    userId=10080
+    pkg=Package{9d1c431 com.dangbeimarket}
+    codePath=/data/app/com.dangbeimarket-Q70KvGAKH3s15xDJwIo89A==
+    resourcePath=/data/app/com.dangbeimarket-Q70KvGAKH3s15xDJwIo89A==
+    legacyNativeLibraryDir=/data/app/com.dangbeimarket-Q70KvGAKH3s15xDJwIo89A==/lib
+    primaryCpuAbi=armeabi-v7a
+    secondaryCpuAbi=null
+    versionCode=613 minSdk=14 targetSdk=28
+    versionName=6.0.7
+    splits=[base]
+    apkSigningVersion=2
+    applicationInfo=ApplicationInfo{6dd6bbb com.dangbeimarket}
+    flags=[ HAS_CODE ALLOW_CLEAR_USER_DATA LARGE_HEAP ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_UNRESIZEABLE ]
+    dataDir=/data/user/0/com.dangbeimarket
+    supportsScreens=[small, medium, large, xlarge, resizeable, anyDensity]
+    timeStamp=2026-08-27 11:18:56
+    firstInstallTime=2026-08-27 11:13:24
+    lastUpdateTime=2026-08-27 11:18:56
+    signatures=PackageSignatures{6fda716 version:2, signatures:[5c254006], past signatures:[]}
+    installPermissionsFixed=true
+    pkgFlags=[ HAS_CODE ALLOW_CLEAR_USER_DATA LARGE_HEAP ]
+    requested permissions:
+      android.permission.PACKAGE_USAGE_STATS
+      android.permission.ACCESS_WIFI_STATE
+      android.permission.CHANGE_WIFI_STATE
+      android.permission.INTERNET
+      android.permission.MOUNT_UNMOUNT_FILESYSTEMS
+      android.permission.READ_EXTERNAL_STORAGE
+      android.permission.WRITE_EXTERNAL_STORAGE
+      android.permission.READ_MEDIA_STORAGE
+      android.permission.ACCESS_NETWORK_STATE
+      android.permission.READ_PHONE_STATE
+      android.permission.KILL_BACKGROUND_PROCESSES
+      android.permission.SYSTEM_ALERT_WINDOW
+      android.permission.SYSTEM_OVERLAY_WINDOW
+      android.permission.WRITE_SETTINGS
+      android.permission.VIBRATE
+      android.permission.ACCESS_DOWNLOAD_MANAGER
+      android.permission.DOWNLOAD_WITHOUT_NOTIFICATION
+      android.permission.DISABLE_KEYGUARD
+      android.permission.GET_PACKAGE_SIZE
+      android.permission.CLEAR_APP_CACHE
+      android.permission.GET_TASKS
+      android.permission.INSTALL_PACKAGES
+      android.permission.DELETE_PACKAGES
+      android.permission.CLEAR_APP_USER_DATA
+      android.permission.CHANGE_COMPONENT_ENABLED_STATE
+      android.permission.READ_FRAME_BUFFER
+      android.permission.WAKE_LOCK
+      android.permission.REQUEST_INSTALL_PACKAGES
+      android.permission.REQUEST_DELETE_PACKAGES
+      android.permission.BROADCAST_STICKY
+      com.mitv.tvhome.permission.HOME_STATE
+      android.permission.FOREGROUND_SERVICE
+      android.permission.RECEIVE_USER_PRESENT
+      android.permission.CHANGE_NETWORK_STATE
+      android.permission.EXPAND_STATUS_BAR
+      android.permission.INTERACT_ACROSS_USERS
+      android.permission.INTERACT_ACROSS_USERS_FULL
+      android.permission.QUERY_ALL_PACKAGES
+      android.permission.READ_LOGS
+      android.permission.MANAGE_EXTERNAL_STORAGE
+      com.google.android.gms.permission.AD_ID
+    install permissions:
+      android.permission.DOWNLOAD_WITHOUT_NOTIFICATION: granted=true
+      android.permission.CHANGE_NETWORK_STATE: granted=true
+      android.permission.FOREGROUND_SERVICE: granted=true
+      android.permission.EXPAND_STATUS_BAR: granted=true
+      android.permission.GET_TASKS: granted=true
+      android.permission.INTERNET: granted=true
+      android.permission.GET_PACKAGE_SIZE: granted=true
+      android.permission.BROADCAST_STICKY: granted=true
+      android.permission.CHANGE_WIFI_STATE: granted=true
+      android.permission.ACCESS_NETWORK_STATE: granted=true
+      android.permission.DISABLE_KEYGUARD: granted=true
+      android.permission.KILL_BACKGROUND_PROCESSES: granted=true
+      android.permission.REQUEST_DELETE_PACKAGES: granted=true
+      android.permission.VIBRATE: granted=true
+      android.permission.ACCESS_WIFI_STATE: granted=true
+      android.permission.WAKE_LOCK: granted=true
+    User 0: ceDataInode=-4294964623 installed=true hidden=false suspended=false stopped=true notLaunched=true enabled=0 instant=false virtual=false
+      gids=[3003]
+      runtime permissions:
+
+Package Changes:
+  Sequence number=46
+  User 0:
+    seq=37, package=com.hisense.service.hproxy
+    seq=45, package=com.ljsy.iptv
+
+
+Dexopt state:
+  [com.dangbeimarket]
+    path: /data/app/com.dangbeimarket-Q70KvGAKH3s15xDJwIo89A==/base.apk
+      arm: [status=speed-profile] [reason=install]
+
+
+Compiler stats:
+  [com.dangbeimarket]
+    (No recorded stats)
