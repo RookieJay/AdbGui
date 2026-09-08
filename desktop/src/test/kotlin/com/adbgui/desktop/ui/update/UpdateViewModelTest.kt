@@ -1,0 +1,175 @@
+package com.adbgui.desktop.ui.update
+
+import com.adbgui.core.log.NoopLogger
+import com.adbgui.core.settings.SettingsStore
+import com.adbgui.core.update.UpdateChecker
+import com.adbgui.core.update.UpdateDownloadResult
+import com.adbgui.core.update.UpdateDownloader
+import com.adbgui.core.update.UpdateManifestFetcher
+import com.adbgui.desktop.platform.MsiUpgrader
+import com.adbgui.desktop.platform.PortableUpdateNotifier
+import com.adbgui.desktop.ui.SettingsViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
+import java.nio.file.Files
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+class UpdateViewModelTest {
+    private class FakeFetcher(private val text: String?) : UpdateManifestFetcher {
+        override suspend fun fetch(url: String): String = text ?: error("no stub")
+    }
+
+    private class FakeDownloader(private val result: UpdateDownloadResult) : UpdateDownloader {
+        override suspend fun download(url: String, sha256: String, onProgress: (Float) -> Unit) = result
+    }
+
+    private class CancellingDownloader : UpdateDownloader {
+        override suspend fun download(url: String, sha256: String, onProgress: (Float) -> Unit): UpdateDownloadResult {
+            delay(1)
+            throw CancellationException("cancelled")
+        }
+    }
+
+    private class FakeMsiUpgrader : MsiUpgrader() {
+        var launched: String? = null
+        override fun launch(msiPath: String) { launched = msiPath }
+    }
+
+    private class FakeNotifier : PortableUpdateNotifier() {
+        var opened: String? = null
+        override fun openDownloadPage(url: String) { opened = url }
+    }
+
+    private fun manifestJson(version: String): String =
+        """{"version":"$version","url":"https://example.com/AdbGui-$version.msi","sha256":"a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"}"""
+
+    private fun buildVm(
+        scope: TestScope,
+        fetcherText: String?,
+        current: String = "1.0.0",
+        downloader: UpdateDownloader = FakeDownloader(UpdateDownloadResult.Success("/tmp/x.msi")),
+        msiUpgrader: MsiUpgrader = MsiUpgrader(),
+        notifier: PortableUpdateNotifier = PortableUpdateNotifier(),
+        exit: (Int) -> Nothing = { throw RuntimeException("exit") },
+    ): Triple<UpdateViewModel, SettingsStore, UpdateChecker> {
+        val dir = Files.createTempDirectory("uvm")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val checker = UpdateChecker(FakeFetcher(fetcherText), current, NoopLogger)
+        return Triple(UpdateViewModel(checker, store, scope, downloader, msiUpgrader, notifier, exit), store, checker)
+    }
+
+    @Test fun check_finds_update() = runTest {
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"))
+        vm.checkForUpdates()
+        advanceUntilIdle()
+        val s = vm.state.value
+        assertIs<UpdateState.Available>(s)
+        assertEquals("1.1.0", s.manifest.version)
+    }
+
+    @Test fun check_no_update() = runTest {
+        val (vm, _, _) = buildVm(this, manifestJson("1.0.0"))
+        vm.checkForUpdates()
+        advanceUntilIdle()
+        assertEquals(UpdateState.NoUpdate, vm.state.value)
+    }
+
+    @Test fun check_error_sets_error_state() = runTest {
+        val (vm, _, _) = buildVm(this, null)
+        vm.checkForUpdates()
+        advanceUntilIdle()
+        assertIs<UpdateState.Error>(vm.state.value)
+    }
+
+    @Test fun select_source_persists() = runTest {
+        val (vm, store, _) = buildVm(this, null)
+        vm.selectSource("github-mirror")
+        advanceUntilIdle()
+        assertEquals("github-mirror", store.load().update.sourceId)
+    }
+
+    @Test fun download_succeeds_to_ready() = runTest {
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
+            downloader = FakeDownloader(UpdateDownloadResult.Success("/tmp/x.msi")))
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate(); advanceUntilIdle()
+        val s = vm.state.value
+        assertIs<UpdateState.Ready>(s)
+        assertEquals("/tmp/x.msi", s.msiPath)
+    }
+
+    @Test fun download_hash_mismatch_sets_error() = runTest {
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
+            downloader = FakeDownloader(UpdateDownloadResult.HashMismatch("a", "b")))
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate(); advanceUntilIdle()
+        assertIs<UpdateState.Error>(vm.state.value)
+    }
+
+    @Test fun install_now_launches_msi_and_exits() = runTest {
+        var exited = -1
+        val msi = FakeMsiUpgrader()
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
+            downloader = FakeDownloader(UpdateDownloadResult.Success("/tmp/x.msi")),
+            msiUpgrader = msi,
+            exit = { exited = it; throw RuntimeException("exit") })
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate(); advanceUntilIdle()
+        try { vm.installNow(); advanceUntilIdle() } catch (e: RuntimeException) {}
+        assertEquals("/tmp/x.msi", msi.launched)
+        assertEquals(0, exited)
+    }
+
+    @Test fun open_download_page() = runTest {
+        val notifier = FakeNotifier()
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0", notifier = notifier)
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.openDownloadPage()
+        assertEquals("https://example.com/AdbGui-1.1.0.msi", notifier.opened)
+    }
+
+    @Test fun cancel_download_restores_available() = runTest {
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
+            downloader = CancellingDownloader())
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate()
+        advanceUntilIdle()
+        val s = vm.state.value
+        assertTrue(s is UpdateState.Available, "expected Available after cancel, got $s")
+    }
+
+    @Test fun dismiss_current_update_persists_version() = runTest {
+        val (vm, store, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0")
+        vm.checkForUpdates(); advanceUntilIdle()
+        assertIs<UpdateState.Available>(vm.state.value)
+        vm.dismissCurrentUpdate(); advanceUntilIdle()
+        assertEquals("1.1.0", store.load().update.dismissedVersion)
+    }
+
+    @Test fun dismiss_propagates_to_shared_settings_viewmodel() = runTest {
+        val dir = Files.createTempDirectory("shared")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val settingsVm = SettingsViewModel(store, this)
+        val updateVm = UpdateViewModel(
+            UpdateChecker(FakeFetcher(manifestJson("1.1.0")), "1.0.0", NoopLogger),
+            store, this,
+            FakeDownloader(UpdateDownloadResult.Success("/tmp/x.msi")),
+            MsiUpgrader(), PortableUpdateNotifier(),
+            exit = { throw RuntimeException("exit") },
+        )
+        advanceUntilIdle() // populate settingsVm.settings via init load
+        updateVm.checkForUpdates(); advanceUntilIdle()
+        assertIs<UpdateState.Available>(updateVm.state.value)
+        updateVm.dismissCurrentUpdate(); advanceUntilIdle()
+        // The banner's data source (settingsVm.settings) must reflect the dismiss
+        // without requiring a restart or explicit reload.
+        assertEquals("1.1.0", settingsVm.settings.value.update.dismissedVersion)
+    }
+}

@@ -59,6 +59,7 @@ fun AppShell(
     vm: DeviceListViewModel,
     modifier: Modifier = Modifier,
     settingsVm: SettingsViewModel? = null,
+    updateVm: com.adbgui.desktop.ui.update.UpdateViewModel? = null,
     configDir: Path? = null,
     deviceOverviewDeviceInfoVm: DeviceInfoViewModel? = null,
     deviceOverviewRemoteVm: RemoteViewModel? = null,
@@ -158,10 +159,16 @@ fun AppShell(
                 device = selectedDevice,
             )
             Divider(color = dividerColor)
+            if (updateVm != null && settingsVm != null) {
+                com.adbgui.desktop.ui.update.UpdateBanner(
+                    updateVm = updateVm,
+                    settingsVm = settingsVm,
+                )
+            }
             Surface(modifier = Modifier.fillMaxSize()) {
                 when {
                     page == NavPage.SETTINGS && settingsVm != null && configDir != null -> {
-                        SettingsScreen(vm = settingsVm, configDir = configDir, scrcpyLocator = scrcpyLocator, repo = repo, adbLocator = adbLocator)
+                        SettingsScreen(vm = settingsVm, configDir = configDir, updateVm = updateVm, scrcpyLocator = scrcpyLocator, repo = repo, adbLocator = adbLocator)
                     }
                     selected != null && page == NavPage.DEVICE_OVERVIEW && deviceOverviewDeviceInfoVm != null && deviceOverviewRemoteVm != null && scrcpyInstaller != null && scrcpyLocator != null && scrcpyLauncher != null -> {
                         DeviceOverviewScreen(

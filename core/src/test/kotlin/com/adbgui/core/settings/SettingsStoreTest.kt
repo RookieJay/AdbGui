@@ -8,6 +8,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SettingsStoreTest {
     private fun tmpDir(): Path = Files.createTempDirectory("adbgui-test")
@@ -57,5 +58,36 @@ class SettingsStoreTest {
         store.save(Settings(scrcpyLaunch = profile))
         val loaded = SettingsStore(dir).load()
         assertEquals(profile, loaded.scrcpyLaunch)
+    }
+
+    @Test
+    fun logcat_ring_cap_default_and_round_trip() = runTest {
+        val dir = Files.createTempDirectory("logcat-cap")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val default = store.load()
+        assertEquals(50000, default.logcatRingCap)
+        store.save(default.copy(logcatRingCap = 200000))
+        val reloaded = store.load()
+        assertEquals(200000, reloaded.logcatRingCap)
+    }
+
+    @Test
+    fun update_settings_default_and_round_trip() = runTest {
+        val dir = Files.createTempDirectory("upd")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val default = store.load()
+        assertEquals("github-official", default.update.sourceId)
+        assertNull(default.update.lastCheckAt)
+        // defaults
+        assertTrue(default.update.checkOnStartup)
+        assertNull(default.update.dismissedVersion)
+        store.save(default.copy(update = default.update.copy(
+            sourceId = "github-mirror", lastCheckAt = "2026-09-03T10:00:00Z",
+            checkOnStartup = false, dismissedVersion = "1.1.0")))
+        val reloaded = store.load()
+        assertEquals("github-mirror", reloaded.update.sourceId)
+        assertEquals("2026-09-03T10:00:00Z", reloaded.update.lastCheckAt)
+        assertEquals(false, reloaded.update.checkOnStartup)
+        assertEquals("1.1.0", reloaded.update.dismissedVersion)
     }
 }

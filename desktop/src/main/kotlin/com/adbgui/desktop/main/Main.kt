@@ -1,5 +1,7 @@
 package com.adbgui.desktop.main
 
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -47,6 +49,10 @@ fun main() = application {
     remember { Strings.set(Locale.fromCode(settings.locale)) }
     // Start the adb tracker exactly once — start() spawns a track-devices stream each call.
     LaunchedEffect(Unit) { root.start() }
+    // Background update check on startup — silent; banner appears only if Available + not dismissed.
+    LaunchedEffect(Unit) {
+        if (settings.update.checkOnStartup) root.updateViewModel.checkForUpdates()
+    }
     val settingsVm = remember { SettingsViewModel(root.settings, root.scope) }
     val vm = remember { DeviceListViewModel(root.repository, root.scope, settingsVm.settings) }
     val selectedSerial = remember { MutableStateFlow<String?>(null) }
@@ -66,7 +72,7 @@ fun main() = application {
             root.logger.info("[screenshot] opening window captureDone=$captureDone image=${screenshotVm.image.value?.size ?: "null"}")
         }
     }
-    val logcatController = remember { com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope) }
+    val logcatController = remember { com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope, ringCap = settings.logcatRingCap) }
     // Whether the selected device is ONLINE — gates the Logcat empty-state "fix logd" hint so
     // it doesn't show for disconnected devices (which also produce an empty logcat stream).
     val deviceOnline = remember {
@@ -99,40 +105,48 @@ fun main() = application {
     Window(onCloseRequest = ::exitApplication, title = Strings.t("app_title")) {
         val settings by settingsVm.settings.collectAsState()
         AdbGuiTheme(settings.theme) {
-            AppShell(
-                vm = vm,
-                settingsVm = settingsVm,
-                configDir = root.configDir,
-                deviceOverviewDeviceInfoVm = deviceInfoVm,
-                deviceOverviewRemoteVm = remoteVm,
-                onOpenScreenshot = {
-                    root.logger.info("[screenshot] button clicked")
-                    screenshotVm.capture()
-                    screenshotLoading = true
-                },
-                screenshotLoading = screenshotLoading,
-                scrcpyInstaller = root.scrcpyInstaller,
-                scrcpyLocator = root.scrcpyLocator,
-                scrcpyLauncher = root.scrcpyLauncher,
-                appConsoleVm = appConsoleVm,
-                logcatVm = logcatVm,
-                systemOpsVm = systemOpsVm,
-                systemInfoVm = systemInfoVm,
-                fileExplorerVm = fileExplorerVm,
-                portForwardingVm = portForwardingVm,
-                cdpDebugVm = cdpDebugVm,
-                selectedSerial = selectedSerial,
-                onOpenShell = { serial ->
-                    // locate() is suspend + may probe the filesystem / spawn adb; run it on the
-                    // background scope so the click doesn't block the UI thread (was runBlocking).
-                    root.scope.launch {
-                        val adb = root.locator.locate()
-                        shellLauncher.open(adb.path, serial)
-                    }
-                },
-                repo = root.repository,
-                adbLocator = root.locator,
-            )
+            // Themed root surface so the window background follows light/dark mode — without
+            // this, transparent gaps (e.g. the update banner area) show the default white pane.
+            Surface(
+                color = MaterialTheme.colors.background,
+                contentColor = MaterialTheme.colors.onBackground,
+            ) {
+                AppShell(
+                    vm = vm,
+                    settingsVm = settingsVm,
+                    updateVm = root.updateViewModel,
+                    configDir = root.configDir,
+                    deviceOverviewDeviceInfoVm = deviceInfoVm,
+                    deviceOverviewRemoteVm = remoteVm,
+                    onOpenScreenshot = {
+                        root.logger.info("[screenshot] button clicked")
+                        screenshotVm.capture()
+                        screenshotLoading = true
+                    },
+                    screenshotLoading = screenshotLoading,
+                    scrcpyInstaller = root.scrcpyInstaller,
+                    scrcpyLocator = root.scrcpyLocator,
+                    scrcpyLauncher = root.scrcpyLauncher,
+                    appConsoleVm = appConsoleVm,
+                    logcatVm = logcatVm,
+                    systemOpsVm = systemOpsVm,
+                    systemInfoVm = systemInfoVm,
+                    fileExplorerVm = fileExplorerVm,
+                    portForwardingVm = portForwardingVm,
+                    cdpDebugVm = cdpDebugVm,
+                    selectedSerial = selectedSerial,
+                    onOpenShell = { serial ->
+                        // locate() is suspend + may probe the filesystem / spawn adb; run it on the
+                        // background scope so the click doesn't block the UI thread (was runBlocking).
+                        root.scope.launch {
+                            val adb = root.locator.locate()
+                            shellLauncher.open(adb.path, serial)
+                        }
+                    },
+                    repo = root.repository,
+                    adbLocator = root.locator,
+                )
+            }
         }
     }
     // Independent screenshot window — opened on demand from Device Overview so the

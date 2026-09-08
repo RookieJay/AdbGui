@@ -12,9 +12,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
+import androidx.compose.material.Checkbox
 import androidx.compose.material.Divider
+import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
+import androidx.compose.material.RadioButton
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
@@ -31,9 +34,14 @@ import androidx.compose.ui.unit.dp
 import com.adbgui.core.adb.AdbLocator
 import com.adbgui.core.device.DeviceRepository
 import com.adbgui.core.log.LogLevel
+import com.adbgui.core.update.UpdateSourceRegistry
+import com.adbgui.desktop.platform.AppMeta
 import com.adbgui.desktop.ui.i18n.Locale
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.ThemePref
+import com.adbgui.desktop.ui.update.UpdateState
+import com.adbgui.desktop.ui.update.UpdateViewModel
+import com.adbgui.desktop.ui.update.formatTimestamp
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
@@ -52,6 +60,7 @@ import java.util.zip.ZipOutputStream
 fun SettingsScreen(
     vm: SettingsViewModel,
     configDir: Path,
+    updateVm: UpdateViewModel? = null,
     scrcpyLocator: com.adbgui.desktop.platform.ScrcpyLocator? = null,
     adbLocator: AdbLocator? = null,
     repo: DeviceRepository? = null,
@@ -208,6 +217,34 @@ fun SettingsScreen(
 
             Divider()
 
+            // --- Logcat ring buffer cap ---
+            Text(Strings.t("logcat_ring_cap"), style = MaterialTheme.typography.subtitle1)
+            var ringCapDraft by remember(settings.logcatRingCap) {
+                mutableStateOf(settings.logcatRingCap.toString())
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = ringCapDraft,
+                    onValueChange = { ringCapDraft = it.filter { c -> c.isDigit() } },
+                    label = { Text(Strings.t("logcat_ring_cap")) },
+                    singleLine = true,
+                    modifier = Modifier.width(200.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val n = ringCapDraft.trim().toIntOrNull()
+                    if (n != null && n in 1000..1_000_000) {
+                        vm.setLogcatRingCap(n)
+                        status = Strings.t("status_log_level_set").format(n.toString()) // reuse generic "set" status
+                    } else {
+                        status = Strings.t("logcat_ring_cap_err")
+                    }
+                }) { Text(Strings.t("apply")) }
+            }
+            Text(Strings.t("logcat_ring_cap_hint"), style = MaterialTheme.typography.caption)
+
+            Divider()
+
             // --- Logs ---
             Text(Strings.t("logs"), style = MaterialTheme.typography.subtitle1)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -264,6 +301,108 @@ fun SettingsScreen(
                 adbVersion != null -> SelectableText(adbVersion!!, style = MaterialTheme.typography.caption)
                 repo != null -> Text(Strings.t("adb_version_loading"), style = MaterialTheme.typography.caption)
                 else -> {}
+            }
+
+            // --- Updates (source selection + check-now) ---
+            if (updateVm != null) {
+                Divider()
+                Text(Strings.t("update_section"), style = MaterialTheme.typography.subtitle1)
+                Text(
+                    Strings.t("update_current_version").format(AppMeta.APP_VERSION),
+                    style = MaterialTheme.typography.caption,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = settings.update.checkOnStartup,
+                        onCheckedChange = { vm.setCheckOnStartup(it) },
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(Strings.t("update_check_on_startup"))
+                }
+                val lastCheckText = Strings.t("update_last_check")
+                    .format(formatTimestamp(settings.update.lastCheckAt) ?: Strings.t("update_last_check_never"))
+                Text(lastCheckText, style = MaterialTheme.typography.caption)
+                settings.update.lastCheckError?.let { err ->
+                    Text(
+                        Strings.t("update_last_error").format(err),
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.error,
+                    )
+                }
+                Text(Strings.t("update_source"), style = MaterialTheme.typography.caption)
+                val sources = remember { UpdateSourceRegistry.all }
+                val updateState by updateVm.state.collectAsState()
+                sources.forEach { src ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = settings.update.sourceId == src.id,
+                            onClick = { updateVm.selectSource(src.id) },
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(src.displayName)
+                    }
+                }
+                Button(onClick = { updateVm.checkForUpdates() }) {
+                    Text(Strings.t("update_check_now"))
+                }
+                when (val s = updateState) {
+                    UpdateState.Checking -> Text(
+                        Strings.t("update_checking"),
+                        style = MaterialTheme.typography.caption,
+                    )
+                    UpdateState.NoUpdate -> Text(
+                        Strings.t("update_no_update"),
+                        style = MaterialTheme.typography.caption,
+                    )
+                    is UpdateState.Available -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val notes = s.manifest.notes
+                        Text(
+                            Strings.t("update_available").format(s.manifest.version),
+                            style = MaterialTheme.typography.caption,
+                        )
+                        if (notes != null) {
+                            Text(notes, style = MaterialTheme.typography.caption)
+                        }
+                        Button(onClick = { updateVm.downloadUpdate() }) {
+                            Text(Strings.t("update_download_install"))
+                        }
+                        TextButton(onClick = { updateVm.openDownloadPage() }) {
+                            Text(Strings.t("update_open_page"))
+                        }
+                    }
+                    is UpdateState.Downloading -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val pct = (s.progress * 100).toInt()
+                        Text(
+                            Strings.t("update_downloading").format(pct),
+                            style = MaterialTheme.typography.caption,
+                        )
+                        LinearProgressIndicator(progress = s.progress)
+                        Button(onClick = { updateVm.cancelDownload() }) {
+                            Text(Strings.t("update_cancel_download"))
+                        }
+                    }
+                    is UpdateState.Ready -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            Strings.t("update_available").format(s.manifest.version),
+                            style = MaterialTheme.typography.caption,
+                        )
+                        Button(onClick = { updateVm.installNow() }) {
+                            Text(Strings.t("update_install_now"))
+                        }
+                        TextButton(onClick = { updateVm.openDownloadPage() }) {
+                            Text(Strings.t("update_open_page"))
+                        }
+                    }
+                    UpdateState.Installing -> Text(
+                        Strings.t("update_installing"),
+                        style = MaterialTheme.typography.caption,
+                    )
+                    is UpdateState.Error -> Text(
+                        Strings.t("update_error").format(s.message),
+                        style = MaterialTheme.typography.caption,
+                    )
+                    UpdateState.Idle -> Unit
+                }
             }
         }
     }

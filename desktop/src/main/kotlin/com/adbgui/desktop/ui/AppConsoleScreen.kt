@@ -2,14 +2,13 @@ package com.adbgui.desktop.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -93,7 +92,15 @@ fun AppConsoleScreen(
     val providerResult by vm.providerResult.collectAsState()
     var selectedPkg by remember { mutableStateOf<String?>(null) }
     var expandedPkg by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(selectedPkg) { vm.clearDetail(); expandedPkg = null }
+    LaunchedEffect(selectedPkg) {
+        // Clear detail + collapse only when selection moves to a DIFFERENT package than the
+        // expanded one — so double-click-to-expand (which fires onClick then onDoubleClick on
+        // the same row) doesn't get its expand immediately wiped by this effect.
+        if (expandedPkg != selectedPkg) {
+            vm.clearDetail()
+            expandedPkg = null
+        }
+    }
     var search by remember { mutableStateOf("") }
     var advancedOpen by remember { mutableStateOf(false) }
     var confirmUninstall by remember { mutableStateOf<String?>(null) }
@@ -238,12 +245,13 @@ fun AppConsoleScreen(
 
             Divider()
 
-            // --- Package list (upper ~40%) ---
+            // --- Package list (gets the larger share of vertical space; was fillMaxHeight(0.4f)
+            // which contended with the fillMaxSize panel below and overflowed) ---
             val filtered = remember(packages, search) {
                 if (search.isBlank()) packages
                 else packages.filter { it.name.contains(search, ignoreCase = true) }
             }
-            Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.4f)) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 if (filtered.isEmpty() && !busy) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(Strings.t("no_packages"), style = MaterialTheme.typography.body2)
@@ -279,15 +287,15 @@ fun AppConsoleScreen(
 
             Divider()
 
-            // --- Lower operation panel (~60%) ---
+            // --- Lower operation panel (smaller share; internal scroll when Advanced expands) ---
             val sel = selectedPkg
             if (sel == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(Strings.t("no_package_selected"), style = MaterialTheme.typography.body2)
                 }
             } else {
                 Column(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                    modifier = Modifier.weight(0.8f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
@@ -366,6 +374,7 @@ fun AppConsoleScreen(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun PackageSelectRow(
     pkg: PackageInfo,
@@ -378,7 +387,7 @@ private fun PackageSelectRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(if (isSelected) MaterialTheme.colors.primary.copy(alpha = 0.15f) else Color.Transparent)
-            .clickable { onClick() }
+            .combinedClickable(onClick = onClick, onDoubleClick = onToggleExpand)
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
