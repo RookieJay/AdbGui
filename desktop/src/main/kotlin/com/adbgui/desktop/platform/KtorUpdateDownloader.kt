@@ -4,6 +4,8 @@ import com.adbgui.core.log.Logger
 import com.adbgui.core.update.UpdateDownloadResult
 import com.adbgui.core.update.UpdateDownloader
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.UserAgent
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.contentLength
@@ -22,12 +24,24 @@ class KtorUpdateDownloader(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val logger: Logger,
 ) : UpdateDownloader {
-    private val client = HttpClient()
+    private val client = HttpClient {
+        install(HttpTimeout) {
+            connectTimeoutMillis = 10_000
+            socketTimeoutMillis = 30_000
+        }
+        install(UserAgent) { agent = "AdbGui/${AppMeta.APP_VERSION}" }
+    }
 
     override suspend fun download(url: String, sha256: String, onProgress: (Float) -> Unit): UpdateDownloadResult = withContext(io) {
         val updatesDir = configDir.resolve("updates").also { Files.createDirectories(it) }
         val partFile = updatesDir.resolve("$sha256.msi.part")
         val finalFile = updatesDir.resolve("$sha256.msi")
+        runCatching {
+            Files.list(updatesDir).use { stream ->
+                stream.filter { Files.isRegularFile(it) && (it.toString().endsWith(".msi") || it.toString().endsWith(".msi.part")) }
+                    .forEach { runCatching { Files.deleteIfExists(it) } }
+            }
+        }.onFailure { logger.warn("update: failed to clean up stale .msi files", it) }
         try {
             val resp = client.get(url)
             if (!resp.status.isSuccess()) {
@@ -39,6 +53,7 @@ class KtorUpdateDownloader(
             val total = resp.contentLength()?.takeIf { it > 0 } ?: -1L
             var read = 0L
             val md = MessageDigest.getInstance("SHA-256")
+            if (total < 0) onProgress(-1f)
             Files.newOutputStream(partFile).use { out ->
                 val buf = ByteArray(64 * 1024)
                 while (true) {

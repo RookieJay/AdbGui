@@ -37,6 +37,14 @@ class UpdateViewModelTest {
         }
     }
 
+    private class RecordingDownloader : UpdateDownloader {
+        var receivedUrl: String? = null
+        override suspend fun download(url: String, sha256: String, onProgress: (Float) -> Unit): UpdateDownloadResult {
+            receivedUrl = url
+            return UpdateDownloadResult.Success("/tmp/x.msi")
+        }
+    }
+
     private class FakeMsiUpgrader : MsiUpgrader() {
         var launched: String? = null
         override fun launch(msiPath: String) { launched = msiPath }
@@ -88,6 +96,25 @@ class UpdateViewModelTest {
         assertIs<UpdateState.Error>(vm.state.value)
     }
 
+    @Test fun check_error_carries_raw_on_parse_failure() = runTest {
+        val (vm, _, _) = buildVm(this, "{not json")
+        vm.checkForUpdates()
+        advanceUntilIdle()
+        val s = assertIs<UpdateState.Error>(vm.state.value)
+        assertEquals("{not json", s.raw)
+    }
+
+    @Test fun open_download_page_proxies_url_for_mirror_source() = runTest {
+        val notifier = FakeNotifier()
+        val (vm, store, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0", notifier = notifier)
+        store.update { it.copy(update = it.update.copy(sourceId = "github-mirror")) }
+        advanceUntilIdle()
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.openDownloadPage(); advanceUntilIdle()
+        val expected = "https://gh-proxy.com/" + "https://example.com/AdbGui-1.1.0.msi"
+        assertEquals(expected, notifier.opened)
+    }
+
     @Test fun select_source_persists() = runTest {
         val (vm, store, _) = buildVm(this, null)
         vm.selectSource("github-mirror")
@@ -131,7 +158,7 @@ class UpdateViewModelTest {
         val notifier = FakeNotifier()
         val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0", notifier = notifier)
         vm.checkForUpdates(); advanceUntilIdle()
-        vm.openDownloadPage()
+        vm.openDownloadPage(); advanceUntilIdle()
         assertEquals("https://example.com/AdbGui-1.1.0.msi", notifier.opened)
     }
 
@@ -171,5 +198,18 @@ class UpdateViewModelTest {
         // The banner's data source (settingsVm.settings) must reflect the dismiss
         // without requiring a restart or explicit reload.
         assertEquals("1.1.0", settingsVm.settings.value.update.dismissedVersion)
+    }
+
+    @Test fun mirror_source_proxies_msi_download_url() = runTest {
+        val recorder = RecordingDownloader()
+        val (vm, store, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0", downloader = recorder)
+        // Persist github-mirror as the selected source before checking.
+        store.update { it.copy(update = it.update.copy(sourceId = "github-mirror")) }
+        advanceUntilIdle()
+        vm.checkForUpdates(); advanceUntilIdle()
+        assertIs<UpdateState.Available>(vm.state.value)
+        vm.downloadUpdate(); advanceUntilIdle()
+        val expected = "https://gh-proxy.com/" + "https://example.com/AdbGui-1.1.0.msi"
+        assertEquals(expected, recorder.receivedUrl)
     }
 }

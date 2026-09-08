@@ -34,7 +34,7 @@ data class UpdateVersion(
     }
 
     companion object {
-        private val re = Regex("""^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.\-]+))?$""")
+        private val re = Regex("""^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.\-]+))?$""")
         fun parse(text: String): UpdateVersion {
             val m = re.matchEntire(text.trim())
             require(m != null) { "Invalid version: $text" }

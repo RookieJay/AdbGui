@@ -15,6 +15,7 @@ object UpdateSourceRegistry {
             "github-mirror",
             "GitHub 镜像 (gh-proxy)",
             "https://gh-proxy.com/https://github.com/RookieJay/AdbGui/releases/latest/download/latest.json",
+            proxyPrefix = "https://gh-proxy.com/",
         ),
     )
 

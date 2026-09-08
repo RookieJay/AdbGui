@@ -37,4 +37,15 @@ class UpdateVersionTest {
     @Test fun prerelease_order_by_identifier() {
         assertTrue(UpdateVersion.parse("1.0.0-rc.2").isGreaterThan(UpdateVersion.parse("1.0.0-rc.1")))
     }
+    @Test fun rejects_leading_zeros() {
+        assertFailsWith<IllegalArgumentException> { UpdateVersion.parse("01.0.0") }
+        assertFailsWith<IllegalArgumentException> { UpdateVersion.parse("1.02.3") }
+        assertFailsWith<IllegalArgumentException> { UpdateVersion.parse("1.0.00") }
+    }
+    @Test fun prerelease_lexical_beta_vs_rc() {
+        assertTrue(UpdateVersion.parse("1.0.0-rc").isGreaterThan(UpdateVersion.parse("1.0.0-beta")))
+    }
+    @Test fun zero_versions_are_valid() {
+        assertEquals(UpdateVersion(0, 0, 0), UpdateVersion.parse("0.0.0"))
+    }
 }
