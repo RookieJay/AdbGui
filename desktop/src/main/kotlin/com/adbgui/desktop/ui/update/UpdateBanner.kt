@@ -17,6 +17,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.SettingsViewModel
 import com.adbgui.desktop.ui.i18n.Strings
@@ -43,9 +44,13 @@ fun UpdateBanner(
     if (available == null || dismissed == available.manifest.version) return
 
     val m = available.manifest
+    // Opaque theme-aware tint: lerp(surface, primary, 0.12) gives a subtle primary wash that
+    // inverts with the theme (dark in dark mode, light in light mode) — avoids the transparent
+    // primary over the unthemed window background that made the banner read as glaring white.
+    val bannerBg = lerp(MaterialTheme.colors.surface, MaterialTheme.colors.primary, 0.12f)
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colors.primary.copy(alpha = 0.12f),
+        color = bannerBg,
         contentColor = MaterialTheme.colors.onSurface,
     ) {
         Row(
@@ -61,7 +66,7 @@ fun UpdateBanner(
                     Text(
                         notes,
                         style = MaterialTheme.typography.caption,
-                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.7f),
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.85f),
                     )
                 }
             }

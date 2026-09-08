@@ -1,5 +1,7 @@
 package com.adbgui.desktop.main
 
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -103,41 +105,48 @@ fun main() = application {
     Window(onCloseRequest = ::exitApplication, title = Strings.t("app_title")) {
         val settings by settingsVm.settings.collectAsState()
         AdbGuiTheme(settings.theme) {
-            AppShell(
-                vm = vm,
-                settingsVm = settingsVm,
-                updateVm = root.updateViewModel,
-                configDir = root.configDir,
-                deviceOverviewDeviceInfoVm = deviceInfoVm,
-                deviceOverviewRemoteVm = remoteVm,
-                onOpenScreenshot = {
-                    root.logger.info("[screenshot] button clicked")
-                    screenshotVm.capture()
-                    screenshotLoading = true
-                },
-                screenshotLoading = screenshotLoading,
-                scrcpyInstaller = root.scrcpyInstaller,
-                scrcpyLocator = root.scrcpyLocator,
-                scrcpyLauncher = root.scrcpyLauncher,
-                appConsoleVm = appConsoleVm,
-                logcatVm = logcatVm,
-                systemOpsVm = systemOpsVm,
-                systemInfoVm = systemInfoVm,
-                fileExplorerVm = fileExplorerVm,
-                portForwardingVm = portForwardingVm,
-                cdpDebugVm = cdpDebugVm,
-                selectedSerial = selectedSerial,
-                onOpenShell = { serial ->
-                    // locate() is suspend + may probe the filesystem / spawn adb; run it on the
-                    // background scope so the click doesn't block the UI thread (was runBlocking).
-                    root.scope.launch {
-                        val adb = root.locator.locate()
-                        shellLauncher.open(adb.path, serial)
-                    }
-                },
-                repo = root.repository,
-                adbLocator = root.locator,
-            )
+            // Themed root surface so the window background follows light/dark mode — without
+            // this, transparent gaps (e.g. the update banner area) show the default white pane.
+            Surface(
+                color = MaterialTheme.colors.background,
+                contentColor = MaterialTheme.colors.onBackground,
+            ) {
+                AppShell(
+                    vm = vm,
+                    settingsVm = settingsVm,
+                    updateVm = root.updateViewModel,
+                    configDir = root.configDir,
+                    deviceOverviewDeviceInfoVm = deviceInfoVm,
+                    deviceOverviewRemoteVm = remoteVm,
+                    onOpenScreenshot = {
+                        root.logger.info("[screenshot] button clicked")
+                        screenshotVm.capture()
+                        screenshotLoading = true
+                    },
+                    screenshotLoading = screenshotLoading,
+                    scrcpyInstaller = root.scrcpyInstaller,
+                    scrcpyLocator = root.scrcpyLocator,
+                    scrcpyLauncher = root.scrcpyLauncher,
+                    appConsoleVm = appConsoleVm,
+                    logcatVm = logcatVm,
+                    systemOpsVm = systemOpsVm,
+                    systemInfoVm = systemInfoVm,
+                    fileExplorerVm = fileExplorerVm,
+                    portForwardingVm = portForwardingVm,
+                    cdpDebugVm = cdpDebugVm,
+                    selectedSerial = selectedSerial,
+                    onOpenShell = { serial ->
+                        // locate() is suspend + may probe the filesystem / spawn adb; run it on the
+                        // background scope so the click doesn't block the UI thread (was runBlocking).
+                        root.scope.launch {
+                            val adb = root.locator.locate()
+                            shellLauncher.open(adb.path, serial)
+                        }
+                    },
+                    repo = root.repository,
+                    adbLocator = root.locator,
+                )
+            }
         }
     }
     // Independent screenshot window — opened on demand from Device Overview so the
