@@ -4,6 +4,8 @@ import com.adbgui.core.log.Logger
 import com.adbgui.core.update.UpdateDownloadResult
 import com.adbgui.core.update.UpdateDownloader
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.UserAgent
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.contentLength
@@ -22,7 +24,14 @@ class KtorUpdateDownloader(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val logger: Logger,
 ) : UpdateDownloader {
-    private val client = HttpClient()
+    private val client = HttpClient {
+        install(HttpTimeout) {
+            connectTimeoutMillis = 10_000
+            requestTimeoutMillis = 30_000
+            socketTimeoutMillis = 30_000
+        }
+        install(UserAgent) { agent = "AdbGui/${AppMeta.APP_VERSION}" }
+    }
 
     override suspend fun download(url: String, sha256: String, onProgress: (Float) -> Unit): UpdateDownloadResult = withContext(io) {
         val updatesDir = configDir.resolve("updates").also { Files.createDirectories(it) }
