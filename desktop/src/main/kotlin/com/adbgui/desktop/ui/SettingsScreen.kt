@@ -41,6 +41,7 @@ import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.ThemePref
 import com.adbgui.desktop.ui.update.UpdateState
 import com.adbgui.desktop.ui.update.UpdateViewModel
+import com.adbgui.desktop.ui.update.formatTimestamp
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
@@ -291,7 +292,7 @@ fun SettingsScreen(
                     Text(Strings.t("update_check_on_startup"))
                 }
                 val lastCheckText = Strings.t("update_last_check")
-                    .format(settings.update.lastCheckAt ?: Strings.t("update_last_check_never"))
+                    .format(formatTimestamp(settings.update.lastCheckAt) ?: Strings.t("update_last_check_never"))
                 Text(lastCheckText, style = MaterialTheme.typography.caption)
                 settings.update.lastCheckError?.let { err ->
                     Text(
