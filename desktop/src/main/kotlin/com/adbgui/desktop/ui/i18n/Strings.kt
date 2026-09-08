@@ -437,6 +437,7 @@ object Strings {
         "update_last_error" to "上次检查失败：%s",
         "update_banner_title" to "发现新版本 %s",
         "update_dismiss" to "以后再说",
+        "update_ready_to_install" to "下载完成，可安装 %s",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -861,6 +862,7 @@ Click "Remove All" when done to clean up.""",
         "update_last_error" to "Last check failed: %s",
         "update_banner_title" to "New version available: %s",
         "update_dismiss" to "Later",
+        "update_ready_to_install" to "Downloaded, ready to install %s",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)
