@@ -61,6 +61,17 @@ class SettingsStoreTest {
     }
 
     @Test
+    fun logcat_ring_cap_default_and_round_trip() = runTest {
+        val dir = Files.createTempDirectory("logcat-cap")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val default = store.load()
+        assertEquals(50000, default.logcatRingCap)
+        store.save(default.copy(logcatRingCap = 200000))
+        val reloaded = store.load()
+        assertEquals(200000, reloaded.logcatRingCap)
+    }
+
+    @Test
     fun update_settings_default_and_round_trip() = runTest {
         val dir = Files.createTempDirectory("upd")
         val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)

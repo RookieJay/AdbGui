@@ -217,6 +217,34 @@ fun SettingsScreen(
 
             Divider()
 
+            // --- Logcat ring buffer cap ---
+            Text(Strings.t("logcat_ring_cap"), style = MaterialTheme.typography.subtitle1)
+            var ringCapDraft by remember(settings.logcatRingCap) {
+                mutableStateOf(settings.logcatRingCap.toString())
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = ringCapDraft,
+                    onValueChange = { ringCapDraft = it.filter { c -> c.isDigit() } },
+                    label = { Text(Strings.t("logcat_ring_cap")) },
+                    singleLine = true,
+                    modifier = Modifier.width(200.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val n = ringCapDraft.trim().toIntOrNull()
+                    if (n != null && n in 1000..1_000_000) {
+                        vm.setLogcatRingCap(n)
+                        status = Strings.t("status_log_level_set").format(n.toString()) // reuse generic "set" status
+                    } else {
+                        status = Strings.t("logcat_ring_cap_err")
+                    }
+                }) { Text(Strings.t("apply")) }
+            }
+            Text(Strings.t("logcat_ring_cap_hint"), style = MaterialTheme.typography.caption)
+
+            Divider()
+
             // --- Logs ---
             Text(Strings.t("logs"), style = MaterialTheme.typography.subtitle1)
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -40,6 +40,10 @@ data class Settings(
     val scrcpyMode: String = "EXTERNAL",  // EMBEDDED / EXTERNAL
     val scrcpyLaunch: ScrcpyLaunchProfile = ScrcpyLaunchProfile(),
     val deviceGroupBy: DeviceGroupBy = DeviceGroupBy.NONE,
+    /** In-memory logcat ring buffer cap (lines). Mirrors Android Studio's "Logcat cycle buffer
+     *  size" — larger = more history retained for copy/scrollback, at the cost of memory. Applied
+     *  at LogcatController construction, so a change takes effect on next app start. */
+    val logcatRingCap: Int = 50000,
     val remoteButtons: List<RemoteButton> = listOf(
         RemoteButton("vol_up", "音量+", 24),
         RemoteButton("vol_down", "音量−", 25),

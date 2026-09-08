@@ -72,7 +72,7 @@ fun main() = application {
             root.logger.info("[screenshot] opening window captureDone=$captureDone image=${screenshotVm.image.value?.size ?: "null"}")
         }
     }
-    val logcatController = remember { com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope) }
+    val logcatController = remember { com.adbgui.core.device.LogcatController(root.commands, root.logger, root.scope, ringCap = settings.logcatRingCap) }
     // Whether the selected device is ONLINE — gates the Logcat empty-state "fix logd" hint so
     // it doesn't show for disconnected devices (which also produce an empty logcat stream).
     val deviceOnline = remember {
