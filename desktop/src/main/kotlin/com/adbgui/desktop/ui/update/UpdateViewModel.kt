@@ -6,6 +6,7 @@ import com.adbgui.core.update.UpdateChecker
 import com.adbgui.core.update.UpdateDownloadResult
 import com.adbgui.core.update.UpdateDownloader
 import com.adbgui.core.update.UpdateManifest
+import com.adbgui.core.update.UpdateSource
 import com.adbgui.core.update.UpdateSourceRegistry
 import com.adbgui.desktop.platform.MsiUpgrader
 import com.adbgui.desktop.platform.PortableUpdateNotifier
@@ -83,7 +84,7 @@ class UpdateViewModel(
         return scope.launch {
             _state.value = UpdateState.Downloading(0f)
             val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
-            val effectiveUrl = source.proxyPrefix?.let { it + m.url } ?: m.url
+            val effectiveUrl = effectiveDownloadUrl(source, m)
             val result = try {
                 downloader.download(effectiveUrl, m.sha256) { p ->
                     _state.value = UpdateState.Downloading(p)
@@ -123,8 +124,7 @@ class UpdateViewModel(
         if (s !is UpdateState.Available && s !is UpdateState.Ready) return@launch
         val m = lastManifest ?: return@launch
         val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
-        val effectiveUrl = source.proxyPrefix?.let { it + m.url } ?: m.url
-        notifier.openDownloadPage(effectiveUrl)
+        notifier.openDownloadPage(effectiveDownloadUrl(source, m))
     }
 
     fun dismissCurrentUpdate(): Job = scope.launch {
@@ -135,4 +135,7 @@ class UpdateViewModel(
     private suspend fun persistResult(at: String, err: String?) {
         store.update { it.copy(update = it.update.copy(lastCheckAt = at, lastCheckError = err)) }
     }
+
+    private fun effectiveDownloadUrl(source: UpdateSource, m: UpdateManifest): String =
+        source.proxyPrefix?.let { it + m.url } ?: m.url
 }

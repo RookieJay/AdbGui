@@ -27,7 +27,6 @@ class KtorUpdateDownloader(
     private val client = HttpClient {
         install(HttpTimeout) {
             connectTimeoutMillis = 10_000
-            requestTimeoutMillis = 30_000
             socketTimeoutMillis = 30_000
         }
         install(UserAgent) { agent = "AdbGui/${AppMeta.APP_VERSION}" }
@@ -39,7 +38,7 @@ class KtorUpdateDownloader(
         val finalFile = updatesDir.resolve("$sha256.msi")
         runCatching {
             Files.list(updatesDir).use { stream ->
-                stream.filter { Files.isRegularFile(it) && it.toString().endsWith(".msi") }
+                stream.filter { Files.isRegularFile(it) && (it.toString().endsWith(".msi") || it.toString().endsWith(".msi.part")) }
                     .forEach { runCatching { Files.deleteIfExists(it) } }
             }
         }.onFailure { logger.warn("update: failed to clean up stale .msi files", it) }
