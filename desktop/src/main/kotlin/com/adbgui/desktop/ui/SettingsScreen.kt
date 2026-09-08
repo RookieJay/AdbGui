@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
+import androidx.compose.material.Checkbox
 import androidx.compose.material.Divider
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
@@ -281,6 +282,25 @@ fun SettingsScreen(
                     Strings.t("update_current_version").format(AppMeta.APP_VERSION),
                     style = MaterialTheme.typography.caption,
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = settings.update.checkOnStartup,
+                        onCheckedChange = { vm.setCheckOnStartup(it) },
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(Strings.t("update_check_on_startup"))
+                }
+                val lastCheckText = settings.update.lastCheckAt?.let {
+                    Strings.t("update_last_check").format(it)
+                } ?: Strings.t("update_last_check").format(Strings.t("update_last_check_never"))
+                Text(lastCheckText, style = MaterialTheme.typography.caption)
+                settings.update.lastCheckError?.let { err ->
+                    Text(
+                        Strings.t("update_last_error").format(err),
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.error,
+                    )
+                }
                 Text(Strings.t("update_source"), style = MaterialTheme.typography.caption)
                 val sources = remember { UpdateSourceRegistry.all }
                 val updateState by updateVm.state.collectAsState()

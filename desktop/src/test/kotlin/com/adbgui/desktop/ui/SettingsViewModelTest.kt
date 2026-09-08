@@ -89,4 +89,15 @@ class SettingsViewModelTest {
         assertEquals("dark", vm.settings.value.theme)
         assertEquals("dark", store.load().theme)
     }
+
+    @Test
+    fun setCheckOnStartup_persists() = runTest {
+        val dir = Files.createTempDirectory("check-on-startup")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = SettingsViewModel(store, this)
+        vm.setCheckOnStartup(false)
+        advanceUntilIdle()
+        assertEquals(false, vm.settings.value.update.checkOnStartup)
+        assertEquals(false, store.load().update.checkOnStartup)
+    }
 }

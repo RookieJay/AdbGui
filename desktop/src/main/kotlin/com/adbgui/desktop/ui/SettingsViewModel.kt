@@ -38,5 +38,9 @@ class SettingsViewModel(private val store: SettingsStore, private val scope: Cor
         store.update { it.copy(deviceGroupBy = mode) }
         refresh()
     }
+    fun setCheckOnStartup(b: Boolean) = scope.launch {
+        store.update { it.copy(update = it.update.copy(checkOnStartup = b)) }
+        refresh()
+    }
     private suspend fun refresh() { _settings.value = store.load() }
 }

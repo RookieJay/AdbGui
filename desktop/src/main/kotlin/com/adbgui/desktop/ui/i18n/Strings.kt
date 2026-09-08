@@ -426,6 +426,10 @@ object Strings {
         "update_open_page" to "打开下载页",
         "update_download_error" to "下载失败：%s",
         "update_hash_error" to "校验失败：文件可能损坏",
+        "update_check_on_startup" to "启动时检查更新",
+        "update_last_check" to "上次检查：%s",
+        "update_last_check_never" to "从未",
+        "update_last_error" to "上次检查失败：%s",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -839,6 +843,10 @@ Click "Remove All" when done to clean up.""",
         "update_open_page" to "Open download page",
         "update_download_error" to "Download failed: %s",
         "update_hash_error" to "Verification failed: file may be corrupt",
+        "update_check_on_startup" to "Check for updates on startup",
+        "update_last_check" to "Last check: %s",
+        "update_last_check_never" to "Never",
+        "update_last_error" to "Last check failed: %s",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)
