@@ -97,7 +97,7 @@ class UpdateViewModel(
         return scope.launch {
             _state.value = UpdateState.Downloading(-1f)  // indeterminate until first byte arrives (gh-proxy may buffer large files before streaming)
             val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
-            val effectiveUrl = effectiveDownloadUrl(source, m)
+            val effectiveUrl = effectiveDownloadUrl(source, m.url)
             val result = try {
                 downloader.download(effectiveUrl, m.sha256) { p ->
                     _state.value = UpdateState.Downloading(p)
@@ -144,7 +144,16 @@ class UpdateViewModel(
         if (s !is UpdateState.Available && s !is UpdateState.Ready) return@launch
         val m = lastManifest ?: return@launch
         val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
-        notifier.openDownloadPage(effectiveDownloadUrl(source, m))
+        notifier.openDownloadPage(effectiveDownloadUrl(source, m.url))
+    }
+
+    /** Open the portable (no-install) build URL in the browser — for green/portable users. */
+    fun openPortablePage(): Job = scope.launch {
+        val s = _state.value as? UpdateState.Available ?: return@launch
+        val m = lastManifest ?: return@launch
+        val portableUrl = m.portableUrl ?: return@launch
+        val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
+        notifier.openDownloadPage(effectiveDownloadUrl(source, portableUrl))
     }
 
     fun dismissCurrentUpdate(): Job = scope.launch {
@@ -156,8 +165,8 @@ class UpdateViewModel(
         store.update { it.copy(update = it.update.copy(lastCheckAt = at, lastCheckError = err)) }
     }
 
-    private fun effectiveDownloadUrl(source: UpdateSource, m: UpdateManifest): String =
-        source.proxyPrefix?.let { it + m.url } ?: m.url
+    private fun effectiveDownloadUrl(source: UpdateSource, url: String): String =
+        source.proxyPrefix?.let { it + url } ?: url
 
     /** True if the file at [path] exists and its SHA-256 equals [expected] (lowercase hex). */
     private suspend fun fileSha256Matches(path: String, expected: String): Boolean = withContext(io) {

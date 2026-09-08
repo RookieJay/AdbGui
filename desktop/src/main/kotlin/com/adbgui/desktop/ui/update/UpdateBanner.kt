@@ -93,6 +93,12 @@ fun UpdateBanner(
                     TextButton(onClick = { updateVm.openDownloadPage() }) {
                         Text(Strings.t("update_open_page"))
                     }
+                    if (m.portableUrl != null) {
+                        Spacer(Modifier.width(4.dp))
+                        TextButton(onClick = { updateVm.openPortablePage() }) {
+                            Text(Strings.t("update_download_portable"))
+                        }
+                    }
                     Spacer(Modifier.width(4.dp))
                     TextButton(onClick = { updateVm.dismissCurrentUpdate() }) {
                         Text(Strings.t("update_dismiss"))

@@ -19,6 +19,7 @@ class UpdateManifestParserTest {
         assertEquals(52428800, m.size)
         assertEquals("修复 scrcpy 启动", m.notes)
         assertEquals("1.0.0", m.minAppVersion)
+        assertEquals("https://example.com/AdbGui-1.1.0-portable.zip", m.portableUrl)
     }
 
     @Test fun throws_on_missing_sha() {

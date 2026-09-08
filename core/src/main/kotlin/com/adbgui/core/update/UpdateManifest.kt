@@ -10,4 +10,6 @@ data class UpdateManifest(
     val size: Long? = null,
     val notes: String? = null,
     val minAppVersion: String? = null,
+    /** Optional portable (no-install) build download URL — shown as a "下载便携版" button when present. */
+    val portableUrl: String? = null,
 )
