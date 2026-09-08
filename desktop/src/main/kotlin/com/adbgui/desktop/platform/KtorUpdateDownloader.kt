@@ -37,6 +37,12 @@ class KtorUpdateDownloader(
         val updatesDir = configDir.resolve("updates").also { Files.createDirectories(it) }
         val partFile = updatesDir.resolve("$sha256.msi.part")
         val finalFile = updatesDir.resolve("$sha256.msi")
+        runCatching {
+            Files.list(updatesDir).use { stream ->
+                stream.filter { Files.isRegularFile(it) && it.toString().endsWith(".msi") }
+                    .forEach { runCatching { Files.deleteIfExists(it) } }
+            }
+        }.onFailure { logger.warn("update: failed to clean up stale .msi files", it) }
         try {
             val resp = client.get(url)
             if (!resp.status.isSuccess()) {
