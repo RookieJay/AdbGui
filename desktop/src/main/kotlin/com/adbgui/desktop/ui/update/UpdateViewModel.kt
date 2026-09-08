@@ -82,7 +82,7 @@ class UpdateViewModel(
         val m = (_state.value as? UpdateState.Available)?.manifest
             ?: return Job().apply { complete() }
         return scope.launch {
-            _state.value = UpdateState.Downloading(0f)
+            _state.value = UpdateState.Downloading(-1f)  // indeterminate until first byte arrives (gh-proxy may buffer large files before streaming)
             val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
             val effectiveUrl = effectiveDownloadUrl(source, m)
             val result = try {

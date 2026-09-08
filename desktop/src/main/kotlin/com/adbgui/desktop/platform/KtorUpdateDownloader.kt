@@ -43,7 +43,9 @@ class KtorUpdateDownloader(
             }
         }.onFailure { logger.warn("update: failed to clean up stale .msi files", it) }
         try {
+            logger.info("update: starting download $url")
             val resp = client.get(url)
+            logger.info("update: response ${resp.status.value}, contentLength=${resp.contentLength()}")
             if (!resp.status.isSuccess()) {
                 Files.deleteIfExists(partFile)
                 logger.warn("update: http ${resp.status.value} for $url")
