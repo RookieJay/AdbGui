@@ -371,12 +371,14 @@ fun SettingsScreen(
                         }
                     }
                     is UpdateState.Downloading -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val pct = (s.progress * 100).toInt()
+                        val pct = if (s.progress < 0f) null else (s.progress * 100).toInt()
                         Text(
-                            Strings.t("update_downloading").format(pct),
+                            if (pct != null) Strings.t("update_downloading").format(pct)
+                            else Strings.t("update_downloading_indeterminate"),
                             style = MaterialTheme.typography.caption,
                         )
-                        LinearProgressIndicator(progress = s.progress)
+                        if (s.progress < 0f) LinearProgressIndicator()
+                        else LinearProgressIndicator(progress = s.progress)
                         Button(onClick = { updateVm.cancelDownload() }) {
                             Text(Strings.t("update_cancel_download"))
                         }

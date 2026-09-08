@@ -54,6 +54,7 @@ class KtorUpdateDownloader(
             val total = resp.contentLength()?.takeIf { it > 0 } ?: -1L
             var read = 0L
             val md = MessageDigest.getInstance("SHA-256")
+            if (total < 0) onProgress(-1f)
             Files.newOutputStream(partFile).use { out ->
                 val buf = ByteArray(64 * 1024)
                 while (true) {
