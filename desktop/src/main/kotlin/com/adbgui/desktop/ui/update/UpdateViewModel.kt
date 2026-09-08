@@ -12,11 +12,16 @@ import com.adbgui.desktop.platform.MsiUpgrader
 import com.adbgui.desktop.platform.PortableUpdateNotifier
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.nio.file.Files
+import java.security.MessageDigest
 import kotlin.system.exitProcess
 
 sealed class UpdateState {
@@ -38,6 +43,7 @@ class UpdateViewModel(
     private val msiUpgrader: MsiUpgrader,
     private val notifier: PortableUpdateNotifier,
     private val exit: (Int) -> Nothing = ::exitProcess,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state = _state.asStateFlow()
@@ -62,7 +68,14 @@ class UpdateViewModel(
             is UpdateCheckResult.UpdateAvailable -> {
                 val m = result.manifest
                 lastManifest = m
-                _state.value = UpdateState.Available(m)
+                // Resume Ready state if a downloaded MSI for this exact version is still on disk
+                // and its sha256 matches (downloaded-but-not-installed, app restarted).
+                val ready = settings.update
+                val resumed = ready.readyVersion == m.version
+                    && ready.readyMsiPath != null
+                    && ready.readySha256 == m.sha256
+                    && fileSha256Matches(ready.readyMsiPath!!, m.sha256)
+                _state.value = if (resumed) UpdateState.Ready(ready.readyMsiPath!!, m) else UpdateState.Available(m)
                 persistResult(nowIso, null)
             }
             is UpdateCheckResult.Error -> {
@@ -94,7 +107,11 @@ class UpdateViewModel(
                 throw e
             }
             when (result) {
-                is UpdateDownloadResult.Success -> _state.value = UpdateState.Ready(result.msiPath, m)
+                is UpdateDownloadResult.Success -> {
+                    _state.value = UpdateState.Ready(result.msiPath, m)
+                    store.update { it.copy(update = it.update.copy(
+                        readyMsiPath = result.msiPath, readyVersion = m.version, readySha256 = m.sha256)) }
+                }
                 is UpdateDownloadResult.HashMismatch -> _state.value = UpdateState.Error(Strings.t("update_hash_error"))
                 is UpdateDownloadResult.NetworkError -> _state.value = UpdateState.Error(Strings.t("update_download_error").format(result.message ?: "unknown"))
                 is UpdateDownloadResult.Cancelled -> _state.value = UpdateState.Available(m)
@@ -110,6 +127,9 @@ class UpdateViewModel(
         val s = _state.value
         if (s !is UpdateState.Ready) return
         _state.value = UpdateState.Installing
+        // Clear persisted Ready state — the install is launching; on next launch (post-upgrade)
+        // the check will be NoUpdate, and a stale ready entry shouldn't linger.
+        scope.launch { store.update { it.copy(update = it.update.copy(readyMsiPath = null, readyVersion = null, readySha256 = null)) } }
         try {
             msiUpgrader.launch(s.msiPath)
         } catch (t: Throwable) {
@@ -138,4 +158,20 @@ class UpdateViewModel(
 
     private fun effectiveDownloadUrl(source: UpdateSource, m: UpdateManifest): String =
         source.proxyPrefix?.let { it + m.url } ?: m.url
+
+    /** True if the file at [path] exists and its SHA-256 equals [expected] (lowercase hex). */
+    private suspend fun fileSha256Matches(path: String, expected: String): Boolean = withContext(io) {
+        val file = java.io.File(path)
+        if (!file.isFile) return@withContext false
+        val md = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                md.update(buf, 0, n)
+            }
+        }
+        md.digest().joinToString("") { "%02x".format(it) }.equals(expected, ignoreCase = true)
+    }
 }
