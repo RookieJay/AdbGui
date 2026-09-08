@@ -290,9 +290,8 @@ fun SettingsScreen(
                     Spacer(Modifier.width(4.dp))
                     Text(Strings.t("update_check_on_startup"))
                 }
-                val lastCheckText = settings.update.lastCheckAt?.let {
-                    Strings.t("update_last_check").format(it)
-                } ?: Strings.t("update_last_check").format(Strings.t("update_last_check_never"))
+                val lastCheckText = Strings.t("update_last_check")
+                    .format(settings.update.lastCheckAt ?: Strings.t("update_last_check_never"))
                 Text(lastCheckText, style = MaterialTheme.typography.caption)
                 settings.update.lastCheckError?.let { err ->
                     Text(

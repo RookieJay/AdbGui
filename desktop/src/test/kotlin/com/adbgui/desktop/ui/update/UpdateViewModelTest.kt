@@ -8,6 +8,7 @@ import com.adbgui.core.update.UpdateDownloader
 import com.adbgui.core.update.UpdateManifestFetcher
 import com.adbgui.desktop.platform.MsiUpgrader
 import com.adbgui.desktop.platform.PortableUpdateNotifier
+import com.adbgui.desktop.ui.SettingsViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
@@ -150,5 +151,25 @@ class UpdateViewModelTest {
         assertIs<UpdateState.Available>(vm.state.value)
         vm.dismissCurrentUpdate(); advanceUntilIdle()
         assertEquals("1.1.0", store.load().update.dismissedVersion)
+    }
+
+    @Test fun dismiss_propagates_to_shared_settings_viewmodel() = runTest {
+        val dir = Files.createTempDirectory("shared")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val settingsVm = SettingsViewModel(store, this)
+        val updateVm = UpdateViewModel(
+            UpdateChecker(FakeFetcher(manifestJson("1.1.0")), "1.0.0", NoopLogger),
+            store, this,
+            FakeDownloader(UpdateDownloadResult.Success("/tmp/x.msi")),
+            MsiUpgrader(), PortableUpdateNotifier(),
+            exit = { throw RuntimeException("exit") },
+        )
+        advanceUntilIdle() // populate settingsVm.settings via init load
+        updateVm.checkForUpdates(); advanceUntilIdle()
+        assertIs<UpdateState.Available>(updateVm.state.value)
+        updateVm.dismissCurrentUpdate(); advanceUntilIdle()
+        // The banner's data source (settingsVm.settings) must reflect the dismiss
+        // without requiring a restart or explicit reload.
+        assertEquals("1.1.0", settingsVm.settings.value.update.dismissedVersion)
     }
 }
