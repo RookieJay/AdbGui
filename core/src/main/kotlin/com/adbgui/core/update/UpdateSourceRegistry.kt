@@ -9,12 +9,12 @@ object UpdateSourceRegistry {
         UpdateSource(
             "github-official",
             "GitHub 官方",
-            "https://github.com/OWNER/ADBGUI/releases/latest/download/latest.json",
+            "https://github.com/RookieJay/AdbGui/releases/latest/download/latest.json",
         ),
         UpdateSource(
             "github-mirror",
-            "GitHub 镜像 (ghproxy)",
-            "https://ghproxy.com/https://github.com/OWNER/ADBGUI/releases/latest/download/latest.json",
+            "GitHub 镜像 (gh-proxy)",
+            "https://gh-proxy.com/https://github.com/RookieJay/AdbGui/releases/latest/download/latest.json",
         ),
     )
 

@@ -8,35 +8,25 @@ import com.adbgui.core.settings.SettingsStore
 import com.adbgui.desktop.ui.i18n.Locale
 import com.adbgui.desktop.ui.i18n.Strings
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(private val store: SettingsStore, private val scope: CoroutineScope) {
-    private val _settings = MutableStateFlow(Settings())
-    val settings = _settings.asStateFlow()
-    init { scope.launch { _settings.value = store.load() } }
+    val settings: StateFlow<Settings> = store.state
+    init { scope.launch { store.load() } }
 
-    fun setAdbPath(path: String?) = scope.launch { store.update { it.copy(adbPathOverride = path) }; refresh() }
-    fun setScrcpyPath(path: String?) = scope.launch { store.update { it.copy(scrcpyPathOverride = path) }; refresh() }
-    fun setScrcpyMode(mode: String) = scope.launch { store.update { it.copy(scrcpyMode = mode) }; refresh() }
-    fun setLogLevel(level: LogLevel) = scope.launch { store.update { it.copy(logLevel = level) }; refresh() }
+    fun setAdbPath(path: String?) = scope.launch { store.update { it.copy(adbPathOverride = path) } }
+    fun setScrcpyPath(path: String?) = scope.launch { store.update { it.copy(scrcpyPathOverride = path) } }
+    fun setScrcpyMode(mode: String) = scope.launch { store.update { it.copy(scrcpyMode = mode) } }
+    fun setLogLevel(level: LogLevel) = scope.launch { store.update { it.copy(logLevel = level) } }
     fun setLocale(locale: Locale) = scope.launch {
         store.update { it.copy(locale = locale.code) }
-        refresh()
         Strings.set(locale)
     }
-    fun setTheme(code: String) = scope.launch {
-        store.update { it.copy(theme = code) }
-        refresh()
+    fun setTheme(code: String) = scope.launch { store.update { it.copy(theme = code) } }
+    fun setScrcpyLaunch(profile: ScrcpyLaunchProfile) = scope.launch { store.update { it.copy(scrcpyLaunch = profile) } }
+    fun setDeviceGroupBy(mode: DeviceGroupBy) = scope.launch { store.update { it.copy(deviceGroupBy = mode) } }
+    fun setCheckOnStartup(b: Boolean) = scope.launch {
+        store.update { it.copy(update = it.update.copy(checkOnStartup = b)) }
     }
-    fun setScrcpyLaunch(profile: ScrcpyLaunchProfile) = scope.launch {
-        store.update { it.copy(scrcpyLaunch = profile) }
-        refresh()
-    }
-    fun setDeviceGroupBy(mode: DeviceGroupBy) = scope.launch {
-        store.update { it.copy(deviceGroupBy = mode) }
-        refresh()
-    }
-    private suspend fun refresh() { _settings.value = store.load() }
 }
