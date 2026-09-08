@@ -399,9 +399,10 @@ fun SettingsScreen(
                         Strings.t("update_installing"),
                         style = MaterialTheme.typography.caption,
                     )
-                    is UpdateState.Error -> Text(
-                        Strings.t("update_error").format(s.message),
-                        style = MaterialTheme.typography.caption,
+                    is UpdateState.Error -> InlineMessageBanner(
+                        text = Strings.t("update_error").format(s.message),
+                        kind = MessageKind.Error,
+                        details = s.raw,
                     )
                     UpdateState.Idle -> Unit
                 }

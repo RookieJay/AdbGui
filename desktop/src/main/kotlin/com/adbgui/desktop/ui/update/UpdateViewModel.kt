@@ -26,7 +26,7 @@ sealed class UpdateState {
     data class Downloading(val progress: Float) : UpdateState()
     data class Ready(val msiPath: String, val manifest: UpdateManifest) : UpdateState()
     object Installing : UpdateState()
-    data class Error(val message: String) : UpdateState()
+    data class Error(val message: String, val raw: String? = null) : UpdateState()
 }
 
 class UpdateViewModel(
@@ -65,7 +65,7 @@ class UpdateViewModel(
                 persistResult(nowIso, null)
             }
             is UpdateCheckResult.Error -> {
-                _state.value = UpdateState.Error(result.message)
+                _state.value = UpdateState.Error(result.message, result.raw)
                 persistResult(nowIso, result.message)
             }
         }
@@ -118,11 +118,13 @@ class UpdateViewModel(
         exit(0)
     }
 
-    fun openDownloadPage() {
+    fun openDownloadPage(): Job = scope.launch {
         val s = _state.value
-        if (s !is UpdateState.Available && s !is UpdateState.Ready) return
-        val m = lastManifest ?: return
-        notifier.openDownloadPage(m.url)
+        if (s !is UpdateState.Available && s !is UpdateState.Ready) return@launch
+        val m = lastManifest ?: return@launch
+        val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
+        val effectiveUrl = source.proxyPrefix?.let { it + m.url } ?: m.url
+        notifier.openDownloadPage(effectiveUrl)
     }
 
     fun dismissCurrentUpdate(): Job = scope.launch {
