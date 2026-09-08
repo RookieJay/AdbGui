@@ -23,4 +23,14 @@ class UpdateSourceRegistryTest {
     @Test fun all_urls_are_https() {
         UpdateSourceRegistry.all.forEach { assertTrue(it.manifestUrl.startsWith("https://"), "${it.id} not https") }
     }
+    @Test fun github_mirror_has_proxy_prefix() {
+        val mirror = UpdateSourceRegistry.byId("github-mirror")
+        assertNotNull(mirror)
+        assertEquals("https://gh-proxy.com/", mirror.proxyPrefix)
+    }
+    @Test fun github_official_has_null_proxy_prefix() {
+        val official = UpdateSourceRegistry.byId("github-official")
+        assertNotNull(official)
+        assertNull(official.proxyPrefix)
+    }
 }

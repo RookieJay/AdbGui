@@ -82,8 +82,10 @@ class UpdateViewModel(
             ?: return Job().apply { complete() }
         return scope.launch {
             _state.value = UpdateState.Downloading(0f)
+            val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
+            val effectiveUrl = source.proxyPrefix?.let { it + m.url } ?: m.url
             val result = try {
-                downloader.download(m.url, m.sha256) { p ->
+                downloader.download(effectiveUrl, m.sha256) { p ->
                     _state.value = UpdateState.Downloading(p)
                 }
             } catch (e: CancellationException) {

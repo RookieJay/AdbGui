@@ -37,6 +37,14 @@ class UpdateViewModelTest {
         }
     }
 
+    private class RecordingDownloader : UpdateDownloader {
+        var receivedUrl: String? = null
+        override suspend fun download(url: String, sha256: String, onProgress: (Float) -> Unit): UpdateDownloadResult {
+            receivedUrl = url
+            return UpdateDownloadResult.Success("/tmp/x.msi")
+        }
+    }
+
     private class FakeMsiUpgrader : MsiUpgrader() {
         var launched: String? = null
         override fun launch(msiPath: String) { launched = msiPath }
@@ -171,5 +179,18 @@ class UpdateViewModelTest {
         // The banner's data source (settingsVm.settings) must reflect the dismiss
         // without requiring a restart or explicit reload.
         assertEquals("1.1.0", settingsVm.settings.value.update.dismissedVersion)
+    }
+
+    @Test fun mirror_source_proxies_msi_download_url() = runTest {
+        val recorder = RecordingDownloader()
+        val (vm, store, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0", downloader = recorder)
+        // Persist github-mirror as the selected source before checking.
+        store.update { it.copy(update = it.update.copy(sourceId = "github-mirror")) }
+        advanceUntilIdle()
+        vm.checkForUpdates(); advanceUntilIdle()
+        assertIs<UpdateState.Available>(vm.state.value)
+        vm.downloadUpdate(); advanceUntilIdle()
+        val expected = "https://gh-proxy.com/" + "https://example.com/AdbGui-1.1.0.msi"
+        assertEquals(expected, recorder.receivedUrl)
     }
 }
