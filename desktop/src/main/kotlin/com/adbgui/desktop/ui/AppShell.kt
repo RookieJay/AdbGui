@@ -159,6 +159,12 @@ fun AppShell(
                 device = selectedDevice,
             )
             Divider(color = dividerColor)
+            if (updateVm != null && settingsVm != null) {
+                com.adbgui.desktop.ui.update.UpdateBanner(
+                    updateVm = updateVm,
+                    settingsVm = settingsVm,
+                )
+            }
             Surface(modifier = Modifier.fillMaxSize()) {
                 when {
                     page == NavPage.SETTINGS && settingsVm != null && configDir != null -> {
