@@ -247,6 +247,15 @@ class CommandRunner(
         return runner.startStream(adb(), listOf("-s", serial, "logcat", "-v", "threadtime"), scope)
     }
 
+    /** `adb -s <serial> logcat -d -v threadtime` — one-shot dump of the device's current logd
+     *  ring buffer, then the process exits (the stream's flow completes on EOF). Used by
+     *  LogcatController.dumpLogcat for full-buffer export that is NOT capped by the in-memory
+     *  ring. The live [streamLogcat] is preferred for viewing; this is for "export everything". */
+    suspend fun dumpLogcat(serial: String): AdbStream {
+        server.ensureStarted()
+        return runner.startStream(adb(), listOf("-s", serial, "logcat", "-d", "-v", "threadtime"), scope)
+    }
+
     suspend fun reboot(serial: String, mode: RebootMode): String {
         val args = buildList { add("reboot"); if (mode.arg != null) add(mode.arg) }
         return runCmd(serial, args).stdout   // throws AdbCommandException on nonzero (e.g. device offline)

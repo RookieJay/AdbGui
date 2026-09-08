@@ -58,8 +58,10 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     var levelSet by remember { mutableStateOf(LogcatLevel.entries.toSet()) }
     var text by remember { mutableStateOf("") }
     var levelMenuOpen by remember { mutableStateOf(false) }
-    var savedFile by remember { mutableStateOf<File?>(null) }
-    var exportError by remember { mutableStateOf<String?>(null) }
+    val exporting by vm.exporting.collectAsState()
+    val exportProgress by vm.exportProgress.collectAsState()
+    val exportError by vm.exportError.collectAsState()
+    val savedPath by vm.savedPath.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
     val searchFocus = remember { FocusRequester() }
     val matchHighlight = MaterialTheme.colors.primary.copy(alpha = 0.28f)
@@ -113,25 +115,25 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                     Icon(Icons.Filled.Delete, contentDescription = Strings.t("clear"))
                 }
                 IconButton(onClick = {
-                    val sel = StringSelection(lines.joinToString("\n") { it.raw })
+                    val sel = StringSelection(vm.export())
                     Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
                 }) { Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy")) }
-                Button(onClick = {
-                    val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-                    val target = com.adbgui.desktop.platform.FileDialogs.saveFile(
-                        title = Strings.t("save_logcat_title"),
-                        defaultName = "logcat_$stamp.txt",
-                    )
-                    if (target != null) {
-                        val t = File(target)
-                        runCatching { t.writeText(vm.export()) }
-                            .onSuccess { savedFile = t; exportError = null }
-                            .onFailure { exportError = Strings.t("status_save_failed").format(it.message) }
-                    }
-                }) {
+                Button(
+                    enabled = !exporting,
+                    onClick = {
+                        val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                        val target = com.adbgui.desktop.platform.FileDialogs.saveFile(
+                            title = Strings.t("save_logcat_title"),
+                            defaultName = "logcat_$stamp.txt",
+                        )
+                        if (target != null) {
+                            vm.exportFull(File(target).absolutePath)
+                        }
+                    },
+                ) {
                     Icon(Icons.Filled.Download, contentDescription = null)
                     Spacer(Modifier.width(4.dp))
-                    Text(Strings.t("export"))
+                    Text(if (exporting) Strings.t("export_progress").format(exportProgress) else Strings.t("export"))
                 }
             }
 
@@ -141,7 +143,8 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 }
             }
             error?.let { e -> InlineMessageBanner(e, MessageKind.Error) }
-            savedFile?.let { f ->
+            savedPath?.let { p ->
+                val f = File(p)
                 SavedFileBanner(path = f.absolutePath, onOpen = { openFile(f) }, onReveal = { revealFile(f) })
             }
 

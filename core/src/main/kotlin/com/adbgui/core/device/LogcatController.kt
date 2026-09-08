@@ -90,6 +90,18 @@ class LogcatController(
 
     fun export(): String = _lines.value.joinToString("\n") { it.raw }
 
+    /** One-shot full-buffer export via `adb logcat -d`: dumps the device's current logd ring
+     *  (everything retained on-device, NOT bounded by [ringCap]), parses each line with
+     *  [LogcatLineParser], and invokes [onLine] with the raw line for every line matching
+     *  [filters] (same predicate the live view uses). The stream completes on EOF; the caller
+     *  writes the raw lines to a file as they arrive — no full in-memory accumulation. */
+    suspend fun dumpLogcat(serial: String, filters: LogcatFilters, onLine: (String) -> Unit) {
+        val s = commands.dumpLogcat(serial)
+        s.lines.mapNotNull { LogcatLineParser.parse(it) }.collect { line ->
+            if (matches(line, filters)) onLine(line.raw)
+        }
+    }
+
     /** Re-enable logd on a device that ships with it silenced (e.g. TCL TVs). Does NOT restart
      *  the logcat stream — the caller does that via [start] afterwards (so the call site controls
      *  timing and is testable without a live stream). */

@@ -131,4 +131,20 @@ class LogcatControllerTest {
         assert(!out.contains("Tag: one"))
         c.stop()
     }
+
+    @Test fun dumpLogcat_applies_filters_and_emits_only_matching_raw() = runTest {
+        // -d full-buffer export: collect the one-shot stream, parse, apply current filters,
+        // emit matching raw lines. Not bounded by ringCap.
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLinesOnce(listOf(
+            "08-17 10:23:45.100  100  200 I Tag: info",
+            "08-17 10:23:45.200  100  201 E Tag: err",
+            "08-17 10:23:45.300  100  202 W Tag: warn",
+        ))
+        val c = controller(runner, this)
+        val got = mutableListOf<String>()
+        c.dumpLogcat("abc", LogcatFilters(levelSet = setOf(com.adbgui.core.domain.LogcatLevel.E))) { got += it }
+        assertEquals(1, got.size)
+        assertTrue(got[0].contains("Tag: err"))
+    }
 }

@@ -44,6 +44,15 @@ class FakeAdbProcessRunner : AdbProcessRunner {
 
     fun setStreamLines(lines: List<String>) { streamLines = lines }
 
+    /** Lines for the next `startStream` call, emitted then the channel CLOSED — models a
+     *  one-shot `adb` subcommand that exits after output (e.g. `logcat -d`, which dumps the
+     *  device ring buffer and exits: the real stream's flow completes on EOF, `collect`
+     *  returns, `isAlive` is false). Contrast [setStreamLines], which leaves the channel
+     *  open (live `logcat` stream that stays up until `kill()`). */
+    private var streamLinesOnce: List<String>? = null
+
+    fun setStreamLinesOnce(lines: List<String>) { streamLinesOnce = lines }
+
     override suspend fun run(adb: AdbBinary, args: List<String>, timeoutMs: Long?): AdbProcessResult {
         runs += args
         return scripts.firstOrNull { r -> r.keywords.all { kw -> args.any { it.contains(kw) } } }?.result
@@ -54,8 +63,15 @@ class FakeAdbProcessRunner : AdbProcessRunner {
 
     override fun startStream(adb: AdbBinary, args: List<String>, scope: CoroutineScope): AdbStream {
         val ch = Channel<String>(Channel.UNLIMITED)
-        streamLines.forEach { ch.trySend(it) }
-        // channel is left OPEN so the flow stays alive until kill() — basic collect tests don't trigger reconnect
+        val once = streamLinesOnce
+        if (once != null) {
+            once.forEach { ch.trySend(it) }
+            ch.close()   // model process-exit EOF: flow completes after the buffered lines
+            streamLinesOnce = null
+        } else {
+            streamLines.forEach { ch.trySend(it) }
+            // channel is left OPEN so the flow stays alive until kill() — basic collect tests don't trigger reconnect
+        }
         return object : AdbStream {
             override val lines: Flow<String> = ch.receiveAsFlow()
             override fun kill() { ch.close() }

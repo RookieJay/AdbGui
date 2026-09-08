@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class FakeAdbStreamTest {
@@ -19,5 +20,18 @@ class FakeAdbStreamTest {
         assertEquals("a", first)
         assertTrue(stream.isAlive)
         stream.kill()
+    }
+
+    @Test fun startStream_once_completes_after_lines_and_not_alive() = runTest {
+        // `adb logcat -d` exits after dumping → real AdbStream.lines flow COMPLETES (readLine()
+        // returns null) and isAlive turns false. The "once" mode models that so dumpLogcat's
+        // collect returns naturally instead of hanging on an open channel.
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLinesOnce(listOf("a", "b", "c"))
+        val stream = runner.startStream(adb, listOf("logcat", "-d"), this)
+        val collected = mutableListOf<String>()
+        stream.lines.collect { collected.add(it) }   // returns when flow completes
+        assertEquals(listOf("a", "b", "c"), collected)
+        assertFalse(stream.isAlive)
     }
 }

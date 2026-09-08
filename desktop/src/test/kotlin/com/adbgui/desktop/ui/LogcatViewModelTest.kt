@@ -10,6 +10,7 @@ import com.adbgui.core.log.NoopLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -91,6 +92,44 @@ class LogcatViewModelTest {
         advanceUntilIdle()
         assertNotNull(vm.fixError.value)
         assertEquals(false, vm.fixing.value)
+        vm.stop(); controller.stop()
+    }
+
+    @Test fun exportFull_writes_dumped_lines_to_file_and_tracks_progress() = runTest {
+        // -d full dump: stream two lines via once-mode, write matching (all-level default) raw
+        // lines to the file, track progress per line, clear exporting on completion.
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLinesOnce(listOf(
+            "08-17 10:23:45.100  100  200 I Tag: one",
+            "08-17 10:23:45.200  100  201 E Tag: two",
+        ))
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
+        val selected = MutableStateFlow("abc")
+        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        val tmp = Files.createTempFile("logcat-export", ".txt")
+        vm.exportFull(tmp.toString())
+        advanceUntilIdle()
+        val content = Files.readString(tmp)
+        assertTrue(content.contains("Tag: one"))
+        assertTrue(content.contains("Tag: two"))
+        assertEquals(2L, vm.exportProgress.value)
+        assertEquals(false, vm.exporting.value)
+        assertNull(vm.exportError.value)
+        vm.stop(); controller.stop()
+    }
+
+    @Test fun exportFull_surfaces_error_when_no_device_selected() = runTest {
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
+        val selected = MutableStateFlow(null)
+        val vm = LogcatViewModel(controller, selected, MutableStateFlow(false), this)
+        val tmp = Files.createTempFile("logcat-export", ".txt")
+        vm.exportFull(tmp.toString())
+        advanceUntilIdle()
+        assertNotNull(vm.exportError.value)
+        assertEquals(false, vm.exporting.value)
         vm.stop(); controller.stop()
     }
 }

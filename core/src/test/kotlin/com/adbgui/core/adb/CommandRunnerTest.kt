@@ -292,6 +292,18 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun dumpLogcat_passes_d_threadtime_args_and_completes() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLinesOnce(listOf("08-17 10:23:45.123  1  2 I Tag: hi"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val stream = cr.dumpLogcat("abc")
+        // startStream uses Channel.UNLIMITED + once-mode → collect returns on completion (models -d exit)
+        val collected = mutableListOf<String>()
+        stream.lines.collect { collected.add(it) }
+        assertEquals(listOf("08-17 10:23:45.123  1  2 I Tag: hi"), collected)
+    }
+
+    @Test
     fun reboot_normal_sends_reboot_no_mode() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("reboot"), AdbProcessResult(0, "rebooting", ""))
