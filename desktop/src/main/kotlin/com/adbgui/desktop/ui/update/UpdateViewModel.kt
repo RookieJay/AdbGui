@@ -41,10 +41,13 @@ class UpdateViewModel(
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state = _state.asStateFlow()
 
+    @Volatile private var checkJob: Job? = null
     @Volatile private var downloadJob: Job? = null
     @Volatile private var lastManifest: UpdateManifest? = null
 
-    fun checkForUpdates() = scope.launch {
+    fun checkForUpdates(): Job {
+        checkJob?.takeIf { it.isActive }?.let { return it }
+        return scope.launch {
         _state.value = UpdateState.Checking
         val settings = store.load()
         val source = UpdateSourceRegistry.byId(settings.update.sourceId) ?: UpdateSourceRegistry.default
@@ -66,6 +69,7 @@ class UpdateViewModel(
                 persistResult(nowIso, result.message)
             }
         }
+    }.also { checkJob = it }
     }
 
     fun selectSource(id: String) = scope.launch {
