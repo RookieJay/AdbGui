@@ -47,6 +47,10 @@ fun main() = application {
     remember { Strings.set(Locale.fromCode(settings.locale)) }
     // Start the adb tracker exactly once — start() spawns a track-devices stream each call.
     LaunchedEffect(Unit) { root.start() }
+    // Background update check on startup — silent; banner appears only if Available + not dismissed.
+    LaunchedEffect(Unit) {
+        if (settings.update.checkOnStartup) root.updateViewModel.checkForUpdates()
+    }
     val settingsVm = remember { SettingsViewModel(root.settings, root.scope) }
     val vm = remember { DeviceListViewModel(root.repository, root.scope, settingsVm.settings) }
     val selectedSerial = remember { MutableStateFlow<String?>(null) }
