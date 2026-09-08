@@ -21,6 +21,8 @@ data class UpdateSettings(
     val sourceId: String = "github-official",
     val lastCheckAt: String? = null,
     val lastCheckError: String? = null,
+    val checkOnStartup: Boolean = true,
+    val dismissedVersion: String? = null,
 )
 
 @Serializable

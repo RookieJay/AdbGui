@@ -8,6 +8,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SettingsStoreTest {
     private fun tmpDir(): Path = Files.createTempDirectory("adbgui-test")
@@ -66,9 +67,16 @@ class SettingsStoreTest {
         val default = store.load()
         assertEquals("github-official", default.update.sourceId)
         assertNull(default.update.lastCheckAt)
-        store.save(default.copy(update = default.update.copy(sourceId = "github-mirror", lastCheckAt = "2026-09-03T10:00:00Z")))
+        // defaults
+        assertTrue(default.update.checkOnStartup)
+        assertNull(default.update.dismissedVersion)
+        store.save(default.copy(update = default.update.copy(
+            sourceId = "github-mirror", lastCheckAt = "2026-09-03T10:00:00Z",
+            checkOnStartup = false, dismissedVersion = "1.1.0")))
         val reloaded = store.load()
         assertEquals("github-mirror", reloaded.update.sourceId)
         assertEquals("2026-09-03T10:00:00Z", reloaded.update.lastCheckAt)
+        assertEquals(false, reloaded.update.checkOnStartup)
+        assertEquals("1.1.0", reloaded.update.dismissedVersion)
     }
 }
