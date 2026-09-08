@@ -279,4 +279,20 @@ class UpdateViewModelTest {
         }
         return md.digest().joinToString("") { "%02x".format(it) }
     }
+
+    @Test fun open_portable_page_proxies_portable_url() = runTest {
+        val notifier = FakeNotifier()
+        val manifest = """{"version":"1.1.0","url":"https://example.com/AdbGui-1.1.0.msi",
+            "sha256":"a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+            "portableUrl":"https://example.com/AdbGui-1.1.0-portable.zip"}""".trimIndent()
+        val (vm, store, _) = buildVm(this, manifest, "1.0.0", notifier = notifier)
+        store.update { it.copy(update = it.update.copy(sourceId = "github-mirror")) }
+        advanceUntilIdle()
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.openPortablePage(); advanceUntilIdle()
+        assertEquals(
+            "https://gh-proxy.com/https://example.com/AdbGui-1.1.0-portable.zip",
+            notifier.opened,
+        )
+    }
 }
