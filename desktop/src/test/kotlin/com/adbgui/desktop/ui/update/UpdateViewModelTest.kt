@@ -143,4 +143,12 @@ class UpdateViewModelTest {
         val s = vm.state.value
         assertTrue(s is UpdateState.Available, "expected Available after cancel, got $s")
     }
+
+    @Test fun dismiss_current_update_persists_version() = runTest {
+        val (vm, store, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0")
+        vm.checkForUpdates(); advanceUntilIdle()
+        assertIs<UpdateState.Available>(vm.state.value)
+        vm.dismissCurrentUpdate(); advanceUntilIdle()
+        assertEquals("1.1.0", store.load().update.dismissedVersion)
+    }
 }

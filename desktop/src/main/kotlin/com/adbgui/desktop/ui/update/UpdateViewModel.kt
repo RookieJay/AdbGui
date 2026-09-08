@@ -119,6 +119,11 @@ class UpdateViewModel(
         notifier.openDownloadPage(m.url)
     }
 
+    fun dismissCurrentUpdate(): Job = scope.launch {
+        val s = _state.value as? UpdateState.Available ?: return@launch
+        store.update { it.copy(update = it.update.copy(dismissedVersion = s.manifest.version)) }
+    }
+
     private suspend fun persistResult(at: String, err: String?) {
         store.update { it.copy(update = it.update.copy(lastCheckAt = at, lastCheckError = err)) }
     }
