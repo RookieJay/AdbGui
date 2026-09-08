@@ -66,11 +66,12 @@ class UpdateViewModelTest {
         msiUpgrader: MsiUpgrader = MsiUpgrader(),
         notifier: PortableUpdateNotifier = PortableUpdateNotifier(),
         exit: (Int) -> Nothing = { throw RuntimeException("exit") },
+        io: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
     ): Triple<UpdateViewModel, SettingsStore, UpdateChecker> {
         val dir = Files.createTempDirectory("uvm")
         val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val checker = UpdateChecker(FakeFetcher(fetcherText), current, NoopLogger)
-        return Triple(UpdateViewModel(checker, store, scope, downloader, msiUpgrader, notifier, exit), store, checker)
+        return Triple(UpdateViewModel(checker, store, scope, downloader, msiUpgrader, notifier, exit, io), store, checker)
     }
 
     @Test fun check_finds_update() = runTest {
@@ -211,5 +212,71 @@ class UpdateViewModelTest {
         vm.downloadUpdate(); advanceUntilIdle()
         val expected = "https://gh-proxy.com/" + "https://example.com/AdbGui-1.1.0.msi"
         assertEquals(expected, recorder.receivedUrl)
+    }
+
+    @Test fun restart_resumes_ready_when_file_and_sha_match() = runTest {
+        val msiFile = Files.createTempFile("resume", ".msi").toFile()
+        msiFile.writeBytes("dummy msi content for resume test".toByteArray())
+        val sha = sha256Of(msiFile)
+        val manifest = """{"version":"1.1.0","url":"https://example.com/x.msi","sha256":"$sha"}"""
+        val dir = Files.createTempDirectory("uvm-resume")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val fetcher = FakeFetcher(manifest)
+        val downloader = FakeDownloader(UpdateDownloadResult.Success(msiFile.absolutePath))
+        fun mkVm() = UpdateViewModel(
+            UpdateChecker(fetcher, "1.0.0", NoopLogger), store, this, downloader,
+            MsiUpgrader(), PortableUpdateNotifier(), { throw RuntimeException("exit") }, kotlinx.coroutines.Dispatchers.Unconfined,
+        )
+        val vm1 = mkVm()
+        vm1.checkForUpdates(); advanceUntilIdle()
+        assertIs<UpdateState.Available>(vm1.state.value)
+        vm1.downloadUpdate(); advanceUntilIdle()
+        assertIs<UpdateState.Ready>(vm1.state.value)
+        assertEquals(msiFile.absolutePath, (vm1.state.value as UpdateState.Ready).msiPath)
+        assertEquals("1.1.0", store.load().update.readyVersion)
+        assertEquals(sha, store.load().update.readySha256)
+        // Restart: new VM, same store, same manifest → should resume Ready (file exists + sha matches).
+        val vm2 = mkVm()
+        vm2.checkForUpdates(); advanceUntilIdle()
+        val s2 = vm2.state.value
+        assertIs<UpdateState.Ready>(s2)
+        assertEquals(msiFile.absolutePath, s2.msiPath)
+    }
+
+    @Test fun restart_falls_back_to_available_when_file_missing() = runTest {
+        val msiFile = Files.createTempFile("resume-missing", ".msi").toFile()
+        msiFile.writeBytes("dummy msi content".toByteArray())
+        val sha = sha256Of(msiFile)
+        val manifest = """{"version":"1.1.0","url":"https://example.com/x.msi","sha256":"$sha"}"""
+        val dir = Files.createTempDirectory("uvm-missing")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val fetcher = FakeFetcher(manifest)
+        val downloader = FakeDownloader(UpdateDownloadResult.Success(msiFile.absolutePath))
+        fun mkVm() = UpdateViewModel(
+            UpdateChecker(fetcher, "1.0.0", NoopLogger), store, this, downloader,
+            MsiUpgrader(), PortableUpdateNotifier(), { throw RuntimeException("exit") }, kotlinx.coroutines.Dispatchers.Unconfined,
+        )
+        val vm1 = mkVm()
+        vm1.checkForUpdates(); advanceUntilIdle()
+        vm1.downloadUpdate(); advanceUntilIdle()
+        assertIs<UpdateState.Ready>(vm1.state.value)
+        // Delete the MSI; on restart the check can't resume → falls back to Available.
+        msiFile.delete()
+        val vm2 = mkVm()
+        vm2.checkForUpdates(); advanceUntilIdle()
+        assertIs<UpdateState.Available>(vm2.state.value)
+    }
+
+    private fun sha256Of(file: java.io.File): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                md.update(buf, 0, n)
+            }
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
     }
 }

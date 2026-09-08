@@ -81,13 +81,20 @@ class SettingsStoreTest {
         // defaults
         assertTrue(default.update.checkOnStartup)
         assertNull(default.update.dismissedVersion)
+        assertNull(default.update.readyMsiPath)
+        assertNull(default.update.readyVersion)
+        assertNull(default.update.readySha256)
         store.save(default.copy(update = default.update.copy(
             sourceId = "github-mirror", lastCheckAt = "2026-09-03T10:00:00Z",
-            checkOnStartup = false, dismissedVersion = "1.1.0")))
+            checkOnStartup = false, dismissedVersion = "1.1.0",
+            readyMsiPath = "/tmp/x.msi", readyVersion = "1.1.0", readySha256 = "abc")))
         val reloaded = store.load()
         assertEquals("github-mirror", reloaded.update.sourceId)
         assertEquals("2026-09-03T10:00:00Z", reloaded.update.lastCheckAt)
         assertEquals(false, reloaded.update.checkOnStartup)
         assertEquals("1.1.0", reloaded.update.dismissedVersion)
+        assertEquals("/tmp/x.msi", reloaded.update.readyMsiPath)
+        assertEquals("1.1.0", reloaded.update.readyVersion)
+        assertEquals("abc", reloaded.update.readySha256)
     }
 }

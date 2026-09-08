@@ -47,7 +47,7 @@ class CompositionRoot {
     val updateDownloader = KtorUpdateDownloader(configDir, logger = logger)
     val msiUpgrader = MsiUpgrader()
     val portableNotifier = PortableUpdateNotifier()
-    val updateViewModel = UpdateViewModel(updateChecker, settings, scope, updateDownloader, msiUpgrader, portableNotifier)
+    val updateViewModel = UpdateViewModel(updateChecker, settings, scope, updateDownloader, msiUpgrader, portableNotifier, io = kotlinx.coroutines.Dispatchers.IO)
 
     // NOTE: the initial locale is set on the UI thread in Main (see Main.kt) — do NOT set
     // Strings here on the background scope, which would create the Compose state off the UI

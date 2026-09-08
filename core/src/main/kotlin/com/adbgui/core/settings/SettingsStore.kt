@@ -26,6 +26,10 @@ data class UpdateSettings(
     val lastCheckError: String? = null,
     val checkOnStartup: Boolean = true,
     val dismissedVersion: String? = null,
+    /** Persisted Ready state so a downloaded-but-not-installed MSI survives app restart. */
+    val readyMsiPath: String? = null,
+    val readyVersion: String? = null,
+    val readySha256: String? = null,
 )
 
 @Serializable
