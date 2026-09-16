@@ -4,6 +4,7 @@ import com.adbgui.core.adb.AdbProcessResult
 import com.adbgui.core.adb.CommandRunner
 import com.adbgui.core.adb.FakeAdbProcessRunner
 import com.adbgui.core.device.LogcatController
+import com.adbgui.core.device.LogcatStatus
 import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbSource
 import com.adbgui.core.log.NoopLogger
@@ -27,6 +28,7 @@ class LogcatViewModelTest {
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow<String?>(null)
         val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        vm.onPageEntered()
         // emulate auto-select
         selected.value = "abc"
         advanceUntilIdle()
@@ -42,6 +44,7 @@ class LogcatViewModelTest {
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow("abc")
         val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        vm.onPageEntered()
         advanceUntilIdle()
         assertEquals(com.adbgui.core.device.LogcatStatus.RUNNING, controller.status.value)
         vm.pause()
@@ -130,6 +133,47 @@ class LogcatViewModelTest {
         advanceUntilIdle()
         assertNotNull(vm.exportError.value)
         assertEquals(false, vm.exporting.value)
+        vm.stop(); controller.stop()
+    }
+
+    @Test fun no_load_before_page_entered() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I Tag: hi"))
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
+        val selected = MutableStateFlow<String?>("abc")
+        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        advanceUntilIdle()
+        assertEquals(0, vm.lines.value.size, "must not stream before the page is entered")
+        vm.stop(); controller.stop()
+    }
+
+    @Test fun page_entered_starts_stream() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I Tag: hi"))
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
+        val selected = MutableStateFlow<String?>("abc")
+        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        vm.onPageEntered()
+        advanceUntilIdle()
+        assertEquals(1, vm.lines.value.size)
+        vm.stop(); controller.stop()
+    }
+
+    @Test fun serial_becomes_null_stops_stream() = runTest {
+        // 修 CHANGELOG 记的既有债：今天 `it?.let{}` 跳过 null，旧设备的流会残留。
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I Tag: hi"))
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
+        val selected = MutableStateFlow<String?>("abc")
+        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        vm.onPageEntered(); advanceUntilIdle()
+        assertEquals(LogcatStatus.RUNNING, vm.status.value)
+        selected.value = null
+        advanceUntilIdle()
+        assertEquals(LogcatStatus.IDLE, vm.status.value, "deselecting must stop the stream")
         vm.stop(); controller.stop()
     }
 }

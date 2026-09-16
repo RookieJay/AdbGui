@@ -101,6 +101,19 @@ class LogcatViewModel(
         }
     }
 
-    private val refreshJob: Job = scope.launch { selectedSerial.collect { it?.let { controller.start(it) } } }
-    fun stop() { refreshJob.cancel() }
+    private var pageJob: Job? = null
+
+    /** 由 [LogcatScreen] 的 LaunchedEffect(Unit) 调用——页面可见时才挂 collector。
+     *  `selectedSerial` 是 StateFlow，collect 会立即发出当前值，所以进入页面即对当前
+     *  设备起流，不需要额外补一次调用。离开页面不停流（保留环形缓冲历史）。 */
+    fun onPageEntered() {
+        if (pageJob?.isActive == true) return
+        pageJob = scope.launch {
+            selectedSerial.collect { serial ->
+                if (serial != null) controller.start(serial) else controller.stop()
+            }
+        }
+    }
+
+    fun stop() { pageJob?.cancel(); pageJob = null }
 }
