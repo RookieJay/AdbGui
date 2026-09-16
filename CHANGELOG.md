@@ -3,6 +3,24 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 页面驱动加载 + logcat 增量发布 (branch `feat/page-driven-loading`, 2026-09-16)
+
+排查"启动后不做任何操作，任务管理器占用涨到约 1250MB"得出的四项修复。完整实测数据见 `docs/superpowers/specs/2026-09-16-page-driven-loading-and-logcat-publish-design.md` §1.1。
+
+**根因**：`Main.kt` 启动时把第一台在线设备自动填入 `selectedSerial`，而 6 个 ViewModel 都在 `application{}` 里 `remember{}` 提前构造、且各自在 **init 块**挂了长生命周期 collector → 启动瞬间就开出 `adb logcat` 持续流 + CDP 会话（forward + 两个 ws，启用 `Runtime/Page/Network/Log` 四域）+ 4 条一次性查询，而这些页面用户一个都没打开过。其中 logcat 最致命：`LogcatController.onLine` 每行 `_lines.value = filtered.toList()`，环里约 3.8 万行 → 约 7 亿次元素复制全落 young gen。
+（注：实测 30s 时堆提交 1160MB，而 full GC 后存活对象仅约 45MB —— **不是泄漏，是"提交了不还"**。未设 `-Xmx` 时 JVM 按 31.3GB 物理内存自选 Initial 504MB / Max 7.8GB / MaxNewSize 4.8GB，而 `G1PeriodicGCInterval` 默认 0。）
+
+- **A — 页面驱动加载（6 个 VM）**：`AppConsole` / `DeviceInfo` / `FileExplorer` / `PortForwarding` / `Logcat` / `CdpDebug` 的长生命周期 collector 从 init 块挪到 `onPageEntered()`，由各 Screen 顶层 `LaunchedEffect(Unit) { vm.onPageEntered() }` 挂载——`AppShell` 的 `when(page)` 保证"页面可见 ⇔ 该页 Screen 在组合树里"，页面生命周期本身就是加载生命周期。`selectedSerial` 是 StateFlow，collect 会立即发当前值 → 进页面即加载，不需要额外补调；守卫 `if (pageJob?.isActive == true) return` 防重复进入叠加 collector。`PortForwarding` / `CdpDebug` 的 `collectLatest`（快速 A→B 切换取消 in-flight refresh）语义原样保留。
+  - CDP 保留"离开即停"（`CdpDebugScreen` 的 `DisposableEffect.onDispose { vm.stop() }`）——离开页面要收掉建在设备上的 9222 forward。顺带修掉一个既有 bug：旧 `stop()` 会**永久** cancel collector，而 CDP VM 是应用级单例 → "访问过 CDP 页 → 离开 → 再回来"之后不再自动连（代码注释自己承认"recreate the VM"，但不存在 recreate 的路径）。现在 `onPageEntered()` 是重建而非只挂一次。
+  - 顺带修掉既有债：logcat 的 `it?.let{}` 跳过 null → 取消选中不停流；现在 serial→null 显式 `controller.stop()`。
+- **B — `LogcatController` 增量节流发布**：每行 O(N) 的全量 `_lines` 赋值改为 `publishOnce()` 唯一发布路径 + conflated channel 固定间隔节流（`publishIntervalMs = 100`，构造参数可注入）。**刻意用节流而非防抖**：`collectLatest { delay() }` 在持续洪流下 delay 会被每行取消 → 永不发布（饿死）；`for (signal in flushSignal) { delay(); publishOnce() }` 保证洪流下每 100ms 必发一次。`clear()` / `setFilters()` 是用户显式动作，绕过节流直接 `publishOnce()`（publisher 挂在 stream job 下，流停时已随 `stop()` 取消）。这同时把 `2026-08-17-logcat-design.md` §2 的"每行 O(1) 增量进视图"拉回实现——旧的每行发布是**既有 spec 违约**。附带收益：`collectAsState` 的 Compose 重组从约 1300 次/秒降到 ≤10 次/秒（旧实现是每行一次重组，本身也是 CPU 灾害点）。
+- **C — `CdpController._net` 补环形上限**：`_net.value = (_net.value + e.req.copy(...)).takeLast(netRingCap)`。原先只有 `_console` 有 `takeLast`，网络条目无限累积且每次追加都是全量复制（实测 30 分钟 452 条，速率慢、**不是**本次 1.2GB 的主因，但确是无上限增长）。新增构造参数 `netRingCap: Int = ringCap`（默认继承）。
+- **D — 打包 JVM 堆参数兜底**：`desktop/build.gradle.kts` 的 `compose.desktop.application` 加 `jvmArgs += listOf("-Xms64m", "-Xmx512m")`。`-Xmx512m` 同时把 `MaxNewSize` 压到约 307MB（G1 强制 ≤60%×max heap）。实测连续运行 30+ 分钟的堆提交从 1160MB 降到 **140MB**。
+
+**测试**：`:core` 按 TDD 先红后绿——`CdpControllerTest` 加 `net_ring_caps_dropping_oldest`；`LogcatControllerTest` 加 burst 节流发布 / 持续流不被饿死（锁死"节流而非防抖"）/ 环形截断语义不被批量发布破坏 三条，既有 6 条（start/ringCap/pause/clear/stop/setFilters）作回归网。`FakeAdbProcessRunner` 新增 `emitStreamLine`（给流"配速"，而非一次性灌完）。`:desktop` 每个 VM 加"未进入页面不触发任何 adb 调用"+"进入页面触发一次"两条状态机测试，另加 `LogcatViewModel` serial→null 停流、`CdpDebugViewModel` "离开再回来仍会连"两条针对性断言。既有断言旧自动行为的用例按计划改成先调 `vm.onPageEntered()`。
+
+**待办（需真机验收）**：spec §10.2 的 7 步手工验收未在本会话跑，其中最关键的三条——① 启动后 60s 内 `adb` 进程列表**不应出现 `logcat`**；④ 选中设备后断开，`adb logcat` 子进程应消失（今天不会）；⑥ 离开 CDP 页后 `adb forward --list` 里 9222 应消失、再进入应能重连。
+
 ## v2 — gap-analysis roadmap (2026-08-24)
 
 按 `docs/superpowers/specs/2026-08-21-gap-analysis-and-roadmap.md` 逐项推进。
@@ -113,7 +131,6 @@ Shell 终端页 / Logcat 实时流 / 文件 push-pull / 投屏（scrcpy）/ 调�
 
 ### 已知技术债（logcat）
 - `stream: AdbStream?` 跨 `stop()`/`runLoop` 未同步 → stop-during-reconnect 边缘下一瞬子进程泄漏（非崩溃）。
-- 取消选中（selectedSerial→null）不停 logcat 流（VM `it?.let{}` 跳过 null）→ 旧设备后台流残留（一行修）。
 - 暂停测试仅断言 status-toggle（channel 在 pause 前已 emit 完，文档化）。
 - `Color.Black`/`Gray` 在暗色主题下 I/V/D 可读性差（v1 可接受）。
 - tag/msg/pid 分字段过滤 + package 过滤未做（见上"功能"注）。

@@ -23,9 +23,10 @@ import kotlin.test.assertTrue
  *  [CdpController]; these tests pin the state flows + control methods + auto-start/stop on
  *  serial change.
  *
- *  All tests use a non-null initial serial + scripted webview-socket/forward so the VM's
- *  auto-collector fires `controller.start` (not `controller.stop`, which would close the
- *  FakeCdpTransport's channel and strand later emits). The Target.getTargets response is left
+ *  All tests that need a live session call `vm.onPageEntered()` to mount the page-scoped
+ *  collector, with a non-null initial serial + scripted webview-socket/forward so it fires
+ *  `controller.start` (not `controller.stop`, which would close the FakeCdpTransport's channel
+ *  and strand later emits). The Target.getTargets response is left
  *  pending — `start`'s runJob suspends on that await with `state==CONNECTED` already set, which
  *  is all these state-machine assertions need; `controller.stop()` in teardown drains it. */
 class CdpDebugViewModelTest {
@@ -56,6 +57,7 @@ class CdpDebugViewModelTest {
         val transport = FakeCdpTransport()
         val selected = MutableStateFlow<String?>("s1")
         val vm = makeVm(transport, runner, selected, this)
+        vm.onPageEntered()
         try {
             advanceUntilIdle()      // collector fires start("s1"): socket probe + forward + connect (CONNECTED) + runLoop, then suspends on Target.getTargets await
             assertEquals(CdpConnectionState.CONNECTED, vm.state.value)
@@ -70,6 +72,7 @@ class CdpDebugViewModelTest {
         val transport = FakeCdpTransport()
         val selected = MutableStateFlow<String?>("s1")
         val vm = makeVm(transport, runner, selected, this)
+        vm.onPageEntered()
         try {
             advanceUntilIdle()      // start("s1") → runLoop collecting on the open channel
             transport.emit("""{"method":"Runtime.consoleAPICalled","params":{"type":"log","args":[{"value":"hi"}]}}""")
@@ -86,6 +89,7 @@ class CdpDebugViewModelTest {
         val transport = FakeCdpTransport()
         val selected = MutableStateFlow<String?>("s1")
         val vm = makeVm(transport, runner, selected, this)
+        vm.onPageEntered()
         try {
             advanceUntilIdle()
             vm.evaluate("1+1", null); advanceUntilIdle()
@@ -106,6 +110,7 @@ class CdpDebugViewModelTest {
         val transport = FakeCdpTransport()
         val selected = MutableStateFlow<String?>("s1")
         val vm = makeVm(transport, runner, selected, this)
+        vm.onPageEntered()
         try {
             advanceUntilIdle()              // start("s1"): first connect succeeds (CONNECTED), suspends on targets await
             transport.connectShouldFail = true
@@ -123,6 +128,7 @@ class CdpDebugViewModelTest {
         val transport = FakeCdpTransport()
         val selected = MutableStateFlow<String?>("s1")
         val vm = makeVm(transport, runner, selected, this)
+        vm.onPageEntered()
         try {
             advanceUntilIdle()
             assertEquals(CdpConnectionState.CONNECTED, vm.state.value)
@@ -138,6 +144,7 @@ class CdpDebugViewModelTest {
         val transport = FakeCdpTransport()
         val selected = MutableStateFlow<String?>("A")
         val vm = makeVm(transport, runner, selected, this)
+        vm.onPageEntered()
         try {
             advanceUntilIdle()
             selected.value = "B"; advanceUntilIdle()
@@ -155,6 +162,7 @@ class CdpDebugViewModelTest {
         val transport = FakeCdpTransport()
         val selected = MutableStateFlow<String?>("s1")
         val vm = makeVm(transport, runner, selected, this)
+        vm.onPageEntered()
         try {
             advanceUntilIdle()
             transport.emit("""{"method":"Runtime.consoleAPICalled","params":{"type":"log","args":[{"value":"hi"}]}}""")
@@ -162,6 +170,37 @@ class CdpDebugViewModelTest {
             assertEquals(1, vm.consoleEntries.value.size)
             vm.clearConsole()
             assertTrue(vm.consoleEntries.value.isEmpty())
+        } finally { vm.stop() }
+    }
+
+    @Test
+    fun no_connect_before_page_entered() = runTest {
+        val runner = FakeAdbProcessRunner()
+        scriptStartPrereqs(runner)
+        val transport = FakeCdpTransport()
+        val vm = makeVm(transport, runner, MutableStateFlow<String?>("s1"), this)
+        try {
+            advanceUntilIdle()
+            assertNull(transport.connectUrl, "must not connect before the page is entered")
+            assertEquals(CdpConnectionState.DISCONNECTED, vm.state.value)
+        } finally { vm.stop() }
+    }
+
+    @Test
+    fun reentering_the_page_reconnects() = runTest {
+        // 修既有 bug：stop() 曾永久取消 collector，VM 又是应用级单例 →
+        // "访问过 CDP 页 → 离开 → 再回来"后不再自动连。
+        val runner = FakeAdbProcessRunner()
+        scriptStartPrereqs(runner)
+        val transport = FakeCdpTransport()
+        val vm = makeVm(transport, runner, MutableStateFlow<String?>("s1"), this)
+        try {
+            vm.onPageEntered(); advanceUntilIdle()
+            assertEquals(CdpConnectionState.CONNECTED, vm.state.value)
+            vm.stop(); advanceUntilIdle()              // 离开页面
+            assertEquals(CdpConnectionState.DISCONNECTED, vm.state.value)
+            vm.onPageEntered(); advanceUntilIdle()      // 再次进入
+            assertEquals(CdpConnectionState.CONNECTED, vm.state.value, "re-entry must reconnect")
         } finally { vm.stop() }
     }
 }

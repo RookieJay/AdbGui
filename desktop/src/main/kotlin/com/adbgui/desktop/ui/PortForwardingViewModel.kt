@@ -47,17 +47,23 @@ class PortForwardingViewModel(
     val autoRefresh: StateFlow<Boolean> = _autoRefresh.asStateFlow()
     fun setAutoRefresh(on: Boolean) { _autoRefresh.value = on }
 
-    // One collector for the lifetime of the VM: re-load whenever the selected device changes.
+    // Page-scoped: re-load whenever the selected device changes, but only while the page is composed.
     // `collectLatest` cancels the previous emission's work — so `doRefresh` runs as a cancellable
     // child of the current emission, NOT as a detached `scope.launch` job. This prevents a stale
     // refresh from a previous device overwriting the list after a rapid A→B switch (I-1).
-    private val collector: Job = scope.launch {
-        selectedSerial.collectLatest { serial ->
-            if (serial != null) doRefresh(serial) else _forwards.value = emptyList()
+    private var pageJob: Job? = null
+
+    /** 由 [PortForwardingScreen] 的 LaunchedEffect(Unit) 调用——页面可见才刷新（spec §3）。 */
+    fun onPageEntered() {
+        if (pageJob?.isActive == true) return
+        pageJob = scope.launch {
+            selectedSerial.collectLatest { serial ->
+                if (serial != null) doRefresh(serial) else _forwards.value = emptyList()
+            }
         }
     }
 
-    fun stop() = collector.cancel()
+    fun stop() { pageJob?.cancel(); pageJob = null }
 
     fun setLocalType(t: ForwardEndpointType) { _localType.value = t }
     fun setLocalValue(v: String) { _localValue.value = v }

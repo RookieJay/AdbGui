@@ -53,6 +53,17 @@ class FakeAdbProcessRunner : AdbProcessRunner {
 
     fun setStreamLinesOnce(lines: List<String>) { streamLinesOnce = lines }
 
+    /** The channel of the most recent `startStream` call, so tests can pace a live stream
+     *  instead of dumping every line at once. `@Volatile`: written by the caller thread that
+     *  invokes `startStream`, read by [emitStreamLine] from elsewhere. */
+    @Volatile private var lastStreamChannel: Channel<String>? = null
+
+    /** Append one line to the channel opened by the most recent `startStream` — lets a test
+     *  "pace" the stream rather than flushing it in one shot. Used to verify the throttler still
+     *  publishes periodically under a sustained flow (i.e. it is a fixed-interval throttle, not
+     *  a debounce that a never-idle stream would starve). */
+    fun emitStreamLine(line: String) { lastStreamChannel?.trySend(line) }
+
     override suspend fun run(adb: AdbBinary, args: List<String>, timeoutMs: Long?): AdbProcessResult {
         runs += args
         return scripts.firstOrNull { r -> r.keywords.all { kw -> args.any { it.contains(kw) } } }?.result
@@ -63,6 +74,7 @@ class FakeAdbProcessRunner : AdbProcessRunner {
 
     override fun startStream(adb: AdbBinary, args: List<String>, scope: CoroutineScope): AdbStream {
         val ch = Channel<String>(Channel.UNLIMITED)
+        lastStreamChannel = ch
         val once = streamLinesOnce
         if (once != null) {
             once.forEach { ch.trySend(it) }

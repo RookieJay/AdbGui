@@ -38,12 +38,36 @@ class PortForwardingViewModelTest {
     }
 
     @Test
+    fun no_refresh_before_page_entered() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("forward", "--list"), AdbProcessResult(0, "s1 tcp:8080 tcp:8080\n", ""))
+        val (repo, vm) = makeVm(runner, MutableStateFlow<String?>("s1"), this)
+        try {
+            advanceUntilIdle()
+            assertTrue(vm.forwards.value.isEmpty(), "must not refresh before the page is entered")
+            assertTrue(runner.runs.none { it.contains("--list") })
+        } finally { vm.stop(); repo.stop() }
+    }
+
+    @Test
+    fun page_entered_refreshes() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("forward", "--list"), AdbProcessResult(0, "s1 tcp:8080 tcp:8080\n", ""))
+        val (repo, vm) = makeVm(runner, MutableStateFlow<String?>("s1"), this)
+        try {
+            vm.onPageEntered(); advanceUntilIdle()
+            assertEquals(1, vm.forwards.value.size)
+        } finally { vm.stop(); repo.stop() }
+    }
+
+    @Test
     fun refresh_loads_and_filters_forwards_for_selected_serial() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("forward", "--list"),
             AdbProcessResult(0, "s1 tcp:9222 localabstract:foo\ns2 tcp:8080 localabstract:bar\n", ""))
         val (repo, vm) = makeVm(runner, MutableStateFlow("s1"), this)
         try {
+            vm.onPageEntered()
             advanceUntilIdle()
             assertEquals(1, vm.forwards.value.size)
             assertEquals("s1", vm.forwards.value[0].serial)
@@ -112,6 +136,7 @@ class PortForwardingViewModelTest {
         val selected = MutableStateFlow<String?>(null)
         val (repo, vm) = makeVm(runner, selected, this)
         try {
+            vm.onPageEntered()
             advanceUntilIdle()
             assertTrue(vm.forwards.value.isEmpty())
             selected.value = "sX"; advanceUntilIdle()

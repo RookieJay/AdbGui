@@ -6,7 +6,10 @@ import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbSource
 import com.adbgui.core.log.NoopLogger
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -15,9 +18,14 @@ import kotlin.test.assertTrue
 class LogcatControllerTest {
     private val adb = AdbBinary("adb", AdbSource.PATH)
 
-    private fun controller(runner: FakeAdbProcessRunner, scope: kotlinx.coroutines.CoroutineScope): LogcatController {
+    private fun controller(
+        runner: FakeAdbProcessRunner,
+        scope: kotlinx.coroutines.CoroutineScope,
+        ringCap: Int = 5,
+        publishIntervalMs: Long = 100,
+    ): LogcatController {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter{})
-        return LogcatController(cmd, NoopLogger, scope, ringCap = 5)
+        return LogcatController(cmd, NoopLogger, scope, ringCap = ringCap, publishIntervalMs = publishIntervalMs)
     }
 
     private val line1 = "08-17 10:23:45.100  100  200 I Tag1: hello"
@@ -146,5 +154,63 @@ class LogcatControllerTest {
         c.dumpLogcat("abc", LogcatFilters(levelSet = setOf(com.adbgui.core.domain.LogcatLevel.E))) { got += it }
         assertEquals(1, got.size)
         assertTrue(got[0].contains("Tag: err"))
+    }
+
+    @Test fun burst_of_many_lines_publishes_throttled_not_per_line() = runTest {
+        // 2000 行一次性灌入（模型：logcat 连接时全量吐设备缓冲）。
+        // 今天每行赋值一次 _lines → 2001 次 emission；节流后应 ≤ 4 次。
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines((1..2000).map { "08-17 10:23:45.100  100  200 I Tag$it: m$it" })
+        val c = controller(runner, this, ringCap = 50000)
+        var emissions = 0
+        // Unconfined collector: a StateFlow collector on the test scheduler is CONFLATED, so a
+        // per-line `_lines.value = ...` inside one un-yielding producer loop is never observed
+        // (measured: 2 emissions for 2000 lines under the old per-line publish). Resuming
+        // inline makes every publish observable — i.e. this counts publish OPERATIONS, which is
+        // exactly what the throttle bounds.
+        val collectJob = launch(kotlinx.coroutines.Dispatchers.Unconfined) { c.lines.collect { emissions++ } }
+        c.start("abc")
+        advanceUntilIdle()
+        assertEquals(2000, c.lines.value.size, "all lines must still reach the state")
+        assertEquals("Tag2000", c.lines.value.last().tag)
+        assertTrue(emissions <= 4, "expected throttled publishes for a 2000-line burst, got $emissions")
+        c.stop(); collectJob.cancel()
+    }
+
+    @Test fun sustained_stream_keeps_publishing_not_starved() = runTest {
+        // 每 30ms 来一行（快于 100ms 节流间隔）。若实现成防抖(collectLatest + delay)，
+        // delay 会被每行取消 → 永不发布（饿死）。此测试锁死"节流而非防抖"。
+        // 注意：这条在旧实现下也会通过（旧实现是每行发布）——它是新实现的行为守卫，不是红→绿。
+        val runner = FakeAdbProcessRunner()
+        val c = controller(runner, this, ringCap = 50)   // ringCap must exceed 20 or the final assert cannot hold
+        var emissions = 0
+        val collectJob = launch { c.lines.collect { emissions++ } }
+        c.start("abc"); runCurrent()
+        repeat(20) { i ->
+            runner.emitStreamLine("08-17 10:23:45.100  100  200 I Tag$i: m$i")
+            runCurrent()
+            advanceTimeBy(30)
+        }
+        assertTrue(emissions >= 3, "sustained stream must keep publishing, got $emissions")
+        // 推进虚拟时间让最后一批也发布出去。注意 `advanceUntilIdle()` 在这里能正常返回：
+        // `setStreamLines`/`emitStreamLine` 留下的是**未关闭**的 channel，runLoop 永久挂在该
+        // `collect` 上、不会走到 backoff 的 `delay`，因此没有"永远排程中"的任务。
+        advanceUntilIdle()
+        assertEquals(20, c.lines.value.size)
+        c.stop(); collectJob.cancel()
+    }
+
+    @Test fun ring_semantics_survive_batching() = runTest {
+        // 7 行 / ringCap 5 → 最终只有最新 5 行，且顺序正确（批量发布不能破坏环形截断）。
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines((1..7).map { "08-17 10:23:45.00$it  100  200 I Tag$it: m$it" })
+        val c = controller(runner, this)   // ringCap = 5
+        var last: List<com.adbgui.core.domain.LogcatLine> = emptyList()
+        val collectJob = launch { c.lines.collect { last = it } }
+        c.start("abc")
+        advanceUntilIdle()
+        assertEquals(listOf("Tag3", "Tag4", "Tag5", "Tag6", "Tag7"), c.lines.value.map { it.tag })
+        assertEquals(5, last.size, "last published snapshot must match the ring")
+        c.stop(); collectJob.cancel()
     }
 }

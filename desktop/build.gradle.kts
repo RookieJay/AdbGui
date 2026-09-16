@@ -26,6 +26,11 @@ sourceSets {
 kotlin { jvmToolchain(21) }
 compose.desktop.application {
     mainClass = "com.adbgui.desktop.main.MainKt"
+    // 未设时 JVM 按物理内存自选（31.3GB → Initial 504MB / Max 7.8GB），G1 young gen 会随
+    // 启动 burst 撑大且基本不回还（G1PeriodicGCInterval 默认 0）→ 任务管理器被顶到 1GB+。
+    // 实测活跃堆仅 43MB（logcat 环 ≤50000 行）→ 512m 余量充足。见
+    // docs/superpowers/specs/2026-09-16-page-driven-loading-and-logcat-publish-design.md §1.1.2。
+    jvmArgs += listOf("-Xms64m", "-Xmx512m")
     nativeDistributions {
         targetFormats(TargetFormat.Msi, TargetFormat.AppImage)
         packageName = "AdbGui"

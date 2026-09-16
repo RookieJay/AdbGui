@@ -60,7 +60,14 @@ class DeviceInfoViewModel(
     }
 
     // Auto-refresh when the selected device changes (incl. the first auto-select).
-    private val refreshJob: Job = scope.launch { selectedSerial.collect { load() } }
+    // Page-scoped: mounted by onPageEntered() so nothing runs until the page is composed.
+    private var pageJob: Job? = null
+
+    /** 由 [DeviceInfoScreen] 的 LaunchedEffect(Unit) 调用——页面可见才加载（spec §3）。 */
+    fun onPageEntered() {
+        if (pageJob?.isActive == true) return
+        pageJob = scope.launch { selectedSerial.collect { load() } }
+    }
 
     // Auto-retry when device recovers: if there's a stale error and the device
     // is back ONLINE (tracker poll shows it), clear the error + retry load().
@@ -75,5 +82,5 @@ class DeviceInfoViewModel(
             }
         }
     }
-    fun stop() { refreshJob.cancel(); recoveryJob.cancel() }
+    fun stop() { pageJob?.cancel(); pageJob = null; recoveryJob.cancel() }
 }

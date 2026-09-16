@@ -57,6 +57,7 @@ class CdpController(
     private val logger: Logger,
     private val scope: CoroutineScope,
     private val ringCap: Int = 10000,
+    private val netRingCap: Int = ringCap,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -285,7 +286,7 @@ class CdpController(
                     // timestamp = wall-clock arrival time, for manual review.
                     _console.value = (_console.value + e.entry.copy(id = idCounter.getAndIncrement(), timestamp = now)).takeLast(ringCap)
                 is CdpEvent.NetRequest ->
-                    _net.value = _net.value + e.req.copy(timestamp = now)
+                    _net.value = (_net.value + e.req.copy(timestamp = now)).takeLast(netRingCap)
                 is CdpEvent.NetResponse ->
                     _net.value = _net.value.map {
                         if (it.requestId == e.requestId)

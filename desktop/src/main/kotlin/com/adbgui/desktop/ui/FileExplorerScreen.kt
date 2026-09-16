@@ -37,6 +37,7 @@ fun FileExplorerScreen(
     modifier: Modifier = Modifier,
     onOpenConnect: () -> Unit = {},
 ) {
+    LaunchedEffect(Unit) { vm.onPageEntered() }
     val currentPath by vm.currentPath.collectAsState()
     val entries by vm.entries.collectAsState()
     val error by vm.error.collectAsState()

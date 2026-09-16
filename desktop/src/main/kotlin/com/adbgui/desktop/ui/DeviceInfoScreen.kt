@@ -57,6 +57,7 @@ fun DeviceInfoScreen(
     onOpenScreenshot: () -> Unit = {},
     screenshotLoading: Boolean = false,
 ) {
+    LaunchedEffect(Unit) { vm.onPageEntered() }
     val props by vm.props.collectAsState()
     val error by vm.error.collectAsState()
     val report by vm.report.collectAsState()

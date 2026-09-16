@@ -45,6 +45,7 @@ fun PortForwardingScreen(
     vm: PortForwardingViewModel,
     selectedSerial: String?,
 ) {
+    LaunchedEffect(Unit) { vm.onPageEntered() }
     val forwards by vm.forwards.collectAsState()
     val localType by vm.localType.collectAsState()
     val localValue by vm.localValue.collectAsState()

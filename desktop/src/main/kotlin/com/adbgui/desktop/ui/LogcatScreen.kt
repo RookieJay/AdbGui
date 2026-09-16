@@ -46,6 +46,8 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
+    // 页面可见才起流（spec §3）：离开页面不停流，缓冲历史保留。
+    LaunchedEffect(Unit) { vm.onPageEntered() }
     val lines by vm.lines.collectAsState()
     val status by vm.status.collectAsState()
     val error by vm.error.collectAsState()
