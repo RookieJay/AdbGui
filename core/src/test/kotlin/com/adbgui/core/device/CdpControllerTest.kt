@@ -30,9 +30,10 @@ class CdpControllerTest {
         transport: FakeCdpTransport,
         runner: FakeAdbProcessRunner,
         scope: kotlinx.coroutines.CoroutineScope,
+        ringCap: Int = 10000,
     ): Pair<CommandRunner, CdpController> {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter{})
-        val ctrl = CdpController(transport, cmd, NoopLogger, scope)
+        val ctrl = CdpController(transport, cmd, NoopLogger, scope, ringCap = ringCap)
         return cmd to ctrl
     }
 
@@ -143,6 +144,23 @@ class CdpControllerTest {
         val r = ctrl.networkRequests.value[0]
         assertEquals(200, r.status)
         assertEquals("text/html", r.mime)
+        ctrl.stop()
+    }
+
+    @Test
+    fun net_ring_caps_dropping_oldest() = runTest {
+        val transport = FakeCdpTransport()
+        val runner = FakeAdbProcessRunner()
+        val (_, ctrl) = makeController(transport, runner, this, ringCap = 3)
+        ctrl.connectManual(9222)
+        advanceUntilIdle()
+        (1..5).forEach { i ->
+            transport.emit("""{"method":"Network.requestWillBeSent","params":{"requestId":"r$i","request":{"method":"GET","url":"http://x/$i"}}}""")
+        }
+        advanceUntilIdle()
+        assertEquals(3, ctrl.networkRequests.value.size, "network ring must cap at netRingCap")
+        assertEquals("http://x/3", ctrl.networkRequests.value.first().url)  // oldest 2 dropped
+        assertEquals("http://x/5", ctrl.networkRequests.value.last().url)
         ctrl.stop()
     }
 
