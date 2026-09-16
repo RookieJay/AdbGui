@@ -11,3 +11,4 @@ desktop/*.txt
 desktop/*.rc
 desktop/files/
 desktop/default.prop
+local.properties

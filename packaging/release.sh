@@ -18,9 +18,16 @@ VERSION="${1:?usage: release.sh <version> e.g. 1.2.0}"
 [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.\-]+)?$ ]] || {
   echo "invalid version: $VERSION (expected X.Y.Z)" >&2; exit 2; }
 
-# Use Temurin 21 by default (jpackage present); fall back to JAVA_HOME if already set.
+# Use Temurin 21 by default (jpackage present); fall back to it if JAVA_HOME lacks jpackage.
 export JAVA_HOME="${JAVA_HOME:-D:/software/jdk-21.0.12.1+1}"
-[[ -x "$JAVA_HOME/bin/jpackage.exe" ]] || { echo "jpackage not found at $JAVA_HOME" >&2; exit 2; }
+if [[ ! -x "$JAVA_HOME/bin/jpackage.exe" ]]; then
+  TEMURIN="D:/software/jdk-21.0.12.1+1"
+  if [[ -x "$TEMURIN/bin/jpackage.exe" ]]; then
+    export JAVA_HOME="$TEMURIN"
+  else
+    echo "jpackage not found at $JAVA_HOME (and Temurin default $TEMURIN missing). Set JAVA_HOME to a full JDK 21 with jpackage." >&2; exit 2
+  fi
+fi
 
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"

@@ -23,7 +23,12 @@ if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9
 
 if (-not $env:JAVA_HOME) { $env:JAVA_HOME = 'D:\software\jdk-21.0.12.1+1' }
 if (-not (Test-Path "$env:JAVA_HOME\bin\jpackage.exe")) {
-    Write-Error "jpackage not found at JAVA_HOME=$env:JAVA_HOME"; exit 2
+    $temurin = 'D:\software\jdk-21.0.12.1+1'
+    if (Test-Path "$temurin\bin\jpackage.exe") {
+        $env:JAVA_HOME = $temurin
+    } else {
+        Write-Error "jpackage not found at JAVA_HOME=$env:JAVA_HOME (and Temurin default $temurin missing). Set JAVA_HOME to a full JDK 21 with jpackage."; exit 2
+    }
 }
 
 $root = (git rev-parse --show-toplevel)
