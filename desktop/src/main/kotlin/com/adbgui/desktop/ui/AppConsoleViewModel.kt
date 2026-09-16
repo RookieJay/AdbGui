@@ -194,6 +194,17 @@ class AppConsoleViewModel(
         return dp
     }
 
-    private val refreshJob: Job = scope.launch { selectedSerial.collect { clearDetail(); load() } }
-    fun stop() { refreshJob.cancel() }
+    // Page-scoped collector: mounted by onPageEntered() when the App Console page becomes
+    // visible, cancelled by stop() when it goes away. This used to be an init-block collector,
+    // so every app launch ran `pm list packages` for the auto-selected device, for a page the
+    // user never opened.
+    private var pageJob: Job? = null
+
+    /** 由 [AppConsoleScreen] 的 LaunchedEffect(Unit) 调用——页面可见才加载（spec §3）。 */
+    fun onPageEntered() {
+        if (pageJob?.isActive == true) return
+        pageJob = scope.launch { selectedSerial.collect { clearDetail(); load() } }
+    }
+
+    fun stop() { pageJob?.cancel(); pageJob = null }
 }

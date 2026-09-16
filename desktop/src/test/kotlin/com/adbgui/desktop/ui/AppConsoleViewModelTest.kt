@@ -91,6 +91,25 @@ class AppConsoleViewModelTest {
         vm.stop(); repo.stop()
     }
 
+    @Test fun no_load_before_page_entered() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pm", "list"), AdbProcessResult(0, "package:com.foo\n", ""))
+        val (repo, vm) = vm(runner, MutableStateFlow<String?>("abc"), this)
+        advanceUntilIdle()
+        assertTrue(vm.packages.value.isEmpty(), "must not list packages before the page is entered")
+        assertTrue(runner.runs.none { it.contains("list") }, "no adb call before page entry")
+        vm.stop(); repo.stop()
+    }
+
+    @Test fun page_entered_loads_packages() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pm", "list"), AdbProcessResult(0, "package:com.foo\n", ""))
+        val (repo, vm) = vm(runner, MutableStateFlow<String?>("abc"), this)
+        vm.onPageEntered(); advanceUntilIdle()
+        assertEquals(1, vm.packages.value.size)
+        vm.stop(); repo.stop()
+    }
+
     @Test fun forceStop_sends_command() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("force-stop"), AdbProcessResult(0, "", ""))
@@ -241,6 +260,7 @@ class AppConsoleViewModelTest {
         runner.whenArgsContains(listOf("pm", "list"), AdbProcessResult(0, "package:com.dangbeimarket\n", ""))
         val selected = MutableStateFlow<String?>("serial1")
         val (repo, vm) = vm(runner, selected, this)
+        vm.onPageEntered()  // mount the serial-switch collector (no longer in init)
         vm.loadDetail("com.dangbeimarket"); advanceUntilIdle()
         assertNotNull(vm.detail.value)
         // switch device

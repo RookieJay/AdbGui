@@ -79,6 +79,8 @@ fun AppConsoleScreen(
     selectedSerial: String?,
     modifier: Modifier = Modifier,
 ) {
+    // 页面可见才加载（spec §3）：进入页面时挂上 collector 并列出当前设备的包。
+    LaunchedEffect(Unit) { vm.onPageEntered() }
     val packages by vm.packages.collectAsState()
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
