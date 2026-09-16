@@ -116,8 +116,12 @@ class CommandRunner(
     private val pkgRegex = Regex("^[A-Za-z0-9._]+$")
 
     suspend fun listPackages(serial: String): List<PackageInfo> {
-        val r = runCmd(serial, listOf("shell", "pm", "list", "packages", "-3"))
-        return PackageListParser.parse(r.stdout, thirdPartyOnly = true)
+        // -f: all packages with APK path (for path-based system detection fallback).
+        // -s: system packages only — authoritative source for isSystem, covers UPDATED_SYSTEM_APP
+        //     (APK in /data/app/ but Android still flags it as system; path-only detection misses these).
+        val full = runCmd(serial, listOf("shell", "pm", "list", "packages", "-f")).stdout
+        val sys  = runCmd(serial, listOf("shell", "pm", "list", "packages", "-s")).stdout
+        return PackageListParser.parse(full, sys)
     }
 
     /** `adb shell dumpsys package <pkg>` → parsed [DumpsysPackage]. Throws [AdbCommandException]

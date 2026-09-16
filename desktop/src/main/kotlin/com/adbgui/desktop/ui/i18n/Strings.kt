@@ -134,6 +134,7 @@ object Strings {
         "no_package_selected" to "未选择应用",
         "screenshot_recapture" to "重新截取",
         "system" to "系统",
+        "show_system_apps" to "显示系统应用",
         "uninstall" to "卸载",
         // App detail + permissions (Task 9)
         "version" to "版本",
@@ -560,6 +561,7 @@ object Strings {
         "no_package_selected" to "No app selected",
         "screenshot_recapture" to "Recapture",
         "system" to "system",
+        "show_system_apps" to "Show system apps",
         "uninstall" to "Uninstall",
         // App detail + permissions (Task 9)
         "version" to "Version",

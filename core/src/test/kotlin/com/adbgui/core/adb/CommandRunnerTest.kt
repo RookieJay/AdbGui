@@ -69,10 +69,18 @@ class CommandRunnerTest {
     @Test
     fun listPackages_parses_output() = runTest {
         val runner = FakeAdbProcessRunner()
-        runner.whenArgsContains(listOf("pm", "list"), AdbProcessResult(0, "package:com.foo\npackage:com.bar\n", ""))
+        // Order matters: firstOrNull wins. "-s" would also substring-match the "-s" device-flag
+        // in the -f call (args contain "-s", serial, ...), so register "-f" first and use
+        // "-packages" as extra context in the -s rule to disambiguate.
+        runner.whenArgsContains(listOf("pm", "list", "-f"), AdbProcessResult(0,
+            "package:/data/app/com.foo-xxx/base.apk=com.foo\npackage:/system/app/com.bar/com.bar.apk=com.bar\n", ""))
+        runner.whenArgsContains(listOf("packages", "-s"), AdbProcessResult(0,
+            "package:com.bar\n", ""))
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val list = cr.listPackages("abc")
         assertEquals(2, list.size)
+        assertEquals(false, list.first { it.name == "com.foo" }.isSystem)
+        assertEquals(true,  list.first { it.name == "com.bar" }.isSystem)
     }
 
     @Test

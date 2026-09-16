@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Button
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.CircularProgressIndicator
@@ -104,6 +105,7 @@ fun AppConsoleScreen(
         }
     }
     var search by remember { mutableStateOf("") }
+    var showSystemApps by remember { mutableStateOf(false) }
     var advancedOpen by remember { mutableStateOf(false) }
     var confirmUninstall by remember { mutableStateOf<String?>(null) }
     var confirmClearData by remember { mutableStateOf<String?>(null) }
@@ -170,6 +172,9 @@ fun AppConsoleScreen(
                     placeholder = { Text(Strings.t("text_search")) },
                     modifier = Modifier.width(220.dp),
                 )
+                Spacer(Modifier.width(8.dp))
+                Checkbox(checked = showSystemApps, onCheckedChange = { showSystemApps = it })
+                Text(Strings.t("show_system_apps"), style = MaterialTheme.typography.body2)
                 Spacer(Modifier.width(8.dp))
                 Button(enabled = !busy, onClick = { vm.load() }) { Text(Strings.t("refresh")) }
                 Spacer(Modifier.width(8.dp))
@@ -249,9 +254,10 @@ fun AppConsoleScreen(
 
             // --- Package list (gets the larger share of vertical space; was fillMaxHeight(0.4f)
             // which contended with the fillMaxSize panel below and overflowed) ---
-            val filtered = remember(packages, search) {
-                if (search.isBlank()) packages
-                else packages.filter { it.name.contains(search, ignoreCase = true) }
+            val filtered = remember(packages, search, showSystemApps) {
+                val byFilter = if (showSystemApps) packages else packages.filter { !it.isSystem }
+                if (search.isBlank()) byFilter
+                else byFilter.filter { it.name.contains(search, ignoreCase = true) }
             }
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 if (filtered.isEmpty() && !busy) {
@@ -394,9 +400,9 @@ private fun PackageSelectRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(pkg.name, style = MaterialTheme.typography.body1)
+            SelectableText(pkg.name, style = MaterialTheme.typography.body1)
             if (pkg.isSystem) {
-                Text(Strings.t("system"), style = MaterialTheme.typography.caption)
+                SelectableText(Strings.t("system"), style = MaterialTheme.typography.caption)
             }
         }
         IconButton(onClick = onToggleExpand) {
@@ -420,31 +426,35 @@ private fun AppDetailBlock(vm: AppConsoleViewModel) {
     val busy by vm.detailBusy.collectAsState()
     val err by vm.detailError.collectAsState()
     Column(Modifier.padding(start = 24.dp, top = 4.dp, bottom = 4.dp)) {
-        Text(Strings.t("app_detail"), style = MaterialTheme.typography.caption)
-        if (busy) CircularProgressIndicator(modifier = Modifier.size(16.dp))
-        err?.let { InlineMessageBanner(Strings.t("adb_error"), MessageKind.Error, details = it, initiallyExpanded = true) }
-        detail?.let { d ->
-            Text("${Strings.t("version")}: ${d.versionName ?: "?"} (${d.versionCode ?: "?"})", style = MaterialTheme.typography.body2)
-            d.primaryCpuAbi?.let { Text("${Strings.t("abi")}: $it", style = MaterialTheme.typography.body2) }
-            d.codePath?.let { path ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${Strings.t("code_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
+        SelectionContainer {
+            Column {
+                Text(Strings.t("app_detail"), style = MaterialTheme.typography.caption)
+                if (busy) CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                detail?.let { d ->
+                    Text("${Strings.t("version")}: ${d.versionName ?: "?"} (${d.versionCode ?: "?"})", style = MaterialTheme.typography.body2)
+                    d.primaryCpuAbi?.let { Text("${Strings.t("abi")}: $it", style = MaterialTheme.typography.body2) }
+                    d.codePath?.let { path ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${Strings.t("code_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
+                                Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
+                            }
+                        }
                     }
+                    d.publicSourceDir?.let { path ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${Strings.t("apk_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
+                                Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                    val libsText = if (d.nativeLibs.isEmpty()) Strings.t("no_native_libs") else d.nativeLibs.joinToString(" ")
+                    Text("${Strings.t("native_libs")}: $libsText", style = MaterialTheme.typography.body2)
                 }
             }
-            d.publicSourceDir?.let { path ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${Strings.t("apk_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
-            val libsText = if (d.nativeLibs.isEmpty()) Strings.t("no_native_libs") else d.nativeLibs.joinToString(" ")
-            Text("${Strings.t("native_libs")}: $libsText", style = MaterialTheme.typography.body2)
         }
+        err?.let { InlineMessageBanner(Strings.t("adb_error"), MessageKind.Error, details = it, initiallyExpanded = true) }
     }
 }
 
