@@ -18,9 +18,10 @@ import kotlinx.coroutines.launch
 /** Thin VM over [CdpController] for the CDP Debug page. Delegates the controller's StateFlows
  *  straight through (no copy — the controller owns the ring buffers / state machine) and wraps
  *  the controller's suspend control methods in `scope.launch` so UI callbacks (non-suspend) can
- *  fire them. One long-lived collector watches `selectedSerial`: a non-null serial auto-starts
- *  a one-click session (`controller.start`); null auto-stops it (`controller.stop`). Uses
- *  `collectLatest` so a rapid A→B switch cancels A's in-flight start before B's runs.
+ *  fire them. A page-scoped collector watches `selectedSerial` while the CDP page is visible
+ *  (mounted by [onPageEntered], cancelled by [stop]): a non-null serial auto-starts a one-click
+ *  session (`controller.start`); null auto-stops it (`controller.stop`). Uses `collectLatest` so
+ *  a rapid A→B switch cancels A's in-flight start before B's runs.
  *
  *  Red line #2: the VM injects [CdpController] (`:core`) only — never ktor / CommandRunner. */
 class CdpDebugViewModel(
@@ -44,12 +45,22 @@ class CdpDebugViewModel(
     private val _selectedTargetId = MutableStateFlow<String?>(null)
     val selectedTargetId: StateFlow<String?> = _selectedTargetId.asStateFlow()
 
-    // The only long-lived collector: auto-start/stop on serial change. `collectLatest` cancels the
-    // previous emission's work — a stale `start` from device A is cancelled before B's runs. It is
-    // a child of [scope]; [stop] cancels it (and the controller's runJob child) on teardown.
-    private val collector: Job = scope.launch {
-        selectedSerial.collectLatest { serial ->
-            if (serial != null) controller.start(serial) else controller.stop()
+    // Page-scoped collector: mounted by onPageEntered() when the CDP page becomes visible,
+    // cancelled by stop() when it goes away. A0: this used to be an init-block collector, so
+    // every app launch auto-opened a CDP session (adb forward + two websockets with
+    // Runtime/Page/Network/Log enabled) for a page the user never opened. `collectLatest`
+    // keeps the A->B rapid-switch semantics: A's in-flight start is cancelled before B's runs.
+    private var pageJob: Job? = null
+
+    /** 由 [CdpDebugScreen] 的 LaunchedEffect(Unit) 调用。是重建而非"只挂一次"，所以
+     *  "离开页面 → 再回来"能重新连上（旧实现 stop() 永久取消 collector，VM 又是应用级
+     *  单例，导致第二次进入永不自动连）。 */
+    fun onPageEntered() {
+        if (pageJob?.isActive == true) return
+        pageJob = scope.launch {
+            selectedSerial.collectLatest { serial ->
+                if (serial != null) controller.start(serial) else controller.stop()
+            }
         }
     }
 
@@ -60,13 +71,10 @@ class CdpDebugViewModel(
 
     fun connectManual(port: Int): Job = scope.launch { controller.connectManual(port) }
 
-    /** Stop the CDP session: cancel the serial collector (which cascades to the controller's run
-     *  loop + transport via structured concurrency) and drain in-flight callers / remove the
-     *  forward via `controller.stop()`. The drain runs as a child of [scope]; the returned [Job]
-     *  completes when teardown finishes. After [stop] the VM no longer auto-restarts on serial
-     *  change — recreate the VM (or don't call [stop]) to keep the collector alive. */
+    /** 离开页面：取消页面级 collector（覆盖结构化并发下的 run loop + transport），并
+     *  `controller.stop()` 关闭 ws + 移除自建的 forward（一键模式）。 */
     fun stop(): Job {
-        collector.cancel()
+        pageJob?.cancel(); pageJob = null
         return scope.launch { controller.stop() }
     }
 

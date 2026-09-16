@@ -86,6 +86,8 @@ fun CdpDebugScreen(
     vm: CdpDebugViewModel,
     modifier: Modifier = Modifier,
 ) {
+    // 页面可见才连（spec §3.4）；离开由下方 DisposableEffect 的 onDispose 收尾。
+    LaunchedEffect(Unit) { vm.onPageEntered() }
     val consoleEntries by vm.consoleEntries.collectAsState()
     val networkRequests by vm.networkRequests.collectAsState()
     val targets by vm.targets.collectAsState()
