@@ -23,6 +23,17 @@ class PackageParsersTest {
     }
 
     @Test
+    fun parses_path_with_base64_padding() {
+        // Hisense TV: path contains Base64 "==" — must split on LAST "=" not first.
+        val fullOut = "package:/data/app/com.dangbeimarket-Q70KvGAKH3s15xDJwIo89A==/base.apk=com.dangbeimarket\n"
+        val sysOut  = ""
+        val list = PackageListParser.parse(fullOut, sysOut)
+        assertEquals(1, list.size)
+        assertEquals("com.dangbeimarket", list[0].name)
+        assertEquals(false, list[0].isSystem)
+    }
+
+    @Test
     fun updated_system_app_detected_via_sys_out() {
         // UPDATED_SYSTEM_APP: APK physically in /data/app/ but Android flags it as system.
         // `-s` output is authoritative — without it, path-based detection would wrongly say isSystem=false.

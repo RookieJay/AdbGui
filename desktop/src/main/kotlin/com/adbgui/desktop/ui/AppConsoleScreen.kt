@@ -306,11 +306,16 @@ fun AppConsoleScreen(
                     modifier = Modifier.weight(0.8f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        sel,
-                        style = MaterialTheme.typography.subtitle1,
-                        modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                    )
+                    SelectionContainer {
+                        Column {
+                            Text(Strings.t("package_name"), style = MaterialTheme.typography.caption)
+                            Text(
+                                sel,
+                                style = MaterialTheme.typography.subtitle1,
+                                modifier = Modifier.padding(bottom = 4.dp).fillMaxWidth(),
+                            )
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(enabled = !busy, onClick = { vm.startApp(sel) }) { Text(Strings.t("start_app")) }
                         Button(enabled = !busy, onClick = { vm.forceStop(sel) }) { Text(Strings.t("force_stop")) }
@@ -400,9 +405,9 @@ private fun PackageSelectRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            SelectableText(pkg.name, style = MaterialTheme.typography.body1)
+            Text(pkg.name, style = MaterialTheme.typography.body1)
             if (pkg.isSystem) {
-                SelectableText(Strings.t("system"), style = MaterialTheme.typography.caption)
+                Text(Strings.t("system"), style = MaterialTheme.typography.caption)
             }
         }
         IconButton(onClick = onToggleExpand) {

@@ -6,8 +6,11 @@ import com.adbgui.core.domain.PackageInfo
 object PackageListParser {
     // `pm list packages -f` format: "package:/data/app/com.example-xxx/base.apk=com.example"
     // `pm list packages -s` format: "package:com.example" (plain, no path)
-    private val withPath = Regex("""^package:(\S+?)=(\S+)$""", RegexOption.MULTILINE)
-    private val plain    = Regex("""^package:(\S+)$""",    RegexOption.MULTILINE)
+    // NOTE: path may contain Base64 "==" (e.g. com.dangbeimarket-Q70KvGAKH3s15xDJwIo89A==),
+    //       so the path/name split must use the LAST "=", not the first.
+    private val plain = Regex("""^package:(\S+)$""", RegexOption.MULTILINE)
+    // Greedy (.+) extends to the LAST "=" before (\S+)$ — correctly handles "==" in paths.
+    private val combined = Regex("""^package:(?:(.+)=)?(\S+)$""", RegexOption.MULTILINE)
 
     private val SYSTEM_PREFIXES = arrayOf("/system/", "/vendor/", "/product/", "/odm/", "/oem/")
 
@@ -22,9 +25,6 @@ object PackageListParser {
      */
     fun parse(fullOut: String, sysOut: String): List<PackageInfo> {
         val sysNames = plain.findAll(sysOut).map { it.groupValues[1] }.toSet()
-        // Match both `-f` format (package:/path=pkg) and plain format (package:pkg) in one pass.
-        // Group 1 = APK path (empty for plain), Group 2 = package name (always present).
-        val combined = Regex("""^package:(?:(\S+?)=)?(\S+)$""", RegexOption.MULTILINE)
         return combined.findAll(fullOut)
             .map { m ->
                 val apkPath = m.groupValues[1]  // "" for plain format
