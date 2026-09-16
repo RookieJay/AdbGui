@@ -236,12 +236,17 @@ private val publishIntervalMs: Long = 100
 private val flushSignal = Channel<Unit>(Channel.CONFLATED)
 @Volatile private var linesDirty = false
 
+/** 唯一发布路径：在 mutex 内快照 filtered 并赋值。所有 _lines 赋值都走这里。 */
+private suspend fun publishOnce() {
+    mutex.withLock {
+        if (linesDirty) { _lines.value = filtered.toList(); linesDirty = false }
+    }
+}
+
 private suspend fun publishLoop() {
     for (signal in flushSignal) {          // CONFLATED：burst 塌缩成一次唤醒
         delay(publishIntervalMs)           // 固定间隔节流（非取消式防抖）
-        mutex.withLock {
-            if (linesDirty) { _lines.value = filtered.toList(); linesDirty = false }
-        }
+        publishOnce()
     }
 }
 ```
@@ -259,13 +264,26 @@ if (matches(line, _filters.value)) {
 
 **必须是节流而非防抖**：若用 `collectLatest { delay() }`，持续不断的行会让 `delay` 不断被取消 → 洪流期间永不发布（饿死）。`for (signal) { delay() }` 保证洪流下**至多每 100ms 发布一次**。
 
-- **burst 场景**：连接时设备缓冲约 38806 行灌入 → 约 20 次发布（每 100ms 一次），总复制量约 76 万元素（今天约 7 亿次），**降低约 1000 倍**。
+- **burst 场景**：连接时设备缓冲约 3.8 万行灌入 → 约 20 次发布（每 100ms 一次），总复制量约 76 万元素（今天约 7 亿次），**降低约 1000 倍**。
 - **细流场景**：1 行/秒 → 每行后约 100ms 发布一次，实时观感不变。
 - **静止场景**：consumer 挂在 `receive()` 上，不持有任何已排程任务。
 
-`clear()` / `setFilters()` 改为只置 `linesDirty = true` + `trySend`，由 publishLoop 统一发布 —— **`_lines` 全程只有一个写入者**，消除今天 `clear()` 与 `onLine()` 并发赋值的竞争。
+`clear()` / `setFilters()` 在 mutex 内改 `ring`/`filtered` 并置 `linesDirty = true` 后，**直接调 `publishOnce()` 立即发布**，不走节流器：
 
-`recomputeFiltered()` 保持 O(N)（spec 明确允许"过滤条件变更 O(N) 重算"），只是不再自己赋值 `_lines`。
+```kotlin
+fun clear() {
+    scope.launch {
+        mutex.withLock { ring.clear(); filtered.clear(); linesDirty = true }
+        publishOnce()
+    }
+}
+```
+
+理由：这两个是用户显式动作，必须立刻可见；而且 `publishLoop` 是 `job` 的子协程（§4.3），流停时它已经死了——若只置脏位，清空/改过滤器会**永远发布不出来**。
+
+因此不变式应表述为"**只有一个发布函数**"（`publishOnce()`，全部在 `mutex` 内快照 `filtered`），而**不是**"只有一个写入者"。今天 `clear()` 与 `onLine()` 并发赋值 `_lines` 的竞争仍然消失（两者都被 `mutex` 串行化，且走同一函数）。
+
+`recomputeFiltered()` 保持 O(N)（spec 明确允许"过滤条件变更 O(N) 重算"），只是不再自己赋值 `_lines`——改为置 `linesDirty = true` 并交给 `publishOnce()`。
 
 ### 4.3 生命周期与可测性
 
