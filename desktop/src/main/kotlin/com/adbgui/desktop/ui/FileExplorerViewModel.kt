@@ -123,6 +123,14 @@ class FileExplorerViewModel(
         } finally { _busy.value = false }
     }
 
-    private val refreshJob: Job = scope.launch { selectedSerial.collect { it?.let { navigate("/") } } }
-    fun stop() { refreshJob.cancel() }
+    // Page-scoped: mounted by onPageEntered() so nothing runs until the page is composed.
+    private var pageJob: Job? = null
+
+    /** 由 [FileExplorerScreen] 的 LaunchedEffect(Unit) 调用——页面可见才列目录（spec §3）。 */
+    fun onPageEntered() {
+        if (pageJob?.isActive == true) return
+        pageJob = scope.launch { selectedSerial.collect { it?.let { navigate("/") } } }
+    }
+
+    fun stop() { pageJob?.cancel(); pageJob = null }
 }

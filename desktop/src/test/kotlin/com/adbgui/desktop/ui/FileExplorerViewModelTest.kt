@@ -29,6 +29,29 @@ class FileExplorerViewModelTest {
         return repo to FileExplorerViewModel(repo, selected, scope)
     }
 
+    @Test fun no_listing_before_page_entered() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("ls", "-la"), AdbProcessResult(0,
+            "drwxrwx--- 2 root root 4096 2020-01-01 12:00 Photos\n", ""))
+        val (repo, vm) = vm(runner, MutableStateFlow<String?>("abc"), this)
+        advanceUntilIdle()
+        assertTrue(runner.runs.none { it.contains("ls") }, "no ls before page entry")
+        // _currentPath 初值就是 "/"（非 null），所以断言 entries 而不是 path。
+        assertTrue(vm.entries.value.isEmpty(), "must not list before page entry")
+        vm.stop(); repo.stop()
+    }
+
+    @Test fun page_entered_lists_root() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("ls", "-la"), AdbProcessResult(0,
+            "drwxrwx--- 2 root root 4096 2020-01-01 12:00 Photos\n-rw-rw---- 1 root root 123 2020-01-01 12:00 test.txt\n", ""))
+        val (repo, vm) = vm(runner, MutableStateFlow<String?>("abc"), this)
+        vm.onPageEntered(); advanceUntilIdle()
+        assertEquals("/", vm.currentPath.value)
+        assertEquals(2, vm.entries.value.size)
+        vm.stop(); repo.stop()
+    }
+
     @Test fun navigate_lists_entries() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("ls", "-la"), AdbProcessResult(0,
