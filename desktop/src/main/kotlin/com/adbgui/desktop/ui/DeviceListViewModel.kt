@@ -76,14 +76,26 @@ class DeviceListViewModel(
     private val _dismissConnect = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val dismissConnect: SharedFlow<Unit> = _dismissConnect.asSharedFlow()
 
+    // One-shot "scroll the device list to this serial" signal. Emitted on successful connect /
+    // reconnect — the repo stamps lastUsedAt there, so the device jumps to the top of its MRU
+    // group; this signal tells the list to scroll it into view. Selection (a bare click) does
+    // NOT emit it — only a real connect does, so merely selecting an offline device no longer
+    // reorders the list. Serial is the repo's wireless serial form: "$ip:$port".
+    private val _scrollToSerial = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val scrollToSerial: SharedFlow<String> = _scrollToSerial.asSharedFlow()
+
     fun connect(ip: String, port: Int, onResult: (ConnectResult) -> Unit = {}) {
         scope.launch {
             _error.value = null
             _busy.value = true
             try {
                 val r = repo.connectWireless(ip, port)
-                if (r.success) _dismissConnect.tryEmit(Unit)
-                else _error.value = formatConnectError(r, ip, port)
+                if (r.success) {
+                    _dismissConnect.tryEmit(Unit)
+                    _scrollToSerial.tryEmit("$ip:$port")
+                } else {
+                    _error.value = formatConnectError(r, ip, port)
+                }
                 onResult(r)
             } finally { _busy.value = false }
         }
@@ -96,7 +108,11 @@ class DeviceListViewModel(
             _busy.value = true
             try {
                 val r = repo.connectWireless(ip, port)
-                if (!r.success) _error.value = formatConnectError(r, ip, port)
+                if (r.success) {
+                    _scrollToSerial.tryEmit("$ip:$port")
+                } else {
+                    _error.value = formatConnectError(r, ip, port)
+                }
             } finally { _busy.value = false }
         }
     }

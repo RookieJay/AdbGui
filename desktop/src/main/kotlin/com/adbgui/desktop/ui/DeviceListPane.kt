@@ -41,12 +41,15 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.UnfoldLess
 import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -164,6 +167,22 @@ fun DeviceListPane(
                         it is DeviceListItem.Device && collapsed[it.groupKey] == true
                     }
                     val listState = rememberLazyListState()
+                    // On successful connect/reconnect the VM emits a serial to scroll into view.
+                    // The repo stamps lastUsedAt on connect success so the device jumps to the top
+                    // of its MRU group, but the tracker only reports it as online a beat later via
+                    // track-devices — then recompute flips isLive and the MRU sort promotes it. Wait
+                    // for that to settle (snapshotFlow re-runs on items/collapsed state changes)
+                    // before scrolling, so we land on the final row, not the pre-sort position.
+                    LaunchedEffect(Unit) {
+                        vm.scrollToSerial.collect { serial ->
+                            val index = snapshotFlow {
+                                items
+                                    .filterNot { it is DeviceListItem.Device && collapsed[it.groupKey] == true }
+                                    .indexOfFirst { it is DeviceListItem.Device && it.view.serial == serial && it.view.isLive }
+                            }.first { it >= 0 }
+                            listState.scrollToItem(index)
+                        }
+                    }
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),

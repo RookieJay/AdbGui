@@ -43,7 +43,9 @@ class DeviceListViewModelTest {
         val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
         var result: ConnectResult? = null
         var dismissed = false
+        var scrolled = false
         val dismissJob = launch { vm.dismissConnect.collect { dismissed = true } }
+        val scrollJob = launch { vm.scrollToSerial.collect { scrolled = true } }
         vm.connect("1.2.3.4", 5555) { result = it }
         // DeviceHistoryStore.upsert/load switch to Dispatchers.IO (real threads); the connect
         // callback only fires after chained IO rounds complete and dispatch back to the test
@@ -59,8 +61,66 @@ class DeviceListViewModelTest {
         // Successful connect must also emit the dismiss signal the ConnectDialog collects to
         // close itself — regression guard for the "dialog didn't dismiss" bug.
         assertTrue(dismissed, "connect success should emit dismissConnect")
+        // And it must emit the scroll-to signal so the device list scrolls the freshly-connected
+        // device into view after it jumps to the top of its MRU group. Selection alone (a bare
+        // click) must NOT stamp lastUsedAt anymore — only a successful connect does — so the list
+        // only reorders+scrolls on real connect success.
+        assertTrue(scrolled, "connect success should emit scrollToSerial")
         dismissJob.cancel()
+        scrollJob.cancel()
         repo.stop()         // cancel the dangling collectLatest collector
+    }
+
+    @Test
+    fun connect_success_emits_scroll_signal() = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(emptyList<DeviceSnapshot>())
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("vm-scroll"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 1.2.3.4:5555", ""))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
+        var result: ConnectResult? = null
+        var scrolled: String? = null
+        val scrollJob = launch { vm.scrollToSerial.collect { scrolled = it } }
+        vm.connect("1.2.3.4", 5555) { result = it }
+        val deadline = System.currentTimeMillis() + 5_000
+        while (result == null && System.currentTimeMillis() < deadline) {
+            advanceUntilIdle()
+            if (result != null) break
+            Thread.sleep(50)
+        }
+        assertTrue(result?.success == true)
+        assertEquals("1.2.3.4:5555", scrolled, "connect success should emit scrollToSerial = ip:port")
+        scrollJob.cancel()
+        repo.stop()
+    }
+
+    @Test
+    fun reconnect_success_emits_scroll_signal() = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(emptyList<DeviceSnapshot>())
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("vm-recon"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 1.2.3.4:5555", ""))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
+        var scrolled: String? = null
+        val scrollJob = launch { vm.scrollToSerial.collect { scrolled = it } }
+        vm.reconnect("1.2.3.4", 5555)
+        val deadline = System.currentTimeMillis() + 5_000
+        while (scrolled == null && System.currentTimeMillis() < deadline) {
+            advanceUntilIdle()
+            if (scrolled != null) break
+            Thread.sleep(50)
+        }
+        assertEquals("1.2.3.4:5555", scrolled, "reconnect success should emit scrollToSerial = ip:port")
+        scrollJob.cancel()
+        repo.stop()
     }
 
     @Test
