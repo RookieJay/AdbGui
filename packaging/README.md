@@ -1,5 +1,7 @@
 # Building ADB GUI distributions
 
+> 自己发布新版本（含 MSI + 便携版 + 自动更新清单上传）见同目录 [`RELEASE.md`](./RELEASE.md)。
+
 ## Prerequisites
 1. **Full JDK 21 with jmods + `jpackage`** (Temurin/Zulu/Corretto — not a JRE). The Android Studio JBR is a JRE-stripped JDK: it runs and compiles the app fine but **does NOT include `jpackage.exe` or jmods**, so packaging will fail with `Failed to check JDK distribution: 'jpackage.exe' is missing`. Install a full JDK 21 (e.g. [Eclipse Temurin 21](https://adoptium.net/temurin/releases/?version=21)) and set `JAVA_HOME` to it before running the commands below.
 2. Run `./gradlew` via the wrapper (no system Gradle needed).
