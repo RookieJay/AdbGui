@@ -252,6 +252,55 @@ class AppConsoleViewModelTest {
         vm.stop(); repo.stop()
     }
 
+    @Test fun exportApk_success_calls_pull_and_sets_message() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("dumpsys", "package"), AdbProcessResult(0, fixture("dumpsys_package_hisense_android9.txt"), ""))
+        runner.whenArgsContains(listOf("pull"), AdbProcessResult(0, "1 file pulled.\n", ""))
+        val selected = MutableStateFlow<String?>("serial1")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.loadDetail("com.dangbeimarket"); advanceUntilIdle()
+        val publicSourceDir = vm.detail.value?.publicSourceDir
+        assertNotNull(publicSourceDir, "detail must expose publicSourceDir for export")
+        vm.exportApk("com.dangbeimarket", "C:/x/app.apk"); advanceUntilIdle()
+        // Verify repo.pull was called with (publicSourceDir, localPath) — adb argv carries both.
+        val pullCalls = runner.runs.filter { it.contains("pull") }
+        assertEquals(1, pullCalls.size, "expected exactly one pull, got ${runner.runs}")
+        val args = pullCalls.first()
+        assertTrue(args.contains(publicSourceDir), "pull must use publicSourceDir: $args")
+        assertTrue(args.contains("C:/x/app.apk"), "pull must use local dest: $args")
+        assertTrue(vm.message.value != null && vm.message.value!!.contains("app.apk"), "success msg with name: ${vm.message.value}")
+        assertNull(vm.error.value)
+        vm.stop(); repo.stop()
+    }
+
+    @Test fun exportApk_failure_sets_error() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("dumpsys", "package"), AdbProcessResult(0, fixture("dumpsys_package_hisense_android9.txt"), ""))
+        runner.whenArgsContains(listOf("pull"), AdbProcessResult(1, "", "remote object does not exist"))
+        val selected = MutableStateFlow<String?>("serial1")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.loadDetail("com.dangbeimarket"); advanceUntilIdle()
+        vm.exportApk("com.dangbeimarket", "C:/x/app.apk"); advanceUntilIdle()
+        assertNotNull(vm.error.value, "expected error on pull failure")
+        assertTrue(vm.message.value == null, "no success message on failure")
+        vm.stop(); repo.stop()
+    }
+
+    @Test fun exportApk_no_source_dir_sets_error_without_pull() = runTest {
+        val runner = FakeAdbProcessRunner()
+        // dumpsys output with no publicSourceDir/resourcePath line → parser yields null publicSourceDir.
+        runner.whenArgsContains(listOf("dumpsys", "package"), AdbProcessResult(0,
+            "Packages:\n  Package [com.x] (0):\n    codePath=/data/app/com.x\n    versionName=1\n", ""))
+        val selected = MutableStateFlow<String?>("serial1")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.loadDetail("com.x"); advanceUntilIdle()
+        assertNull(vm.detail.value?.publicSourceDir, "fixture must have no publicSourceDir")
+        vm.exportApk("com.x", "C:/x.apk"); advanceUntilIdle()
+        assertNotNull(vm.error.value, "expected error when publicSourceDir is null")
+        assertTrue(runner.runs.none { it.contains("pull") }, "no pull call when no source dir")
+        vm.stop(); repo.stop()
+    }
+
     @Test fun switching_serial_clears_dumpsys_cache() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("dumpsys", "package"), AdbProcessResult(0, fixture("dumpsys_package_hisense_android9.txt"), ""))

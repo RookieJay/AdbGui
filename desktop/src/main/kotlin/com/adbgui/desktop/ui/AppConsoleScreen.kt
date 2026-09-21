@@ -285,7 +285,7 @@ fun AppConsoleScreen(
                                 onClick = { selectedPkg = pkg.name },
                             )
                             if (expandedPkg == pkg.name) {
-                                AppDetailBlock(vm)
+                                AppDetailBlock(vm, pkg.name)
                             }
                             Divider()
                         }
@@ -426,10 +426,11 @@ private fun PackageSelectRow(
 }
 
 @Composable
-private fun AppDetailBlock(vm: AppConsoleViewModel) {
+private fun AppDetailBlock(vm: AppConsoleViewModel, pkg: String) {
     val detail by vm.detail.collectAsState()
     val busy by vm.detailBusy.collectAsState()
     val err by vm.detailError.collectAsState()
+    val consoleBusy by vm.busy.collectAsState()
     Column(Modifier.padding(start = 24.dp, top = 4.dp, bottom = 4.dp)) {
         SelectionContainer {
             Column {
@@ -451,6 +452,21 @@ private fun AppDetailBlock(vm: AppConsoleViewModel) {
                             Text("${Strings.t("apk_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
                             IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
                                 Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
+                            }
+                            // Export APK: adb pull <publicSourceDir> → user-chosen local file.
+                            // Save dialog lives in platform FileDialogs (UI layer owns OS pickers,
+                            // VM owns the pull). Disabled while any console op is running.
+                            IconButton(
+                                enabled = !consoleBusy,
+                                onClick = {
+                                    val dest = com.adbgui.desktop.platform.FileDialogs.saveFile(
+                                        title = Strings.t("export_apk_save_title"),
+                                        defaultName = "$pkg.apk",
+                                    )
+                                    if (dest != null) vm.exportApk(pkg, dest)
+                                },
+                            ) {
+                                Icon(Icons.Filled.Download, contentDescription = Strings.t("export_apk"), modifier = Modifier.size(16.dp))
                             }
                         }
                     }

@@ -143,6 +143,24 @@ class AppConsoleViewModel(
         finally { _busy.value = false }
     }
 
+    /** Export the selected package's APK to a local path via `adb pull` of its [DumpsysPackage.publicSourceDir].
+     *  The save-path dialog is handled by the UI (FileDialogs, `:desktop/platform`); the VM only
+     *  receives the chosen [destPath] and performs the pull. No source dir → inline error, no pull. */
+    fun exportApk(pkg: String, destPath: String) = scope.launch {
+        val serial = selectedSerial.value ?: return@launch
+        _busy.value = true; _error.value = null; _message.value = null
+        try {
+            val sourceDir = cachedOrLoad(serial, pkg).publicSourceDir
+                ?: throw IllegalStateException(Strings.t("export_apk_no_path"))
+            repo.pull(serial, sourceDir, destPath)
+            _message.value = Strings.t("export_apk_success").format(destPath)
+        } catch (e: AdbCommandException) {
+            _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
+        } catch (e: Exception) {
+            _error.value = e.message ?: "unknown error"
+        } finally { _busy.value = false }
+    }
+
     fun loadDetail(pkg: String) = scope.launch {
         val serial = selectedSerial.value ?: return@launch
         _detailBusy.value = true; _detailError.value = null
