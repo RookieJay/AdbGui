@@ -17,3 +17,10 @@
 ## MSI installer (per-user, Start menu shortcut) — requires WiX + full JDK
 ./gradlew :desktop:packageMsi
 # Output: desktop/build/compose/binaries/main/msi/AdbGui-1.0.0.msi
+
+> **不要"以管理员身份"运行 MSI**（右键 run as admin）。per-user 包提升安装会把 ARP 卸载项
+> 写进 HKLM 并留下与后续非提升升级不一致的上下文——之后应用内升级若触发同版本重装
+> （jpackage 的 ProductCode 由 应用名+版本 派生，同版本必同 ProductCode），Windows Installer
+> 每个被覆盖文件的备份都会弹一个 Error 1926 模态框（2026-09-22 实测 25 连弹）。正常双击安装、
+> 应用内升级都无需管理员；升级遇到报错的 `<盘符>\Config.Msi` 残留时才需要管理员删除它。
+> 详见 CHANGELOG「升级体验修复」节。

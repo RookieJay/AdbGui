@@ -6,6 +6,9 @@ import com.adbgui.core.update.UpdateChecker
 import com.adbgui.core.update.UpdateDownloadResult
 import com.adbgui.core.update.UpdateDownloader
 import com.adbgui.core.update.UpdateManifestFetcher
+import com.adbgui.desktop.platform.InstalledAppInfo
+import com.adbgui.desktop.platform.InstalledAppLauncher
+import com.adbgui.desktop.platform.InstalledAppVersionProbe
 import com.adbgui.desktop.platform.MsiUpgrader
 import com.adbgui.desktop.platform.PortableUpdateNotifier
 import com.adbgui.desktop.ui.SettingsViewModel
@@ -50,6 +53,19 @@ class UpdateViewModelTest {
         override fun launch(msiPath: String) { launched = msiPath }
     }
 
+    private class FakeProbe(private val info: InstalledAppInfo?) : InstalledAppVersionProbe {
+        override fun probe(): InstalledAppInfo? = info
+    }
+
+    private class FakeAppLauncher : InstalledAppLauncher() {
+        var launched: String? = null
+        override fun launch(exePath: String) { launched = exePath }
+    }
+
+    private class ThrowingAppLauncher : InstalledAppLauncher() {
+        override fun launch(exePath: String) { throw RuntimeException("spawn failed") }
+    }
+
     private class FakeNotifier : PortableUpdateNotifier() {
         var opened: String? = null
         override fun openDownloadPage(url: String) { opened = url }
@@ -65,13 +81,15 @@ class UpdateViewModelTest {
         downloader: UpdateDownloader = FakeDownloader(UpdateDownloadResult.Success("/tmp/x.msi")),
         msiUpgrader: MsiUpgrader = MsiUpgrader(),
         notifier: PortableUpdateNotifier = PortableUpdateNotifier(),
-        exit: (Int) -> Nothing = { throw RuntimeException("exit") },
+        installedProbe: InstalledAppVersionProbe = FakeProbe(null),
+        appLauncher: InstalledAppLauncher = FakeAppLauncher(),
+        exit: (Int) -> Nothing = { throw CancellationException("exit ${it}") },
         io: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
     ): Triple<UpdateViewModel, SettingsStore, UpdateChecker> {
         val dir = Files.createTempDirectory("uvm")
         val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val checker = UpdateChecker(FakeFetcher(fetcherText), current, NoopLogger)
-        return Triple(UpdateViewModel(checker, store, scope, downloader, msiUpgrader, notifier, exit, io), store, checker)
+        return Triple(UpdateViewModel(checker, store, scope, downloader, msiUpgrader, notifier, installedProbe, appLauncher, exit, io), store, checker)
     }
 
     @Test fun check_finds_update() = runTest {
@@ -147,12 +165,91 @@ class UpdateViewModelTest {
         val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
             downloader = FakeDownloader(UpdateDownloadResult.Success("/tmp/x.msi")),
             msiUpgrader = msi,
-            exit = { exited = it; throw RuntimeException("exit") })
+            exit = { exited = it; throw CancellationException("exit") })
         vm.checkForUpdates(); advanceUntilIdle()
         vm.downloadUpdate(); advanceUntilIdle()
-        try { vm.installNow(); advanceUntilIdle() } catch (e: RuntimeException) {}
+        vm.installNow(); advanceUntilIdle()
         assertEquals("/tmp/x.msi", msi.launched)
         assertEquals(0, exited)
+    }
+
+    @Test fun install_now_skips_msi_when_target_already_installed() = runTest {
+        // 机器上已装 1.1.0（同版本 ProductCode → 维护重装会弹 1926 风暴）→ 直接启动已装新版
+        val installDir = Files.createTempDirectory("installed")
+        Files.createFile(installDir.resolve("AdbGui.exe"))
+        var exited = -1
+        val msi = FakeMsiUpgrader()
+        val launcher = FakeAppLauncher()
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
+            msiUpgrader = msi,
+            installedProbe = FakeProbe(InstalledAppInfo("1.1.0", installDir.toAbsolutePath().toString())),
+            appLauncher = launcher,
+            exit = { exited = it; throw CancellationException("exit") })
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate(); advanceUntilIdle()
+        vm.installNow(); advanceUntilIdle()
+        assertEquals(null, msi.launched)
+        assertEquals(installDir.resolve("AdbGui.exe").toAbsolutePath().toString(), launcher.launched)
+        assertEquals(0, exited)
+    }
+
+    @Test fun install_now_skips_msi_when_installed_version_is_newer() = runTest {
+        val installDir = Files.createTempDirectory("installed-newer")
+        Files.createFile(installDir.resolve("AdbGui.exe"))
+        val msi = FakeMsiUpgrader()
+        val launcher = FakeAppLauncher()
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
+            msiUpgrader = msi,
+            installedProbe = FakeProbe(InstalledAppInfo("1.2.0", installDir.toAbsolutePath().toString())),
+            appLauncher = launcher,
+            exit = { throw CancellationException("exit") })
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate(); advanceUntilIdle()
+        vm.installNow(); advanceUntilIdle()
+        assertEquals(null, msi.launched)
+        assertEquals(installDir.resolve("AdbGui.exe").toAbsolutePath().toString(), launcher.launched)
+    }
+
+    @Test fun install_now_runs_msi_when_installed_version_is_older() = runTest {
+        val installDir = Files.createTempDirectory("installed-older")
+        Files.createFile(installDir.resolve("AdbGui.exe"))
+        val msi = FakeMsiUpgrader()
+        val launcher = FakeAppLauncher()
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
+            msiUpgrader = msi,
+            installedProbe = FakeProbe(InstalledAppInfo("1.0.5", installDir.toAbsolutePath().toString())),
+            appLauncher = launcher,
+            exit = { throw CancellationException("exit") })
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate(); advanceUntilIdle()
+        vm.installNow(); advanceUntilIdle()
+        assertEquals("/tmp/x.msi", msi.launched)
+        assertEquals(null, launcher.launched)
+    }
+
+    @Test fun install_now_no_exe_found_sets_error() = runTest {
+        // ARP 无 InstallLocation 且 dev 运行（无 resources.dir），找不到 exe → 内联报错，不退出
+        val emptyDir = Files.createTempDirectory("installed-noexe")
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
+            installedProbe = FakeProbe(InstalledAppInfo("1.1.0", emptyDir.toAbsolutePath().toString())))
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate(); advanceUntilIdle()
+        vm.installNow(); advanceUntilIdle()
+        val s = assertIs<UpdateState.Error>(vm.state.value)
+        assertTrue(s.message.isNotEmpty())
+    }
+
+    @Test fun install_now_launch_failure_sets_error() = runTest {
+        val installDir = Files.createTempDirectory("installed-launchfail")
+        Files.createFile(installDir.resolve("AdbGui.exe"))
+        val (vm, _, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0",
+            installedProbe = FakeProbe(InstalledAppInfo("1.1.0", installDir.toAbsolutePath().toString())),
+            appLauncher = ThrowingAppLauncher())
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate(); advanceUntilIdle()
+        vm.installNow(); advanceUntilIdle()
+        val s = assertIs<UpdateState.Error>(vm.state.value)
+        assertTrue(s.message.contains("spawn failed"))
     }
 
     @Test fun open_download_page() = runTest {
@@ -189,8 +286,8 @@ class UpdateViewModelTest {
             UpdateChecker(FakeFetcher(manifestJson("1.1.0")), "1.0.0", NoopLogger),
             store, this,
             FakeDownloader(UpdateDownloadResult.Success("/tmp/x.msi")),
-            MsiUpgrader(), PortableUpdateNotifier(),
-            exit = { throw RuntimeException("exit") },
+            MsiUpgrader(), PortableUpdateNotifier(), FakeProbe(null), FakeAppLauncher(),
+            exit = { throw CancellationException("exit") },
         )
         advanceUntilIdle() // populate settingsVm.settings via init load
         updateVm.checkForUpdates(); advanceUntilIdle()
@@ -225,7 +322,8 @@ class UpdateViewModelTest {
         val downloader = FakeDownloader(UpdateDownloadResult.Success(msiFile.absolutePath))
         fun mkVm() = UpdateViewModel(
             UpdateChecker(fetcher, "1.0.0", NoopLogger), store, this, downloader,
-            MsiUpgrader(), PortableUpdateNotifier(), { throw RuntimeException("exit") }, kotlinx.coroutines.Dispatchers.Unconfined,
+            MsiUpgrader(), PortableUpdateNotifier(), FakeProbe(null), FakeAppLauncher(),
+            { throw CancellationException("exit") }, kotlinx.coroutines.Dispatchers.Unconfined,
         )
         val vm1 = mkVm()
         vm1.checkForUpdates(); advanceUntilIdle()
@@ -254,7 +352,8 @@ class UpdateViewModelTest {
         val downloader = FakeDownloader(UpdateDownloadResult.Success(msiFile.absolutePath))
         fun mkVm() = UpdateViewModel(
             UpdateChecker(fetcher, "1.0.0", NoopLogger), store, this, downloader,
-            MsiUpgrader(), PortableUpdateNotifier(), { throw RuntimeException("exit") }, kotlinx.coroutines.Dispatchers.Unconfined,
+            MsiUpgrader(), PortableUpdateNotifier(), FakeProbe(null), FakeAppLauncher(),
+            { throw CancellationException("exit") }, kotlinx.coroutines.Dispatchers.Unconfined,
         )
         val vm1 = mkVm()
         vm1.checkForUpdates(); advanceUntilIdle()

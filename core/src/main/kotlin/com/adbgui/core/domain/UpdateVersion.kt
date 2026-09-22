@@ -21,6 +21,9 @@ data class UpdateVersion(
         return comparePrerelease(prerelease, other.prerelease) > 0
     }
 
+    fun isAtLeast(other: UpdateVersion): Boolean =
+        this == other || isGreaterThan(other)
+
     private fun comparePrerelease(a: String, b: String): Int {
         val sa = a.split(".")
         val sb = b.split(".")

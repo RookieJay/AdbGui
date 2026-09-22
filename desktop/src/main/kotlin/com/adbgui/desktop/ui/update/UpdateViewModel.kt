@@ -8,6 +8,9 @@ import com.adbgui.core.update.UpdateDownloader
 import com.adbgui.core.update.UpdateManifest
 import com.adbgui.core.update.UpdateSource
 import com.adbgui.core.update.UpdateSourceRegistry
+import com.adbgui.core.update.UpdateVersionComparer
+import com.adbgui.desktop.platform.InstalledAppLauncher
+import com.adbgui.desktop.platform.InstalledAppVersionProbe
 import com.adbgui.desktop.platform.MsiUpgrader
 import com.adbgui.desktop.platform.PortableUpdateNotifier
 import com.adbgui.desktop.ui.i18n.Strings
@@ -20,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.nio.file.Files
 import java.security.MessageDigest
 import kotlin.system.exitProcess
@@ -42,6 +46,8 @@ class UpdateViewModel(
     private val downloader: UpdateDownloader,
     private val msiUpgrader: MsiUpgrader,
     private val notifier: PortableUpdateNotifier,
+    private val installedProbe: InstalledAppVersionProbe,
+    private val appLauncher: InstalledAppLauncher,
     private val exit: (Int) -> Nothing = ::exitProcess,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
@@ -129,14 +135,47 @@ class UpdateViewModel(
         _state.value = UpdateState.Installing
         // Clear persisted Ready state — the install is launching; on next launch (post-upgrade)
         // the check will be NoUpdate, and a stale ready entry shouldn't linger.
-        scope.launch { store.update { it.copy(update = it.update.copy(readyMsiPath = null, readyVersion = null, readySha256 = null)) } }
-        try {
-            msiUpgrader.launch(s.msiPath)
-        } catch (t: Throwable) {
-            _state.value = UpdateState.Error(t.message ?: "install failed")
-            return
+        scope.launch {
+            store.update { it.copy(update = it.update.copy(readyMsiPath = null, readyVersion = null, readySha256 = null)) }
+            // 目标（或更新）版本可能已经装在本机（比如用户在旧实例还运行时手动装了新 MSI）。
+            // jpackage 按 应用名+版本 派生 ProductCode，同版本 MSI 再跑 msiexec 是"维护重装"：
+            // 每个被覆盖的文件都备份进 <盘符>\Config.Msi\*.rbf 并弹一个 Error 1926 模态框
+            // （提升装/非提升升的上下文不一致时必弹，2026-09-22 实测 25 连弹）。
+            // 此时跳过安装器，直接启动已装的新版。详见 InstalledAppVersionProbe。
+            val installed = withContext(io) { runCatching { installedProbe.probe() }.getOrNull() }
+            if (installed != null && UpdateVersionComparer.isAtLeast(installed.version, s.manifest.version)) {
+                val exe = withContext(io) { findInstalledExe(installed.installLocation) }
+                if (exe == null) {
+                    _state.value = UpdateState.Error(Strings.t("update_already_installed_no_exe"))
+                    return@launch
+                }
+                try {
+                    appLauncher.launch(exe)
+                } catch (t: Throwable) {
+                    _state.value = UpdateState.Error(
+                        Strings.t("update_already_installed_launch_failed").format(t.message ?: "unknown"))
+                    return@launch
+                }
+                exit(0)
+            }
+            try {
+                msiUpgrader.launch(s.msiPath)
+            } catch (t: Throwable) {
+                _state.value = UpdateState.Error(t.message ?: "install failed")
+                return@launch
+            }
+            exit(0)
         }
-        exit(0)
+    }
+
+    /** 已装新版的 AdbGui.exe：优先 ARP 的 InstallLocation，其次本实例自身安装目录（打包运行）。 */
+    private fun findInstalledExe(installLocation: String?): String? {
+        val ownInstallDir = System.getProperty("compose.application.resources.dir")
+            ?.let { File(it).parentFile?.path }
+        return listOfNotNull(installLocation, ownInstallDir)
+            .map { File(it, "AdbGui.exe") }
+            .firstOrNull { it.isFile }
+            ?.absolutePath
     }
 
     fun openDownloadPage(): Job = scope.launch {

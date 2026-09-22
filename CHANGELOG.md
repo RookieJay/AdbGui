@@ -3,6 +3,21 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 升级体验修复：记忆安装目录 + 防同版本重装 1926 风暴 (2026-09-22)
+
+发布 1.2.1 后真机走升级流程踩出的两个问题，根因全部实测取证（事件日志 MsiInstaller + jpackage WiX 模板源码 + MSI 数据库 Property 表）：
+
+**问题 A — 升级不记忆自定义安装目录**。jpackage 生成的 MSI 模板（`main.wxs`）只有 `JpSetARPINSTALLLOCATION` 把本次安装路径写进卸载表，**没有 RegistrySearch 回读旧安装位置**；且升级走 `RemoveExistingProducts Before=CostInitialize`（先卸后装、全新 cost），`INSTALLDIR` 无人赋值就回落默认——`perUserInstall` 下默认 `%LocalAppData%\AdbGui`（C 盘）。这是 jpackage MSI 的能力缺失，不是 bug。
+**修复**：`MsiUpgrader.buildCommand` 把当前安装目录（打包运行时 Compose 启动器设的 `compose.application.resources.dir` 的父目录；`desktopRun` 下为 null → 不传）作为公共属性 `INSTALLDIR=` 传给 msiexec，目录选择页会预填、装回原目录。
+
+**问题 B — 同目录重装弹 25 个 Error 1926 模态框**。jpackage 的 `ProductCode` 由 应用名+版本 确定性生成 → 同版本 MSI 对已装同版本产品再跑 msiexec 是"**维护重装**"：每个被覆盖的文件先备份成 `<盘符>\Config.Msi\*.rbf` 并逐个设置安全描述符；若先前是提升安装（ARP 卸载项在 HKLM——per-user 产品 + 提升安装的特征）而本次非提升，每个文件弹一个 `Error 1926. Could not set file security ... Error: 5`（2026-09-22 实测 25 连弹，Esc 全关掉后安装仍能完成）。触发场景：旧实例还运行时新版已手动装好（用户自测必踩；真实用户"手动装完再点升级"也会踩）。
+**修复**：`installNow()` 先探测本机已装版本（`InstalledAppVersionProbe` → `RegInstalledAppVersionProbe` 走 reg.exe 查 HKCU/HKLM64/WOW6432Node 三个卸载表根，`RegQueryParser` 纯函数解析、fixture 录制自本机 zh-CN reg.exe 输出、无视本地化汇总行）；若 `已装版本 ≥ manifest 版本`（复用 `:core` `UpdateVersionComparer.isAtLeast`，新增）→ 跳过安装器，直接从 ARP `InstallLocation`（兜底本实例 `resources.dir` 父目录）启动已装 `AdbGui.exe` 并退出旧实例；找不到 exe / 启动失败 → 内联 Error（`update_already_installed_no_exe` / `update_already_installed_launch_failed`，zh+en）。真正的大版本升级（ProductCode 不同 → `RemoveExistingProducts` 路径，无逐文件备份）不受影响，走原 msiexec 路径。
+**installNow 顺带协程化**：探测是 IO（reg.exe 子进程 + exe 存在性检查），整个 install 移入 `scope.launch` + `withContext(io)`，`Installing` 状态覆盖探测间隙。测试里 exit 用 `CancellationException`（真实 `RuntimeException` 会把 runTest 打挂）。
+
+**测试**：`:core` `UpdateVersionComparerTest` +6（isAtLeast 相等/更新/更旧/release≥prerelease/prerelease<release/非法串）；`:desktop` 新增 `RegQueryParserTest`（8 条，fixture 注释标明录制命令）+ `MsiUpgraderTest`（传/不传 INSTALLDIR，@AfterTest 还原系统属性）+ `UpdateViewModelTest` +5（已装同版本→启动已装 exe 且不跑 msiexec / 已装更新→跳过 / 已装更旧→走 msiexec / 找不到 exe→Error / 启动失败→Error 含原因）。
+
+**运维注记**：勿以管理员身份运行 MSI（会留下 HKLM ARP + 上下文不一致，为 1926 风暴埋雷）；升级统一走应用内非提升路径。现场已有锁死的 `<盘符>\Config.Msi` 残留时需管理员删除。
+
 ## v2 — 页面驱动加载 + logcat 增量发布 (branch `feat/page-driven-loading`, 2026-09-16)
 
 排查"启动后不做任何操作，任务管理器占用涨到约 1250MB"得出的四项修复。完整实测数据见 `docs/superpowers/specs/2026-09-16-page-driven-loading-and-logcat-publish-design.md` §1.1。
