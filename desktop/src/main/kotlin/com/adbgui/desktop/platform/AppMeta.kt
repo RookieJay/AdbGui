@@ -5,5 +5,5 @@ package com.adbgui.desktop.platform
  * 改版本时同步改 desktop/build.gradle.kts 的 packageVersion（两处需一致）。
  */
 object AppMeta {
-    const val APP_VERSION = "1.0.0"
+    const val APP_VERSION = "1.2.1"
 }

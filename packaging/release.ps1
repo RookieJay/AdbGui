@@ -2,8 +2,10 @@
 # sha256, generate latest.json (with portableUrl), and zip the portable dir.
 # After running, create the GitHub release (tag v<VERSION>) and upload the generated assets.
 #
-# Usage:   pwsh packaging/release.ps1 -Version 1.2.0
-#   (or from PowerShell: .\packaging\release.ps1 1.2.0)
+# Usage:   packaging\release.bat 1.2.0          (cmd / Windows Terminal — recommended)
+#          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\release.ps1 -Version 1.2.0
+#          pwsh packaging\release.ps1 -Version 1.2.0   (if PowerShell 7 is installed)
+# Compatible with both Windows PowerShell 5.1 (powershell.exe) and PowerShell 7 (pwsh).
 #
 # Prerequisites:
 #   - Full JDK 21 with jpackage on JAVA_HOME (Temurin at D:\software\jdk-21.0.12.1+1 by default;
@@ -53,10 +55,15 @@ $tag = "v$Version"
 $assetBase = "https://github.com/$repo/releases/download/$tag"
 
 Write-Host "==> Bumping version to $Version in build.gradle.kts + AppMeta.kt"
-(Get-Content $gradleFile) -replace 'packageVersion = "[^"]*"', "packageVersion = `"$Version`"" |
-    Set-Content $gradleFile
-(Get-Content $appMetaFile) -replace 'APP_VERSION = "[^"]*"', "APP_VERSION = `"$Version`"" |
-    Set-Content $appMetaFile
+# Read/write as UTF-8 (no BOM): PS 5.1 Get-Content/Set-Content would round-trip as ANSI
+# (GBK on zh-CN) and corrupt the Chinese comments in these files.
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+foreach ($f in @($gradleFile, $appMetaFile)) {
+    $text = [System.IO.File]::ReadAllText("$root\$f", [System.Text.Encoding]::UTF8)
+    $text = $text -replace 'packageVersion = "[^"]*"', "packageVersion = `"$Version`"" `
+                      -replace 'APP_VERSION = "[^"]*"', "APP_VERSION = `"$Version`""
+    [System.IO.File]::WriteAllText("$root\$f", $text, $utf8NoBom)
+}
 Select-String -Path $gradleFile, $appMetaFile -Pattern 'packageVersion|APP_VERSION'
 
 Write-Host "==> Building MSI + AppImage (JAVA_HOME=$env:JAVA_HOME)"

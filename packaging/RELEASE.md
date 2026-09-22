@@ -62,8 +62,8 @@ popd >/dev/null
 ```bash
 # Git Bash
 ./packaging/release.sh 1.2.0
-# 或 PowerShell
-pwsh packaging/release.ps1 -Version 1.2.0
+# 或 cmd / Windows 终端 / Android Studio 内置终端（无需装 pwsh）
+packaging\release.bat 1.2.0
 ```
 
 脚本跑完会输出三个产物（路径在 `desktop/build/compose/binaries/main/`）：
