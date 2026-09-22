@@ -1,10 +1,13 @@
-# Release helper (Windows native PowerShell): bump version, build MSI + AppImage, compute
+# Release helper (Windows native PowerShell): build MSI + AppImage, compute
 # sha256, generate latest.json (with portableUrl), and zip the portable dir.
+# The version comes from gradle.properties (single source of truth) — edit
+# `version=` there, then run this script.
 # After running, create the GitHub release (tag v<VERSION>) and upload the generated assets.
 #
-# Usage:   packaging\release.bat 1.2.0          (cmd / Windows Terminal — recommended)
-#          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\release.ps1 -Version 1.2.0
-#          pwsh packaging\release.ps1 -Version 1.2.0   (if PowerShell 7 is installed)
+# Usage:   packaging\release.bat                 (version read from gradle.properties)
+#          packaging\release.bat 1.2.0           (optional: must match gradle.properties)
+#          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\release.ps1
+#          pwsh packaging\release.ps1            (if PowerShell 7 is installed)
 # Compatible with both Windows PowerShell 5.1 (powershell.exe) and PowerShell 7 (pwsh).
 #
 # Prerequisites:
@@ -13,15 +16,11 @@
 #   - WiX on PATH for MSI (the Compose plugin auto-downloads it; install manually if blocked).
 #   - git remote origin points to the GitHub repo (used to derive release asset URLs).
 param(
-    [Parameter(Mandatory = $true, Position = 0)]
+    [Parameter(Position = 0)]
     [string]$Version
 )
 
 $ErrorActionPreference = 'Stop'
-
-if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.\-]+)?$') {
-    Write-Error "invalid version: $Version (expected X.Y.Z)"; exit 2
-}
 
 if (-not $env:JAVA_HOME) { $env:JAVA_HOME = 'D:\software\jdk-21.0.12.1+1' }
 if (-not (Test-Path "$env:JAVA_HOME\bin\jpackage.exe")) {
@@ -36,8 +35,21 @@ if (-not (Test-Path "$env:JAVA_HOME\bin\jpackage.exe")) {
 $root = (git rev-parse --show-toplevel)
 Set-Location $root
 
-$gradleFile = 'desktop\build.gradle.kts'
-$appMetaFile = 'desktop\src\main\kotlin\com\adbgui\desktop\platform\AppMeta.kt'
+# Version single source of truth: root gradle.properties. Read as UTF-8 (no BOM).
+$propsText = [System.IO.File]::ReadAllText("$root\gradle.properties", [System.Text.Encoding]::UTF8)
+if ($propsText -notmatch '(?m)^version\s*=\s*(\S+)\s*$') {
+    Write-Error "version= not found in gradle.properties (single source of truth)"; exit 2
+}
+$gradleVersion = $Matches[1]
+if ($Version -and $Version -ne $gradleVersion) {
+    Write-Error "requested $Version but gradle.properties says $gradleVersion; edit gradle.properties instead (single source of truth)"; exit 2
+}
+$Version = $gradleVersion
+if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.\-]+)?$') {
+    Write-Error "invalid version: $Version (expected X.Y.Z)"; exit 2
+}
+Write-Host "==> Releasing version $Version (from gradle.properties)"
+
 $buildDir = 'desktop\build\compose\binaries\main'
 $msi = "$buildDir\msi\AdbGui-$Version.msi"
 $appImageDir = "$buildDir\app\AdbGui"
@@ -53,18 +65,6 @@ if ($remote -match 'github\.com[:/]([^/]+/[^/]+?)(\.git)?$') {
 }
 $tag = "v$Version"
 $assetBase = "https://github.com/$repo/releases/download/$tag"
-
-Write-Host "==> Bumping version to $Version in build.gradle.kts + AppMeta.kt"
-# Read/write as UTF-8 (no BOM): PS 5.1 Get-Content/Set-Content would round-trip as ANSI
-# (GBK on zh-CN) and corrupt the Chinese comments in these files.
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-foreach ($f in @($gradleFile, $appMetaFile)) {
-    $text = [System.IO.File]::ReadAllText("$root\$f", [System.Text.Encoding]::UTF8)
-    $text = $text -replace 'packageVersion = "[^"]*"', "packageVersion = `"$Version`"" `
-                      -replace 'APP_VERSION = "[^"]*"', "APP_VERSION = `"$Version`""
-    [System.IO.File]::WriteAllText("$root\$f", $text, $utf8NoBom)
-}
-Select-String -Path $gradleFile, $appMetaFile -Pattern 'packageVersion|APP_VERSION'
 
 Write-Host "==> Building MSI + AppImage (JAVA_HOME=$env:JAVA_HOME)"
 & .\gradlew.bat :desktop:packageMsi :desktop:packageAppImage
@@ -113,7 +113,7 @@ Write-Host "    latest.json:  $latestJson"
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  1. Commit + tag + push:"
-Write-Host "       git add desktop\build.gradle.kts desktop\src\main\kotlin\com\adbgui\desktop\platform\AppMeta.kt"
+Write-Host "       git add gradle.properties"
 Write-Host "       git commit -m `"release: bump version to $Version`""
 Write-Host "       git tag $tag"
 Write-Host "       git push origin master $tag"

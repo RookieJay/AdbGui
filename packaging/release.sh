@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Release helper: bump version, build MSI + AppImage, compute sha256, generate latest.json,
-# and zip the portable (AppImage) dir. After this script, you only need to create the GitHub
-# release (tag v<VERSION>) and upload the generated assets.
+# Release helper: build MSI + AppImage, compute sha256, generate latest.json, and zip
+# the portable (AppImage) dir. The version comes from gradle.properties (single source
+# of truth) — edit `version=` there, then run this script. After this script, you only
+# need to create the GitHub release (tag v<VERSION>) and upload the generated assets.
 #
-# Usage: ./packaging/release.sh 1.2.0
+# Usage: ./packaging/release.sh            (version read from gradle.properties)
+#        ./packaging/release.sh 1.2.0      (optional: must match gradle.properties)
 #
 # Prerequisites:
 #   - Full JDK 21 with jpackage on JAVA_HOME (Temurin at D:\software\jdk-21.0.12.1+1 by default;
@@ -13,7 +15,19 @@
 #   - git remote origin points to the GitHub repo (used to derive the release asset URLs).
 set -euo pipefail
 
-VERSION="${1:?usage: release.sh <version> e.g. 1.2.0}"
+VERSION="${1:-}"
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+
+# Version single source of truth: root gradle.properties.
+GRADLE_PROPS_VERSION=$(sed -n 's/^version[[:space:]]*=[[:space:]]*//p' gradle.properties | tr -d '\r' | head -n1)
+[[ -n "$GRADLE_PROPS_VERSION" ]] || {
+  echo "version= not found in gradle.properties (single source of truth)" >&2; exit 2; }
+if [[ -n "$VERSION" && "$VERSION" != "$GRADLE_PROPS_VERSION" ]]; then
+  echo "requested $VERSION but gradle.properties says $GRADLE_PROPS_VERSION; edit gradle.properties instead (single source of truth)" >&2; exit 2
+fi
+VERSION="$GRADLE_PROPS_VERSION"
+echo "==> Releasing version $VERSION (from gradle.properties)"
 # Validate semver-ish (X.Y.Z, optional -prerelease).
 [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.\-]+)?$ ]] || {
   echo "invalid version: $VERSION (expected X.Y.Z)" >&2; exit 2; }
@@ -29,9 +43,6 @@ if [[ ! -x "$JAVA_HOME/bin/jpackage.exe" ]]; then
   fi
 fi
 
-ROOT=$(git rev-parse --show-toplevel)
-cd "$ROOT"
-
 GRADLE="./gradlew"
 BUILD_DIR="desktop/build/compose/binaries/main"
 MSI="$BUILD_DIR/msi/AdbGui-$VERSION.msi"
@@ -45,12 +56,6 @@ REPO=$(printf '%s' "$REMOTE" | sed 's|^.*github\.com/||; s|\.git$||')
 [[ "$REPO" == */* ]] || { echo "could not parse owner/repo from origin: $REMOTE" >&2; exit 2; }
 TAG="v$VERSION"
 ASSET_BASE="https://github.com/$REPO/releases/download/$TAG"
-
-echo "==> Bumping version to $VERSION in build.gradle.kts + AppMeta.kt"
-# Use perl for portable in-place edit (works on Windows git bash; sed -i variants differ).
-perl -i -pe "s/(packageVersion = \")[^\"]*(\")/\\1$VERSION\\2/" desktop/build.gradle.kts
-perl -i -pe "s/(APP_VERSION = \")[^\"]*(\")/\\1$VERSION\\2/" desktop/src/main/kotlin/com/adbgui/desktop/platform/AppMeta.kt
-grep -n "packageVersion\|APP_VERSION" desktop/build.gradle.kts desktop/src/main/kotlin/com/adbgui/desktop/platform/AppMeta.kt
 
 echo "==> Building MSI + AppImage (JAVA_HOME=$JAVA_HOME)"
 "$GRADLE" :desktop:packageMsi :desktop:packageAppImage
@@ -94,7 +99,7 @@ echo "    latest.json:  $LATEST_JSON"
 echo
 echo "Next steps:"
 echo "  1. Commit + tag + push:"
-echo "       git add desktop/build.gradle.kts desktop/src/main/kotlin/com/adbgui/desktop/platform/AppMeta.kt"
+echo "       git add gradle.properties"
 echo "       git commit -m 'release: bump version to $VERSION'"
 echo "       git tag $TAG"
 echo "       git push origin master $TAG"

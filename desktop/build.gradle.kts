@@ -34,7 +34,9 @@ compose.desktop.application {
     nativeDistributions {
         targetFormats(TargetFormat.Msi, TargetFormat.AppImage)
         packageName = "AdbGui"
-        packageVersion = "1.2.1"  // keep in sync with AppMeta.APP_VERSION
+        // 版本唯一真相源是根 gradle.properties 的 version=…。MSI 的 ProductVersion 只接受
+        // 数字段，预发布后缀（如 -rc.1）剥掉后再给 jpackage。
+        packageVersion = project.version.toString().substringBefore('-')
         windows {
             dirChooser = true
             perUserInstall = true
@@ -60,3 +62,14 @@ afterEvaluate {
     tasks.findByName("packageAppImage")?.finalizedBy(copyBundledAdb)
     tasks.findByName("packageReleaseAppImage")?.finalizedBy(copyBundledAdb)
 }
+
+// Generates /version.properties from the gradle project version (truth source: root
+// gradle.properties). AppMeta.APP_VERSION reads it at runtime for the update check,
+// so bumping the version never requires touching Kotlin sources.
+val generateVersionProperties by tasks.registering {
+    val versionFile = layout.buildDirectory.file("versionProperties/version.properties")
+    val appVersion = project.version.toString()
+    outputs.file(versionFile)
+    doLast { versionFile.get().asFile.apply { parentFile.mkdirs() }.writeText("app.version=$appVersion\n") }
+}
+tasks.processResources { from(generateVersionProperties) }

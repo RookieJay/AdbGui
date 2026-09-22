@@ -19,12 +19,12 @@
 
 ## 1. 版本号在哪改
 
-两个文件必须**同步**改（脚本会自动改，手动发也要保证一致）：
+**只改一处**：根 `gradle.properties` 的 `version=` 行。它是唯一真相源，其余全部自动派生：
 
-- `desktop/build.gradle.kts` → `packageVersion = "1.0.0"`
-- `desktop/src/main/kotlin/com/adbgui/desktop/platform/AppMeta.kt` → `APP_VERSION = "1.0.0"`
+- `desktop/build.gradle.kts` 的 `packageVersion`（jpackage/MSI 用，预发布后缀会被剥掉）由 Gradle `project.version` 派生。
+- 运行时 `AppMeta.APP_VERSION`（更新检查比对用）来自 Gradle `processResources` 生成的 `/version.properties`，打进 jar，AppMeta 运行时读取。
 
-`AppMeta.APP_VERSION` 是运行时版本真相源，老版本用它和 `latest.json` 的 `version` 比对决定是否提示更新。**改了版本就必须打全量包并发布 latest.json**，否则用户看到的"已是最新"会和实际对不上。
+`AppMeta.APP_VERSION` 是运行时版本，老版本用它和 `latest.json` 的 `version` 比对决定是否提示更新。**改了版本就必须打全量包并发布 latest.json**，否则用户看到的"已是最新"会和实际对不上。
 
 版本格式：`X.Y.Z`（可选 `-prerelease`），脚本用正则校验。
 
@@ -57,12 +57,14 @@ popd >/dev/null
 
 ## 路径 B：完整发布（推荐，含自动更新）
 
-一条命令搞定：改版本号 → 打 MSI + AppImage → 算 sha256 → 生成 latest.json → zip 便携版。
+一条命令搞定：打 MSI + AppImage → 算 sha256 → 生成 latest.json → zip 便携版。版本号从 `gradle.properties` 读（先改好 `version=`）。
 
 ```bash
 # Git Bash
-./packaging/release.sh 1.2.0
+./packaging/release.sh
 # 或 cmd / Windows 终端 / Android Studio 内置终端（无需装 pwsh）
+packaging\release.bat
+# 传参仅作一致性校验（不匹配会报错）：
 packaging\release.bat 1.2.0
 ```
 
@@ -97,7 +99,7 @@ packaging\release.bat 1.2.0
 
 ```bash
 # 1. 提交版本号改动 + 打 tag + 推送
-git add desktop/build.gradle.kts desktop/src/main/kotlin/com/adbgui/desktop/platform/AppMeta.kt
+git add gradle.properties
 git commit -m "release: bump version to 1.2.0"
 git tag v1.2.0
 git push origin master v1.2.0
@@ -147,7 +149,7 @@ git push origin master v1.2.0
 | 老版本提示"已是最新"但实际有新版 | latest.json 没上传 / Release 还是 Draft / 版本号没改 | 见上文三步 |
 | `update: available 1.2.0` 但点更新失败 | asset 文件名和 latest.json 里的不一致 | 重命名 asset 或改 latest.json 重新上传 |
 | 打出来的 exe 是旧代码 | 仓库有未提交改动 / 上次打包缓存 | `./gradlew clean :desktop:packageAppImage` 重打 |
-| 版本号两处不一致 | 只改了一处 | 脚本会同时改；手动发记得两处都改 |
+| 传给脚本的版本和实际发布不符 | 脚本从 `gradle.properties` 读版本，传参只是校验 | 只改 `gradle.properties` 的 `version=`，不匹配会直接报错 |
 
 ---
 
@@ -155,8 +157,9 @@ git push origin master v1.2.0
 
 ```
 # 完整发版（路径 B）
-./packaging/release.sh <VERSION>          # 打包 + 生成 latest.json
-git add ... && git commit -m "release: bump version to <VERSION>"
+# 1. 改 gradle.properties 的 version=
+# 2. ./packaging/release.sh                # 打包 + 生成 latest.json
+git add gradle.properties && git commit -m "release: bump version to <VERSION>"
 git tag v<VERSION> && git push origin master v<VERSION>
 # → GitHub 建 Release、传 3 个 asset、Publish
 # → 浏览器开 latest.json 稳定 URL 自检
