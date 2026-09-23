@@ -49,7 +49,8 @@ compose.desktop.application {
 
 // Bundles platform-tools adb (desktop/resources/adb/win/) into the AppImage's
 // app/resources/adb/win/ so the distributed app needs no adb on PATH. The Compose
-// launcher sets compose.application.resources.dir=$APPDIR\resources at runtime,
+// launcher sets compose.application.resources.dir=$APPDIR\app\resources at runtime
+// (jpackage layout: everything lives under app/; verified via jcmd on an installed app),
 // which ResourceBundledAdbProvider reads to locate adb.exe.
 // (appResourcesRootDir is a no-op in Compose 1.7.x — the new compose.resources {}
 // system superseded it — so we copy into the built image dir directly.)

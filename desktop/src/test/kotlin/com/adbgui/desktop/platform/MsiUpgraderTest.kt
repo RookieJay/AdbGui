@@ -18,9 +18,20 @@ class MsiUpgraderTest {
     }
 
     @Test fun command_passes_current_install_dir_as_installdir() {
-        System.setProperty(PROPERTY, "D:\\Program Files\\AdbGui\\resources")
+        // jpackage 实际布局：<install>\app\resources（jcmd 实测 MSI 安装的运行 JVM：
+        // compose.application.resources.dir=D:\Program Files\AdbGui\app\resources）
+        System.setProperty(PROPERTY, "D:\\Program Files\\AdbGui\\app\\resources")
         assertEquals(
             listOf("msiexec", "/i", "X:\\tmp\\new.msi", "INSTALLDIR=D:\\Program Files\\AdbGui"),
+            MsiUpgrader().buildCommand("X:\\tmp\\new.msi"),
+        )
+    }
+
+    @Test fun command_handles_install_dir_named_app() {
+        // 安装目录本身叫 "app"：<install>\app\app\resources —— 第二层 app 不回退
+        System.setProperty(PROPERTY, "D:\\Tools\\app\\app\\resources")
+        assertEquals(
+            listOf("msiexec", "/i", "X:\\tmp\\new.msi", "INSTALLDIR=D:\\Tools\\app"),
             MsiUpgrader().buildCommand("X:\\tmp\\new.msi"),
         )
     }
