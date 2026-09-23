@@ -84,6 +84,7 @@ class SettingsStoreTest {
         assertNull(default.update.readyMsiPath)
         assertNull(default.update.readyVersion)
         assertNull(default.update.readySha256)
+        assertEquals("", default.update.customManifestUrl)
         store.save(default.copy(update = default.update.copy(
             sourceId = "github-mirror", lastCheckAt = "2026-09-03T10:00:00Z",
             checkOnStartup = false, dismissedVersion = "1.1.0",
@@ -96,5 +97,17 @@ class SettingsStoreTest {
         assertEquals("/tmp/x.msi", reloaded.update.readyMsiPath)
         assertEquals("1.1.0", reloaded.update.readyVersion)
         assertEquals("abc", reloaded.update.readySha256)
+    }
+
+    @Test
+    fun update_settings_custom_manifest_url_round_trips() = runTest {
+        val dir = Files.createTempDirectory("upd-custom")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val s = store.load().copy(update = UpdateSettings(
+            sourceId = "custom", customManifestUrl = "http://127.0.0.1:8000/latest.json"))
+        store.save(s)
+        val reloaded = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined).load()
+        assertEquals("custom", reloaded.update.sourceId)
+        assertEquals("http://127.0.0.1:8000/latest.json", reloaded.update.customManifestUrl)
     }
 }

@@ -33,4 +33,39 @@ class UpdateSourceRegistryTest {
         assertNotNull(official)
         assertNull(official.proxyPrefix)
     }
+
+    // resolve(id, customUrl): built-ins ignore customUrl; "custom" synthesizes a source from URL.
+    @Test fun resolve_builtin_passes_through() {
+        val src = UpdateSourceRegistry.resolve("github-mirror", "http://127.0.0.1/latest.json")
+        assertNotNull(src)
+        assertEquals("github-mirror", src.id)
+    }
+
+    @Test fun resolve_custom_with_http_url_returns_custom_source() {
+        val src = UpdateSourceRegistry.resolve("custom", "http://127.0.0.1:8000/latest.json")
+        assertNotNull(src)
+        assertEquals("custom", src.id)
+        assertEquals("http://127.0.0.1:8000/latest.json", src.manifestUrl)
+        assertNull(src.proxyPrefix)
+    }
+
+    @Test fun resolve_custom_with_https_url_returns_custom_source() {
+        val src = UpdateSourceRegistry.resolve("custom", "https://my-company.example/latest.json")
+        assertNotNull(src)
+        assertEquals("https://my-company.example/latest.json", src.manifestUrl)
+    }
+
+    @Test fun resolve_custom_with_blank_url_returns_null() {
+        assertNull(UpdateSourceRegistry.resolve("custom", ""))
+    }
+
+    @Test fun resolve_custom_with_invalid_url_returns_null() {
+        assertNull(UpdateSourceRegistry.resolve("custom", "ftp://example.com"))
+        assertNull(UpdateSourceRegistry.resolve("custom", "file:///C:/x.json"))
+        assertNull(UpdateSourceRegistry.resolve("custom", "not a url"))
+    }
+
+    @Test fun resolve_unknown_id_returns_null() {
+        assertNull(UpdateSourceRegistry.resolve("nope", null))
+    }
 }

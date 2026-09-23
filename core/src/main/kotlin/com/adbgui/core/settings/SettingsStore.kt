@@ -30,6 +30,8 @@ data class UpdateSettings(
     val readyMsiPath: String? = null,
     val readyVersion: String? = null,
     val readySha256: String? = null,
+    /** 自定义源清单 URL（sourceId == "custom" 时用）。默认空表示未配置。 */
+    val customManifestUrl: String = "",
 )
 
 @Serializable

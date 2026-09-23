@@ -447,6 +447,9 @@ object Strings {
         "update_dismiss" to "以后再说",
         "update_ready_to_install" to "下载完成，可安装 %s",
         "update_download_portable" to "下载便携版",
+        "update_source_custom" to "自定义…",
+        "update_source_custom_url" to "清单 URL (latest.json)",
+        "update_source_custom_hint" to "用于本地测试：起一个静态服务器（如 python -m http.server），放 latest.json + MSI",
     )
 
     private val en: Map<String, String> = mapOf(
@@ -881,6 +884,9 @@ Click "Remove All" when done to clean up.""",
         "update_dismiss" to "Later",
         "update_ready_to_install" to "Downloaded, ready to install %s",
         "update_download_portable" to "Download portable",
+        "update_source_custom" to "Custom…",
+        "update_source_custom_url" to "Manifest URL (latest.json)",
+        "update_source_custom_hint" to "For local testing: run a static server (e.g. python -m http.server) serving latest.json + MSI",
     )
 
     private val maps = mapOf(Locale.ZH to zh, Locale.EN to en)

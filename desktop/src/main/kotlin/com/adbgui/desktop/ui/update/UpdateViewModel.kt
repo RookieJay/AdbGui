@@ -63,7 +63,8 @@ class UpdateViewModel(
         return scope.launch {
         _state.value = UpdateState.Checking
         val settings = store.load()
-        val source = UpdateSourceRegistry.byId(settings.update.sourceId) ?: UpdateSourceRegistry.default
+        val source = UpdateSourceRegistry.resolve(settings.update.sourceId, settings.update.customManifestUrl)
+            ?: UpdateSourceRegistry.default
         val result = checker.check(source)
         val nowIso = java.time.Instant.now().toString()
         when (result) {
@@ -92,8 +93,11 @@ class UpdateViewModel(
     }.also { checkJob = it }
     }
 
-    fun selectSource(id: String) = scope.launch {
-        store.update { it.copy(update = it.update.copy(sourceId = id)) }
+    fun selectSource(id: String, customUrl: String? = null) = scope.launch {
+        // 选内置源时清掉旧的 customManifestUrl，避免下次切到 "custom" 时误用上次的值
+        store.update { it.copy(update = it.update.copy(
+            sourceId = id,
+            customManifestUrl = if (id == UpdateSourceRegistry.CUSTOM_ID) (customUrl ?: it.update.customManifestUrl) else "")) }
     }
 
     fun downloadUpdate(): Job {
@@ -102,7 +106,9 @@ class UpdateViewModel(
             ?: return Job().apply { complete() }
         return scope.launch {
             _state.value = UpdateState.Downloading(-1f)  // indeterminate until first byte arrives (gh-proxy may buffer large files before streaming)
-            val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
+            val loaded = store.load()
+            val source = UpdateSourceRegistry.resolve(loaded.update.sourceId, loaded.update.customManifestUrl)
+                ?: UpdateSourceRegistry.default
             val effectiveUrl = effectiveDownloadUrl(source, m.url)
             val result = try {
                 downloader.download(effectiveUrl, m.sha256) { p ->
@@ -182,7 +188,9 @@ class UpdateViewModel(
         val s = _state.value
         if (s !is UpdateState.Available && s !is UpdateState.Ready) return@launch
         val m = lastManifest ?: return@launch
-        val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
+        val loaded = store.load()
+        val source = UpdateSourceRegistry.resolve(loaded.update.sourceId, loaded.update.customManifestUrl)
+            ?: UpdateSourceRegistry.default
         notifier.openDownloadPage(effectiveDownloadUrl(source, m.url))
     }
 
@@ -191,7 +199,9 @@ class UpdateViewModel(
         val s = _state.value as? UpdateState.Available ?: return@launch
         val m = lastManifest ?: return@launch
         val portableUrl = m.portableUrl ?: return@launch
-        val source = UpdateSourceRegistry.byId(store.load().update.sourceId) ?: UpdateSourceRegistry.default
+        val loaded = store.load()
+        val source = UpdateSourceRegistry.resolve(loaded.update.sourceId, loaded.update.customManifestUrl)
+            ?: UpdateSourceRegistry.default
         notifier.openDownloadPage(effectiveDownloadUrl(source, portableUrl))
     }
 

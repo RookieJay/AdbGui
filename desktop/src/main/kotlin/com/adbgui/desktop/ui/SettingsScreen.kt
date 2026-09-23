@@ -342,6 +342,31 @@ fun SettingsScreen(
                         Text(src.displayName)
                     }
                 }
+                // 自定义源：单选 + URL 输入框
+                val isCustom = settings.update.sourceId == UpdateSourceRegistry.CUSTOM_ID
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = isCustom,
+                        onClick = { updateVm.selectSource(UpdateSourceRegistry.CUSTOM_ID, settings.update.customManifestUrl) },
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(Strings.t("update_source_custom"))
+                }
+                if (isCustom) {
+                    OutlinedTextField(
+                        value = settings.update.customManifestUrl,
+                        onValueChange = { updateVm.selectSource(UpdateSourceRegistry.CUSTOM_ID, it) },
+                        label = { Text(Strings.t("update_source_custom_url")) },
+                        placeholder = { Text("http://127.0.0.1:8000/latest.json") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(start = 24.dp),
+                    )
+                    Text(
+                        Strings.t("update_source_custom_hint"),
+                        style = MaterialTheme.typography.caption,
+                        modifier = Modifier.padding(start = 24.dp),
+                    )
+                }
                 Button(onClick = { updateVm.checkForUpdates() }) {
                     Text(Strings.t("update_check_now"))
                 }

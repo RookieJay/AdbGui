@@ -3,6 +3,24 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 自定义更新源（本地 latest.json 测试）(2026-09-23)
+
+升级体验修复后需要一个不发布 GitHub 就能本地验证"应用内升级"的通道。现有两个源（GitHub 官方 / gh-proxy 镜像）都是固定的，没法指向本地服务器。
+
+**改动**：设置页"更新源"加第三个单选项"自定义…"，选中后展开一个 URL 输入框，填入 `latest.json` 的 URL（`http://127.0.0.1:8000/latest.json` 等）即生效。
+
+- **core**
+  - `UpdateSettings.customManifestUrl: String = ""`：默认空，旧 settings.json 兼容。
+  - `UpdateSourceRegistry`：新增 `CUSTOM_ID = "custom"` 常量和 `resolve(id, customUrl): UpdateSource?`。内置 id 直接返回；`id == "custom"` 且 URL 以 `http://` / `https://` 开头则合成 `UpdateSource("custom", "自定义…", url)`（无 `proxyPrefix`）；其余返回 null，调用方 `?: default` 兜底。
+- **desktop**
+  - `UpdateViewModel`：4 处 `byId(sourceId)` 改 `resolve(sourceId, customManifestUrl)`（check / download / openDownloadPage / openPortablePage）；`selectSource(id, customUrl = null)` 同时持久化 URL——选回内置源时清零，避免下次切回 custom 时误用旧值。
+  - `SettingsScreen`：单选列表后加"自定义…"项 + `OutlinedTextField`（输入即存）+ 提示文案。
+  - i18n（zh+en）：`update_source_custom` / `update_source_custom_url` / `update_source_custom_hint`。
+
+**测试**：`:core` `UpdateSourceRegistryTest` +7（resolve 四分支：内置/自定义合法/自定义非法/未知 + 自定义空/https/ftp/file 校验）；`SettingsStoreTest` +1（customManifestUrl 持久化往返）；`:desktop` `UpdateViewModelTest` +3（自定义源拉清单 + 下载 URL 无代理 + 持久化；切回内置清空 URL；空 URL 兜底 github-official）。
+
+**本地验证用法**：`python -m http.server` 在目录里放 `latest.json` + `AdbGui-<ver>.msi`；manifest 的 `url` 填 `http://127.0.0.1:8000/...`；设置页选"自定义…"填 `http://127.0.0.1:8000/latest.json` → 应用内点"立即安装"走完整链路。
+
 ## v2 — 升级体验修复：记忆安装目录 + 防同版本重装 1926 风暴 (2026-09-22)
 
 发布 1.2.1 后真机走升级流程踩出的两个问题，根因全部实测取证（事件日志 MsiInstaller + jpackage WiX 模板源码 + MSI 数据库 Property 表）：

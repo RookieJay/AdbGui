@@ -394,4 +394,47 @@ class UpdateViewModelTest {
             notifier.opened,
         )
     }
+
+    @Test fun custom_source_resolves_to_custom_manifest_url() = runTest {
+        val recorder = RecordingDownloader()
+        val manifest = """{"version":"1.1.0","url":"http://127.0.0.1:8000/AdbGui-1.1.0.msi",
+            "sha256":"a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"}""".trimIndent()
+        val (vm, store, _) = buildVm(this, manifest, "1.0.0", downloader = recorder)
+        // 选中 "custom" 并提供 URL
+        vm.selectSource("custom", "http://127.0.0.1:8000/latest.json"); advanceUntilIdle()
+        vm.checkForUpdates(); advanceUntilIdle()
+        assertIs<UpdateState.Available>(vm.state.value)
+        vm.downloadUpdate(); advanceUntilIdle()
+        // 自定义源无代理，直接传清单里的 url
+        assertEquals("http://127.0.0.1:8000/AdbGui-1.1.0.msi", recorder.receivedUrl)
+        // 持久化
+        val reloaded = store.load().update
+        assertEquals("custom", reloaded.sourceId)
+        assertEquals("http://127.0.0.1:8000/latest.json", reloaded.customManifestUrl)
+    }
+
+    @Test fun select_builtin_source_clears_custom_url() = runTest {
+        val (vm, store, _) = buildVm(this, manifestJson("1.1.0"), "1.0.0")
+        vm.selectSource("custom", "http://127.0.0.1:8000/latest.json"); advanceUntilIdle()
+        assertEquals("custom", store.load().update.sourceId)
+        assertEquals("http://127.0.0.1:8000/latest.json", store.load().update.customManifestUrl)
+        // 切回内置源 → customManifestUrl 清零
+        vm.selectSource("github-mirror"); advanceUntilIdle()
+        assertEquals("github-mirror", store.load().update.sourceId)
+        assertEquals("", store.load().update.customManifestUrl)
+    }
+
+    @Test fun custom_source_with_blank_url_falls_back_to_default() = runTest {
+        // "custom" 但 URL 为空 → resolve 返回 null → 兜底 github-official
+        val recorder = RecordingDownloader()
+        val manifest = """{"version":"1.1.0","url":"https://example.com/x.msi",
+            "sha256":"a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"}""".trimIndent()
+        val (vm, store, _) = buildVm(this, manifest, "1.0.0", downloader = recorder)
+        store.update { it.copy(update = it.update.copy(sourceId = "custom", customManifestUrl = "")) }
+        advanceUntilIdle()
+        vm.checkForUpdates(); advanceUntilIdle()
+        vm.downloadUpdate(); advanceUntilIdle()
+        // 无代理（兜底的 github-official 也无代理），直接 url
+        assertEquals("https://example.com/x.msi", recorder.receivedUrl)
+    }
 }
