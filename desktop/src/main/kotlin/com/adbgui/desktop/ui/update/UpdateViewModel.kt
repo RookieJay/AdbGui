@@ -11,6 +11,7 @@ import com.adbgui.core.update.UpdateSourceRegistry
 import com.adbgui.core.update.UpdateVersionComparer
 import com.adbgui.desktop.platform.InstalledAppLauncher
 import com.adbgui.desktop.platform.InstalledAppVersionProbe
+import com.adbgui.desktop.platform.InstalledDir
 import com.adbgui.desktop.platform.MsiUpgrader
 import com.adbgui.desktop.platform.PortableUpdateNotifier
 import com.adbgui.desktop.ui.i18n.Strings
@@ -176,9 +177,8 @@ class UpdateViewModel(
 
     /** 已装新版的 AdbGui.exe：优先 ARP 的 InstallLocation，其次本实例自身安装目录（打包运行）。 */
     private fun findInstalledExe(installLocation: String?): String? {
-        val ownInstallDir = System.getProperty("compose.application.resources.dir")
-            ?.let { File(it).parentFile?.path }
-        return listOfNotNull(installLocation, ownInstallDir)
+        val candidates = listOfNotNull(installLocation, InstalledDir.detect())
+        return candidates
             .map { File(it, "AdbGui.exe") }
             .firstOrNull { it.isFile }
             ?.absolutePath
