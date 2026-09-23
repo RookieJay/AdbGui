@@ -45,7 +45,7 @@ class CompositionRoot {
     val updateFetcher = KtorUpdateManifestFetcher()
     val updateChecker = UpdateChecker(updateFetcher, AppMeta.APP_VERSION, logger)
     val updateDownloader = KtorUpdateDownloader(configDir, logger = logger)
-    val msiUpgrader = MsiUpgrader()
+    val msiUpgrader = MsiUpgrader(logger)
     val portableNotifier = PortableUpdateNotifier()
     val installedProbe = com.adbgui.desktop.platform.RegInstalledAppVersionProbe()
     val installedAppLauncher = com.adbgui.desktop.platform.InstalledAppLauncher()

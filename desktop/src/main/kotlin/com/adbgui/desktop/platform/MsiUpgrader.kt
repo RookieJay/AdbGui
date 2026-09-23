@@ -1,5 +1,6 @@
 package com.adbgui.desktop.platform
 
+import com.adbgui.core.log.Logger
 import java.io.File
 
 /**
@@ -10,9 +11,11 @@ import java.io.File
  *   当前安装目录由 [InstalledDir.detect] 检测（打包运行时有效，desktopRun 下为 null → 不传）。
  * - 调用方在 launch 后必须 exitProcess(0) 释放已安装文件锁。
  */
-open class MsiUpgrader {
+open class MsiUpgrader(private val logger: Logger? = null) {
     open fun launch(msiPath: String) {
-        ProcessBuilder(buildCommand(msiPath)).redirectErrorStream(true).start()
+        val cmd = buildCommand(msiPath)
+        logger?.info("update: msiexec command=$cmd")
+        ProcessBuilder(cmd).redirectErrorStream(true).start()
     }
 
     fun buildCommand(msiPath: String): List<String> {
