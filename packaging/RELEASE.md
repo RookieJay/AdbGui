@@ -140,6 +140,32 @@ git push origin master v1.2.0
 
 ---
 
+## 3.5 本地模拟在线升级（不发 GitHub 也能全链路测试）
+
+发布前想验证"老版本 → 检查更新 → 下载 → 校验 → 安装"整条链路，用自定义更新源指向本机 HTTP 服务即可：
+
+```bash
+# 1. 准备测试目录（项目根的 test/ 就是干这个的）：
+#    test/latest.json          ← 从 release 脚本产物复制，url 改成 http://127.0.0.1:8000/<msi文件名>
+#    test/AdbGui-<VERSION>.msi ← 要升级到的目标安装包
+# 2. 起本地服务器（在 test/ 目录里跑）：
+cd test
+python -m http.server 8000
+
+# 3. 老版本应用里：设置 → 更新源 → 自定义，填：
+#    http://127.0.0.1:8000/latest.json
+# 4. 检查更新 → 下载 → 安装，走真实流程。
+```
+
+**两个必须核对的点**（2026-09-24 实测踩过）：
+
+- `latest.json` 的 `sha256`/`size` 必须是对 `url` 指向的**那个 msi 文件**重算的——从上个版本复制 manifest 只改 version/url 不改哈希，会下载成功但校验报"文件可能损坏"。
+- 打的 msi 必须是**改完 version= 之后重打的**（`generateVersionProperties` 有 input 声明，正常会自动重生成 `version.properties`；如果应用里显示的版本和包名对不上，`msiexec /a <msi> /qn TARGETDIR=<目录>` 解包后查 jar 里的 `version.properties`）。
+
+**安装上下文要求**：应用内升级是非提权（per-user）跑 msiexec。如果本机曾经用管理员装过（ARP 条目出现在 HKLM 而非 HKCU、且存在管理员属主的 `<盘符>:\Config.Msi`），升级时每个文件会弹 Error 1926。一次性根治：管理员卸载 + 删 `<盘符>:\Config.Msi` + 普通身份重装。**平时安装/升级都别用管理员。**
+
+---
+
 ## 4. 常见坑
 
 | 现象 | 原因 | 解决 |
@@ -150,6 +176,8 @@ git push origin master v1.2.0
 | `update: available 1.2.0` 但点更新失败 | asset 文件名和 latest.json 里的不一致 | 重命名 asset 或改 latest.json 重新上传 |
 | 打出来的 exe 是旧代码 | 仓库有未提交改动 / 上次打包缓存 | `./gradlew clean :desktop:packageAppImage` 重打 |
 | 传给脚本的版本和实际发布不符 | 脚本从 `gradle.properties` 读版本，传参只是校验 | 只改 `gradle.properties` 的 `version=`，不匹配会直接报错 |
+| 点"安装更新"后 msiexec 弹帮助框而非安装 UI | `INSTALLDIR` 含空格时被整段加引号，msiexec 判命令行非法（1639） | 已修（JNA ShellExecute 传原始参数串）；如再出现查 `%APPDATA%/AdbGui/logs/` 的 `msiexec /i parameters=` 行 |
+| 升级安装过程中逐文件弹 "Could not set file security ... Error: 5"（1926） | 本机基座是管理员/机器级(HKLM)安装，非提权升级碰旧产品文件 | 管理员卸载现有版本 + 删 `<盘符>:\Config.Msi`，再普通身份重装；详见 §3.5 |
 
 ---
 
