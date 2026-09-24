@@ -70,6 +70,9 @@ afterEvaluate {
 val generateVersionProperties by tasks.registering {
     val versionFile = layout.buildDirectory.file("versionProperties/version.properties")
     val appVersion = project.version.toString()
+    // 必须把版本声明为 input：否则只有 outputs 时 Gradle 见输出已存在即 UP-TO-DATE，
+    // 改 gradle.properties 后不会重新生成，打进包里的还是旧 version.properties。
+    inputs.property("appVersion", appVersion)
     outputs.file(versionFile)
     doLast { versionFile.get().asFile.apply { parentFile.mkdirs() }.writeText("app.version=$appVersion\n") }
 }
