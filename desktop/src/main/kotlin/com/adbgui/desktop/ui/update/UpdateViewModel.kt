@@ -59,7 +59,12 @@ class UpdateViewModel(
     @Volatile private var downloadJob: Job? = null
     @Volatile private var lastManifest: UpdateManifest? = null
 
-    fun checkForUpdates(): Job {
+    /**
+     * @param userInitiated true = 用户在设置页点了"立即检查"，失败置 Error 供 UI 内联展示；
+     *   false = 启动时的后台静默检查，失败只持久化 lastCheckError（设置页可见），
+     *   状态回 Idle——不打扰用户（顶部 UpdateBanner 不弹错误横幅）。
+     */
+    fun checkForUpdates(userInitiated: Boolean = true): Job {
         checkJob?.takeIf { it.isActive }?.let { return it }
         return scope.launch {
         _state.value = UpdateState.Checking
@@ -87,7 +92,11 @@ class UpdateViewModel(
                 persistResult(nowIso, null)
             }
             is UpdateCheckResult.Error -> {
-                _state.value = UpdateState.Error(result.message, result.raw)
+                if (userInitiated) {
+                    _state.value = UpdateState.Error(result.message, result.raw)
+                } else {
+                    _state.value = UpdateState.Idle
+                }
                 persistResult(nowIso, result.message)
             }
         }

@@ -115,6 +115,24 @@ class UpdateViewModelTest {
         assertIs<UpdateState.Error>(vm.state.value)
     }
 
+    @Test fun check_silent_error_stays_idle_but_persists_error() = runTest {
+        // 启动时的后台检查是静默的：fetch 失败不置 Error（顶部横幅不弹），
+        // 只持久化 lastCheckError——设置页"上次检查"处仍能看到失败原因。
+        val (vm, store, _) = buildVm(this, null)
+        vm.checkForUpdates(userInitiated = false)
+        advanceUntilIdle()
+        assertEquals(UpdateState.Idle, vm.state.value)
+        assertTrue(store.load().update.lastCheckError!!.isNotBlank())
+    }
+
+    @Test fun check_silent_parse_error_stays_idle_but_persists_error() = runTest {
+        val (vm, store, _) = buildVm(this, "{not json")
+        vm.checkForUpdates(userInitiated = false)
+        advanceUntilIdle()
+        assertEquals(UpdateState.Idle, vm.state.value)
+        assertTrue(store.load().update.lastCheckError!!.isNotBlank())
+    }
+
     @Test fun check_error_carries_raw_on_parse_failure() = runTest {
         val (vm, _, _) = buildVm(this, "{not json")
         vm.checkForUpdates()
