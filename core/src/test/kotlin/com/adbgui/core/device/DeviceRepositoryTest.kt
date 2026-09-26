@@ -8,8 +8,14 @@ import com.adbgui.core.domain.AdbSource
 import com.adbgui.core.domain.DeviceSnapshot
 import com.adbgui.core.domain.DeviceStatus
 import com.adbgui.core.domain.DeviceType
+import com.adbgui.core.log.InMemoryLogger
+import com.adbgui.core.log.LogLevel
 import com.adbgui.core.log.NoopLogger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
@@ -27,7 +33,7 @@ class DeviceRepositoryTest {
         history.upsert("xyz", DeviceType.WIRELESS, "10.0.0.1", 5555) // offline historical
         val runner = FakeAdbProcessRunner()
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val list = repo.devices.value
         assertEquals(2, list.size)
         assertTrue(list.any { it.serial == "abc" && it.isLive })
@@ -42,7 +48,7 @@ class DeviceRepositoryTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 192.168.1.50:5555", ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 42L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val r = repo.connectWireless("192.168.1.50", 5555)
         assertTrue(r.success)
         val h = history.load().first()
@@ -65,7 +71,7 @@ class DeviceRepositoryTest {
             "[ro.product.brand]: [OnePlus]\n[ro.product.manufacturer]: [OnePlus]\n[ro.product.model]: [PJZ110]\n",
             ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         repo.connectWireless("10.0.5.221", 43849)
         // Alias-setting is async (launch) — drain.
         val deadline = System.currentTimeMillis() + 3_000
@@ -93,7 +99,7 @@ class DeviceRepositoryTest {
             "[ro.product.brand]: [OnePlus]\n[ro.product.manufacturer]: [OnePlus]\n[ro.product.model]: [PJZ110]\n",
             ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         repo.connectWireless("10.0.5.221", 43849)
         // Wait for auto-alias, then user renames.
         val deadline1 = System.currentTimeMillis() + 3_000
@@ -115,6 +121,98 @@ class DeviceRepositoryTest {
         repo.stop()
     }
 
+    private fun getpropResult(brand: String, model: String) = AdbProcessResult(0,
+        "[ro.product.brand]: [$brand]\n[ro.product.manufacturer]: [$brand]\n[ro.product.model]: [$model]\n", "")
+
+    /** Poll-until with wall-clock deadline. Pumps runCurrent (NOT advanceUntilIdle — that
+     *  would fast-forward virtual time and burn through self-scheduled 60s retry chains);
+     *  tests advance time explicitly via advanceTimeBy when they want retries to fire. */
+    private suspend fun TestScope.waitUntil(timeoutMs: Long = 3_000, condition: suspend () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (!condition() && System.currentTimeMillis() < deadline) {
+            runCurrent()
+            if (condition()) break
+            Thread.sleep(30)
+        }
+    }
+
+    @Test
+    fun online_usb_device_without_alias_gets_auto_named() = runTest {
+        // USB devices never go through connectWireless — auto-name must trigger when the
+        // tracker reports the device ONLINE. Covers USB plug-in and "app started while a
+        // device was already connected".
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE)))
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("usbname"), clock = { 0L }, io = Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("getprop"), getpropResult("Xiaomi", "MiTV-MFTR0"))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        waitUntil { history.load().firstOrNull()?.alias != null }
+        assertEquals("Xiaomi MiTV-MFTR0", history.load().first { it.serial == "abc" }.alias)
+        repo.stop()
+    }
+
+    @Test
+    fun offline_device_is_not_auto_named() = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(DeviceSnapshot("abc", DeviceStatus.OFFLINE)))
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("offname"), clock = { 0L }, io = Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("getprop"), getpropResult("Xiaomi", "MiTV-MFTR0"))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        advanceUntilIdle()
+        assertTrue(runner.runs.none { args -> args.any { it.contains("getprop") } })
+        repo.stop()
+    }
+
+    @Test
+    fun auto_name_retries_after_transient_failure() = runTest {
+        // The 2026-09-26 bug: getprop right after connect failed transiently, runCatching
+        // swallowed it with no log — the device stayed unnamed forever. Worse, the device
+        // list then stays unchanged, and StateFlow conflates equal values, so recompute
+        // never fires again either. Retries must be self-scheduled: a failed attempt
+        // re-arms itself after a delay (while the device stays online).
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE)))
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("retry"), clock = { 0L }, io = Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner() // no getprop script → default exit 1: first attempt fails
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        // 1st attempt fails (device reported online by the initial recompute).
+        waitUntil { runner.runs.any { args -> args.any { it.contains("getprop") } } }
+        runCurrent()
+        assertEquals(null, history.load().firstOrNull()?.alias)
+        assertEquals(1, runner.runs.count { args -> args.any { it.contains("getprop") } })
+        // getprop now succeeds → the self-scheduled retry (virtual time) names the device.
+        runner.whenArgsContains(listOf("getprop"), getpropResult("Xiaomi", "MiTV-MFTR0"))
+        advanceTimeBy(60_001)
+        runCurrent()
+        assertEquals("Xiaomi MiTV-MFTR0", history.load().first { it.serial == "abc" }.alias)
+        repo.stop()
+    }
+
+    @Test
+    fun auto_name_failure_is_logged_at_warn() = runTest {
+        // The swallowed failure left no trace in the logs — undiagnosable. Failures must log.
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE)))
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("logname"), clock = { 0L }, io = Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner() // default exit 1
+        val log = InMemoryLogger(LogLevel.DEBUG, clock = { 0L })
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, log, this)
+        waitUntil { log.entries.any { it.level == LogLevel.WARN && it.message.contains("abc") } }
+        assertTrue(log.entries.any { it.level == LogLevel.WARN && it.message.contains("abc") },
+            "auto-name failure must be logged at WARN (was swallowed silently before)")
+        repo.stop()
+    }
+
     @Test
     fun recompute_maps_lastUsedAt_and_tag_from_history() = runTest {
         val tracker = object : IDeviceTracker {
@@ -127,7 +225,7 @@ class DeviceRepositoryTest {
         history.setTag("abc", "lab")
         val runner = FakeAdbProcessRunner()
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val v = repo.devices.value.first { it.serial == "abc" }
         assertEquals("lab", v.tag)
         assertEquals(0L, v.lastUsedAt) // history store clock=0 → touchLastUsed stamped 0
@@ -145,7 +243,7 @@ class DeviceRepositoryTest {
         history.upsert("abc", DeviceType.USB, null, null)
         val runner = FakeAdbProcessRunner()
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         repo.touchLastUsed("abc")
         val v = repo.devices.value.first { it.serial == "abc" }
         assertEquals(4242L, v.lastUsedAt)
@@ -165,7 +263,7 @@ class DeviceRepositoryTest {
         history.upsert("abc", DeviceType.USB, null, null)
         val runner = FakeAdbProcessRunner()
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         repo.setTag("abc", "lab")
         val v = repo.devices.value.first { it.serial == "abc" }
         assertEquals("lab", v.tag)
@@ -190,7 +288,7 @@ class DeviceRepositoryTest {
         history.upsert("c", DeviceType.USB, null, null); history.setTag("c", "lab")
         val runner = FakeAdbProcessRunner()
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         repo.clearTag("lab")
         val views = repo.devices.value.associateBy { it.serial }
         assertEquals(null, views["a"]?.tag)

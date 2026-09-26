@@ -30,7 +30,7 @@ class SystemOpsViewModelTest {
         val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
         val history = DeviceHistoryStore(Files.createTempDirectory("sops"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val cmd = CommandRunner({ adb }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, scope, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, scope)
         return repo to SystemOpsViewModel(repo, selected, scope)
     }
 

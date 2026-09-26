@@ -26,7 +26,7 @@ class DeviceRepositoryForwardTest {
         val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<com.adbgui.core.domain.DeviceSnapshot>()) }
         val history = DeviceHistoryStore(Files.createTempDirectory("fwd"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val mine = repo.listForwards("s1")
         assertEquals(1, mine.size)
         assertEquals("s1", mine[0].serial)

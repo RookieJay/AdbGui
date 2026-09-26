@@ -13,12 +13,16 @@ import com.adbgui.core.domain.PackageInfo
 import com.adbgui.core.log.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 interface IDeviceTracker {
     val devices: StateFlow<List<DeviceSnapshot>>
@@ -30,21 +34,44 @@ class DeviceRepository(
     private val commands: CommandRunner,
     private val logger: Logger,
     private val scope: CoroutineScope,
-    private val clock: () -> Long,
 ) {
     private val _devices = MutableStateFlow<List<DeviceView>>(emptyList())
     val devices: StateFlow<List<DeviceView>> = _devices.asStateFlow()
 
     private val collectorJob: Job
 
+    // Auto-name coroutines run here, NOT on [scope]: naming is background work that
+    // outlives individual recomputes (self-scheduled retries), and it must be stoppable
+    // with [stop] without being a child of [scope] (runTest fails tests whose scope
+    // still has active children at test end). Dispatcher inherited from [scope].
+    private val namingJob = SupervisorJob()
+    private val namingScope = CoroutineScope(scope.coroutineContext + namingJob)
+
+    // Auto-name bookkeeping. Cross-thread mutable — guarded by mutex.
+    // - inFlight: dedup concurrent attempts (recompute and connectWireless can race).
+    // - attempts: bounded retries per online epoch (see [autoName]).
+    // - launchLive: the last live list we scheduled naming for — the collector's initial
+    //   value is the SAME list init already recomputed, and an unchanged list means no new
+    //   naming candidates, so don't launch a second identical round (StateFlow also
+    //   conflates equal values, so this only guards the startup double-processing).
+    private val namingMutex = Mutex()
+    private val namingInFlight = mutableSetOf<String>()
+    private val namingAttempts = mutableMapOf<String, Int>()
+    private var namingLaunchLive: List<DeviceSnapshot>? = null
+
     init {
         runBlocking { recompute(tracker.devices.value) }
         collectorJob = scope.launch {
-            tracker.devices.collectLatest { recompute(it) }
+            tracker.devices.collectLatest {
+                recompute(it)
+            }
         }
     }
 
-    fun stop() { collectorJob.cancel() }
+    fun stop() {
+        collectorJob.cancel()
+        namingJob.cancel()
+    }
 
     private suspend fun recompute(live: List<DeviceSnapshot>) {
         val hist = history.load().associateBy { it.serial }
@@ -64,6 +91,87 @@ class DeviceRepository(
             )
         }
         _devices.value = merged
+        val onlineSerials = merged.filter { it.isLive }.map { it.serial }.toSet()
+        val launchNaming = namingMutex.withLock {
+            // A device that dropped offline gets a fresh auto-name attempt budget on its
+            // next online epoch (e.g. it was rebooted and getprop works now).
+            namingAttempts.keys.retainAll(onlineSerials)
+            val firstTime = live != namingLaunchLive
+            if (firstTime) namingLaunchLive = live
+            firstTime
+        }
+        // Auto-name any ONLINE device that has no alias yet — covers USB plug-in, devices
+        // already connected when the app starts, and wireless connect (fast path there
+        // calls autoName directly). Never overwrites an existing (user-set) alias.
+        // NOTE: recompute only fires when the tracker list VALUE changes (StateFlow
+        // conflates equal values), so retries are self-scheduled — see [autoName].
+        if (launchNaming) {
+            merged.filter { it.isLive && it.alias == null }.forEach { namingScope.launch { autoName(it.serial) } }
+        }
+    }
+
+    /**
+     * Set the device's alias to "<brand> <model>" from getprop, unless it already has an
+     * alias. Best-effort: failures log at WARN and self-schedule a retry (while the device
+     * stays online), up to [AUTO_NAME_MAX_ATTEMPTS] per online epoch. (The 2026-09-26 bug:
+     * a transient getprop failure right after `adb connect` was swallowed silently with no
+     * retry — and the device list staying unchanged means no recompute would ever fire
+     * again — leaving the device unnamed forever.)
+     */
+    private suspend fun autoName(serial: String) {
+        namingMutex.withLock {
+            if (serial in namingInFlight) return
+            val attempts = (namingAttempts[serial] ?: 0) + 1
+            namingAttempts[serial] = attempts
+            if (attempts > AUTO_NAME_MAX_ATTEMPTS) {
+                if (attempts == AUTO_NAME_MAX_ATTEMPTS + 1) {
+                    logger.info("auto-name: giving up on $serial after $AUTO_NAME_MAX_ATTEMPTS attempts (budget resets when it reconnects)")
+                }
+                return
+            }
+            namingInFlight += serial
+        }
+        try {
+            val existing = history.load().firstOrNull { it.serial == serial }?.alias
+            if (existing.isNullOrBlank()) {
+                val props = commands.deviceProps(serial)
+                val name = "${props.brand} ${props.model}".trim()
+                if (name.isNotBlank() && name.lowercase() != "unknown unknown") {
+                    // Re-check alias right before writing — a user may have renamed during
+                    // the getprop round-trip.
+                    val still = history.load().firstOrNull { it.serial == serial }?.alias
+                    if (still.isNullOrBlank()) {
+                        setAlias(serial, name)
+                        logger.info("auto-name: $serial -> \"$name\"")
+                    }
+                } else {
+                    logger.debug("auto-name: no usable brand/model for $serial, retrying in ${AUTO_NAME_RETRY_MS / 1000}s")
+                    scheduleAutoNameRetry(serial)
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.warn("auto-name failed for $serial (will retry in ${AUTO_NAME_RETRY_MS / 1000}s): ${e.message}")
+            scheduleAutoNameRetry(serial)
+        } finally {
+            namingMutex.withLock { namingInFlight -= serial }
+        }
+    }
+
+    private fun isOnlineNow(serial: String): Boolean =
+        tracker.devices.value.any { it.serial == serial && it.status == DeviceStatus.ONLINE }
+
+    private fun scheduleAutoNameRetry(serial: String) {
+        namingScope.launch {
+            delay(AUTO_NAME_RETRY_MS)
+            if (isOnlineNow(serial)) autoName(serial)
+        }
+    }
+
+    companion object {
+        private const val AUTO_NAME_RETRY_MS = 60_000L
+        private const val AUTO_NAME_MAX_ATTEMPTS = 5
     }
 
     suspend fun connectWireless(ip: String, port: Int): ConnectResult {
@@ -74,24 +182,9 @@ class DeviceRepository(
             // A successful connect counts as "use" for MRU sort.
             history.touchLastUsed(serial)
             recompute(tracker.devices.value)
-            // Auto-name: fetch brand+model and set alias so the list shows a friendly name
-            // instead of a bare serial. Only when the device has NO existing alias — never
-            // overwrite a user-set name. getprop is best-effort; failures don't break connect.
-            val existing = history.load().firstOrNull { it.serial == serial }?.alias
-            if (existing.isNullOrBlank()) {
-                scope.launch {
-                    runCatching {
-                        val props = commands.deviceProps(serial)
-                        val name = "${props.brand} ${props.model}".trim()
-                        if (name.isNotBlank() && name.lowercase() != "unknown unknown") {
-                            // Re-check alias right before writing — a user may have renamed
-                            // between the check above and the getprop round-trip completing.
-                            val still = history.load().firstOrNull { it.serial == serial }?.alias
-                            if (still.isNullOrBlank()) setAlias(serial, name)
-                        }
-                    }
-                }
-            }
+            // Auto-name now (fast path — don't wait for the 2s tracker poll to report the
+            // device online); the recompute path covers retries, USB, and app-start cases.
+            namingScope.launch { autoName(serial) }
         }
         return r
     }

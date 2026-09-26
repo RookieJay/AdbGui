@@ -29,7 +29,7 @@ class DeviceInfoViewModelTest {
         val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
         val history = DeviceHistoryStore(Files.createTempDirectory("di"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, scope, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, scope)
         return repo to DeviceInfoViewModel(repo, selected, scope)
     }
 
@@ -65,7 +65,7 @@ class DeviceInfoViewModelTest {
         val propOut = "[ro.product.model]: [Pixel 6]\n[ro.build.version.release]: [13]\n[ro.build.version.sdk]: [33]\n[ro.product.cpu.abi]: [arm64-v8a]\n"
         runner.whenArgsContains(listOf("getprop"), AdbProcessResult(0, propOut, ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val vm = DeviceInfoViewModel(repo, MutableStateFlow("abc"), this)
         vm.load()
         advanceUntilIdle()

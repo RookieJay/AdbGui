@@ -39,7 +39,7 @@ class DeviceListViewModelTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 1.2.3.4:5555", ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
         var result: ConnectResult? = null
         var dismissed = false
@@ -80,7 +80,7 @@ class DeviceListViewModelTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 1.2.3.4:5555", ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
         var result: ConnectResult? = null
         var scrolled: String? = null
@@ -107,7 +107,7 @@ class DeviceListViewModelTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 1.2.3.4:5555", ""))
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
         var scrolled: String? = null
         val scrollJob = launch { vm.scrollToSerial.collect { scrolled = it } }
@@ -141,7 +141,7 @@ class DeviceListViewModelTest {
         // args wouldn't fire; but we assert on behavior (idle + error-free), which holds
         // regardless. The key point: pair success alone must not raise an error.
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
         var pairResult: PairResult? = null
         vm.pair("1.2.3.4", 4321, "123456") { pairResult = it }
@@ -173,7 +173,7 @@ class DeviceListViewModelTest {
             AdbProcessResult(1, "failed to connect to 1.2.3.4:5555", "cannot connect to 1.2.3.4:5555: Connection refused"),
         )
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val vm = DeviceListViewModel(repo, this, kotlinx.coroutines.flow.MutableStateFlow(com.adbgui.core.settings.Settings()))
         var result: ConnectResult? = null
         vm.connect("1.2.3.4", 5555) { result = it }
@@ -212,7 +212,7 @@ class DeviceListViewModelTest {
         history.touchLastUsed("wl1")
         val runner = FakeAdbProcessRunner()
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val settingsFlow = MutableStateFlow(Settings(deviceGroupBy = DeviceGroupBy.NONE))
         val vm = DeviceListViewModel(repo, this, settingsFlow)
         val collected = mutableListOf<List<DeviceListItem>>()
@@ -243,7 +243,7 @@ class DeviceListViewModelTest {
         history.touchLastUsed("wl1")
         val runner = FakeAdbProcessRunner()
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val settingsFlow = MutableStateFlow(Settings(deviceGroupBy = DeviceGroupBy.TYPE))
         val vm = DeviceListViewModel(repo, this, settingsFlow)
         val collected = mutableListOf<List<DeviceListItem>>()
@@ -280,7 +280,7 @@ class DeviceListViewModelTest {
         history.setTag("wl1", "lab")
         val runner = FakeAdbProcessRunner()
         val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
         val settingsFlow = MutableStateFlow(Settings(deviceGroupBy = DeviceGroupBy.TAG))
         val vm = DeviceListViewModel(repo, this, settingsFlow)
         val collected = mutableListOf<List<DeviceListItem>>()

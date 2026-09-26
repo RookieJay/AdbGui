@@ -35,7 +35,7 @@ class AppConsoleViewModelTest {
         val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
         val history = DeviceHistoryStore(Files.createTempDirectory("ac"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val cmd = CommandRunner({ adb }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter{})
-        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, scope, clock = { 0L })
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, scope)
         return repo to AppConsoleViewModel(repo, selected, scope)
     }
 

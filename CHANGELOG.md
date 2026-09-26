@@ -3,6 +3,20 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 设备自动命名根治：online 即命名 + 有界自调度重试 (2026-09-26)
+
+真机现象：无线连接的小米电视（`192.168.10.92:5555`）在列表里只显示 serial，没有名字。取证（`devices.json` 的 `lastConnectedAt`/`lastUsedAt` 相差 10ms = `connectWireless` 成功路径指纹 + 对该设备手动 `getprop` 正常）定位到根因：**自动命名只在 `connectWireless` 里 fire-once**，连接成功后立刻 `getprop`，瞬时失败（adbd 握手未就绪等）被 `runCatching` 静默吞掉——无日志、无重试，设备从此永久无名。且设备列表此后不再变化，而 `DeviceTracker` 每 2s 往 StateFlow 塞**值相等**的列表会被合并（不唤醒 collector），`recompute` 永远不会再触发——即使想"下次 recompute 重试"也没有下次。另有同类缺口：USB 插入、app 启动时已连接的设备永远走不到命名分支。
+
+**改动（`DeviceRepository`）**：
+
+- 命名时机从「connect 后一次性」改为「观察到 ONLINE 且无别名」：`recompute` 里对 `isLive && alias == null` 的设备调度 `autoName`；`connectWireless` 保留 fast path（不等 2s 轮询）。覆盖 USB 插入 / app 启动时已连接 / 无线连接三条路径。
+- **重试自调度**：失败记 WARN（旧版无任何日志，不可诊断）并 `delay(60s)` 后重试（设备仍在线才重试）；**有界**——每个 online epoch 最多 5 次（设备离线重置预算），防止永久不可命名的设备无限重试（也会让 runTest 虚拟时间无限快进）。
+- 发射端去重：`namingLaunchLive` 记录上次调度过命名的 live 列表，值相等不再重复调度（init `recompute` 与 collector 处理初始值是同一列表，避免双跑 getprop）；并发执行用 `namingInFlight` + `Mutex` 去重。
+- 命名协程挂独立 `namingScope`（`SupervisorJob` + 继承 scope 的 dispatcher），`stop()` 一并取消——不能做 runTest scope 的子 Job（测试结束时有活跃子 Job 会 UncompletedCoroutinesError）。
+- `DeviceRepository` 移除从未使用的 `clock` 构造参数（技术债规范 #2：无引用即删；同步改 CompositionRoot + 全部测试调用点）。
+
+**测试**：`DeviceRepositoryTest` +4：USB/启动即命名、offline 不命名、瞬时失败后虚拟时间推进 60s 重试成功、失败记 WARN。测试侧踩坑两则记档：① 测试里背靠背改 `MutableStateFlow.value`（OFFLINE→ONLINE）会被合并，collector 醒来时当前值==上次收集值则不再发射——这正是生产里"列表不变则无 recompute"的镜像；② `advanceUntilIdle` 会快进虚拟时间烧完整条重试链，轮询等待要用 `runCurrent`。
+
 ## v2 — 自定义更新源（本地 latest.json 测试）(2026-09-23)
 
 升级体验修复后需要一个不发布 GitHub 就能本地验证"应用内升级"的通道。现有两个源（GitHub 官方 / gh-proxy 镜像）都是固定的，没法指向本地服务器。

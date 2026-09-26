@@ -36,7 +36,7 @@ class CompositionRoot {
     val commands = CommandRunner({ locator.locate() }, runner, logger, scope, CommandRunner.AdbServerStarter { server.ensureStarted() })
     private val history = DeviceHistoryStore(configDir, clock = { System.currentTimeMillis() })
     val tracker = DeviceTracker({ locator.locate() }, server, runner, logger, scope)
-    val repository = DeviceRepository(tracker, history, commands, logger, scope, clock = { System.currentTimeMillis() })
+    val repository = DeviceRepository(tracker, history, commands, logger, scope)
     // scrcpy wiring (Task 5)
     val scrcpyInstaller = com.adbgui.desktop.platform.ScrcpyInstaller(configDir)
     val scrcpyLocator = com.adbgui.desktop.platform.WindowsScrcpyLocator(settings, configDir, SystemPathProbe())
