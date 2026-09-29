@@ -262,14 +262,38 @@ class AppConsoleViewModelTest {
         val publicSourceDir = vm.detail.value?.publicSourceDir
         assertNotNull(publicSourceDir, "detail must expose publicSourceDir for export")
         vm.exportApk("com.dangbeimarket", "C:/x/app.apk"); advanceUntilIdle()
-        // Verify repo.pull was called with (publicSourceDir, localPath) — adb argv carries both.
+        // Verify repo.pull was called with (apk file, localPath) — adb argv carries both.
+        // Android <=9 resourcePath is the package DIRECTORY; the pull must target base.apk in it.
         val pullCalls = runner.runs.filter { it.contains("pull") }
         assertEquals(1, pullCalls.size, "expected exactly one pull, got ${runner.runs}")
         val args = pullCalls.first()
-        assertTrue(args.contains(publicSourceDir), "pull must use publicSourceDir: $args")
+        assertTrue(args.contains("$publicSourceDir/base.apk"), "pull must use <publicSourceDir>/base.apk: $args")
         assertTrue(args.contains("C:/x/app.apk"), "pull must use local dest: $args")
         assertTrue(vm.message.value != null && vm.message.value!!.contains("app.apk"), "success msg with name: ${vm.message.value}")
         assertNull(vm.error.value)
+        vm.stop(); repo.stop()
+    }
+
+    @Test fun exportApk_appends_base_apk_when_source_is_dir() = runTest {
+        val runner = FakeAdbProcessRunner()
+        // Android 6 (TCL TV) dumpsys: no publicSourceDir line, and resourcePath is the package
+        // DIRECTORY (no /base.apk suffix) — apk lives at <dir>/base.apk since Android 5.
+        runner.whenArgsContains(listOf("dumpsys", "package"), AdbProcessResult(0,
+            "Packages:\n  Package [com.x] (0):\n    codePath=/data/app/com.x-1\n" +
+            "    resourcePath=/data/app/com.x-1\n    versionName=1.0.12\n", ""))
+        runner.whenArgsContains(listOf("pull"), AdbProcessResult(0, "1 file pulled.\n", ""))
+        val selected = MutableStateFlow<String?>("serial1")
+        val (repo, vm) = vm(runner, selected, this)
+        vm.loadDetail("com.x"); advanceUntilIdle()
+        assertEquals("/data/app/com.x-1", vm.detail.value?.publicSourceDir, "fixture must expose a dir-shaped source")
+        vm.exportApk("com.x", "D:/x/app.apk"); advanceUntilIdle()
+        // Pulling the directory would drag lib/ and oat/ along (oat/ is permission-denied on
+        // Android 6) — the pull must target the apk file inside the dir.
+        val pullCalls = runner.runs.filter { it.contains("pull") }
+        assertEquals(1, pullCalls.size, "expected exactly one pull, got ${runner.runs}")
+        assertTrue(pullCalls.first().contains("/data/app/com.x-1/base.apk"),
+            "pull must target <dir>/base.apk: ${pullCalls.first()}")
+        assertNull(vm.error.value, "expected success, got: ${vm.error.value}")
         vm.stop(); repo.stop()
     }
 

@@ -145,14 +145,19 @@ class AppConsoleViewModel(
 
     /** Export the selected package's APK to a local path via `adb pull` of its [DumpsysPackage.publicSourceDir].
      *  The save-path dialog is handled by the UI (FileDialogs, `:desktop/platform`); the VM only
-     *  receives the chosen [destPath] and performs the pull. No source dir → inline error, no pull. */
+     *  receives the chosen [destPath] and performs the pull. No source dir → inline error, no pull.
+     *  Android <=9 dumpsys has no publicSourceDir; the resourcePath fallback is the package
+     *  DIRECTORY — pulling it would drag lib/ and oat/ along (oat/ is permission-denied on
+     *  Android 6), so a dir-shaped source is resolved to its `<dir>/base.apk` (the layout since
+     *  Android 5; on older releases resourcePath already points at the .apk file). */
     fun exportApk(pkg: String, destPath: String) = scope.launch {
         val serial = selectedSerial.value ?: return@launch
         _busy.value = true; _error.value = null; _message.value = null
         try {
             val sourceDir = cachedOrLoad(serial, pkg).publicSourceDir
                 ?: throw IllegalStateException(Strings.t("export_apk_no_path"))
-            repo.pull(serial, sourceDir, destPath)
+            val apkPath = if (sourceDir.endsWith(".apk")) sourceDir else "$sourceDir/base.apk"
+            repo.pull(serial, apkPath, destPath)
             _message.value = Strings.t("export_apk_success").format(destPath)
         } catch (e: AdbCommandException) {
             _error.value = "${e.message}\n--- adb stderr ---\n${e.stderr}"
