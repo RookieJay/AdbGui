@@ -3,6 +3,21 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 电视下载 APK 报错：盘根目录 pull + Android ≤9 源是目录 (2026-09-29)
+
+真机现象：TCL 电视（Android 6.0.1，`192.168.1.138:5555`）导出 APK 到 `D:\` 报 `adb: error: cannot create file/directory 'D:\xxx.apk': No such file or directory`。取证（cmd.exe 纯净环境排除 shell 转义，platform-tools 37.0.1 = 内置 adb 同版本）确认是**两个独立问题叠加**：
+
+1. **盘根目录**：Windows adb 无法在盘符根目录直接创建 pull 目标——盘根明明存在却报 ENOENT；同一命令拉到已存在子目录即成功；正/反斜杠、相对路径均不救（相对路径 + cwd 在盘根可以，但需要改进程 cwd，不动接口）。这是 adb 的已知行为，应用侧只能绕。
+2. **源是目录**：Android ≤9 dumpsys 没有 `publicSourceDir` 字段，parser 回退取 `resourcePath`——实测该字段是**包目录**（`/data/app/<pkg>-1`，非 `base.apk`）。就算换个子目录保存，pull 整个目录会把 `lib/` + `oat/`（Android 6 上权限拒绝）一起拖下来。
+
+**改动**：
+
+- **core** `CommandRunner.pull`：目标是盘根直接子路径（`isDriveRootChild`：绝对路径且 parent 的 parent 为 null）时，在目标同级建临时目录（`Files.createTempDirectory`，我们的 JVM 不受 adb 该缺陷影响）→ pull 进去 → 同卷 `Files.move`（廉价 rename）到位 → finally 无论成败递归删临时目录。本地文件操作跑在注入的 `io` dispatcher 上（技术债规范 #1，测试传 `Unconfined`）。
+- **desktop** `AppConsoleViewModel.exportApk`：源不以 `.apk` 结尾时补 `/base.apk`（Android 5+ 目录内固定叫 base.apk；更老版本的 `resourcePath` 本身就是 .apk 文件，不动）。
+- `FakeAdbProcessRunner` 加 `runSideEffect` 钩子：脚本化的 `AdbProcessResult` 无法模拟 pull 在本地建文件，测试用它模拟 adb 的文件副作用。
+
+**测试**：`CommandRunnerTest` +2（`isDriveRootChild` 判定表；端到端：盘根目标 → adb 收到的是临时目录内路径、文件 move 到位、临时目录清理干净——测试踩坑：C:\ 根目录 ACL 允许建目录但拒绝建文件，探根必须试"建文件"而非"建目录"；且测试目标文件名不能撞临时目录前缀 `adbgui-pull-`，否则清理断言把自己算进去）；`AppConsoleViewModelTest` +1（Android 6 形状的 dumpsys → pull 参数带 `/base.apk`），既有成功用例断言同步修正为 `<dir>/base.apk`。
+
 ## v2 — 设备自动命名根治：online 即命名 + 有界自调度重试 (2026-09-26)
 
 真机现象：无线连接的小米电视（`192.168.10.92:5555`）在列表里只显示 serial，没有名字。取证（`devices.json` 的 `lastConnectedAt`/`lastUsedAt` 相差 10ms = `connectWireless` 成功路径指纹 + 对该设备手动 `getprop` 正常）定位到根因：**自动命名只在 `connectWireless` 里 fire-once**，连接成功后立刻 `getprop`，瞬时失败（adbd 握手未就绪等）被 `runCatching` 静默吞掉——无日志、无重试，设备从此永久无名。且设备列表此后不再变化，而 `DeviceTracker` 每 2s 往 StateFlow 塞**值相等**的列表会被合并（不唤醒 collector），`recompute` 永远不会再触发——即使想"下次 recompute 重试"也没有下次。另有同类缺口：USB 插入、app 启动时已连接的设备永远走不到命名分支。
