@@ -12,7 +12,20 @@ import com.adbgui.core.domain.InstallResult
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.core.domain.RebootMode
 import com.adbgui.core.log.Logger
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+
+/** True for absolute paths whose parent IS a filesystem root — on Windows, the direct
+ *  children of a drive root (`D:\app.apk`, `\app.apk`): the only destinations adb's
+ *  pull cannot create (see [CommandRunner.pull]). Nested paths and non-absolute paths
+ *  (adb resolves those against its cwd, which works) return false. */
+internal fun isDriveRootChild(path: Path): Boolean =
+    path.isAbsolute && path.parent != null && path.parent.parent == null
 
 class CommandRunner(
     private val adb: suspend () -> AdbBinary,
@@ -20,6 +33,8 @@ class CommandRunner(
     private val logger: Logger,
     private val scope: CoroutineScope,
     private val server: AdbServerStarter,
+    // Dispatcher for pull's local staging file ops (tech-debt rule #1: injected, tests pass Unconfined).
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     // seam so tests can inject a no-op server without the real AdbServerController
     fun interface AdbServerStarter { suspend fun ensureStarted() }
@@ -379,8 +394,31 @@ class CommandRunner(
         runCmd(serial, listOf("push", localPath, devicePath))
     }
 
+    /** `adb -s <serial> pull <devicePath> <localPath>`. On Windows, adb cannot create a
+     *  destination that sits directly at a drive root (`D:\app.apk`) — it fails with
+     *  `cannot create file/directory 'D:\app.apk': No such file or directory` although the
+     *  root exists (reproduced with platform-tools 37.0.1 from a clean cmd.exe; the same
+     *  pull under an existing subdirectory succeeds, and the bundled adb is the same
+     *  version). Such pulls are staged into a temp sibling directory of the destination
+     *  (our JVM creates files there fine), then [Files.move]d into place — same volume, so
+     *  a cheap rename — with the staging dir removed whether the pull succeeded or not. */
     suspend fun pull(serial: String, devicePath: String, localPath: String) {
-        runCmd(serial, listOf("pull", devicePath, localPath))
+        val dest = Path.of(localPath)
+        if (!isDriveRootChild(dest)) {
+            runCmd(serial, listOf("pull", devicePath, localPath))
+            return
+        }
+        logger.debug("pull: dest at drive root, staging via sibling temp dir: $dest")
+        withContext(io) {
+            val stage = Files.createTempDirectory(dest.parent, "adbgui-pull-")
+            val staged = stage.resolve(dest.fileName)
+            try {
+                runCmd(serial, listOf("pull", devicePath, staged.toString()))
+                Files.move(staged, dest, StandardCopyOption.REPLACE_EXISTING)
+            } finally {
+                runCatching { deleteRecursively(stage) }
+            }
+        }
     }
 
     /** Probe `/proc/net/unix` for the WebView devtools abstract socket
@@ -457,6 +495,12 @@ class CommandRunner(
             return i
         }
         return null
+    }
+
+    private fun deleteRecursively(dir: Path) {
+        Files.walk(dir).use { walk ->
+            walk.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+        }
     }
 
     private suspend fun runCmd(serial: String, args: List<String>, timeoutMs: Long? = null): AdbProcessResult {

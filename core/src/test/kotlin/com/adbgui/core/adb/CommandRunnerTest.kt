@@ -7,11 +7,16 @@ import com.adbgui.core.domain.Extra
 import com.adbgui.core.domain.ExtraType
 import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.log.NoopLogger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CommandRunnerTest {
@@ -369,6 +374,50 @@ class CommandRunnerTest {
         runner.whenArgsContains(listOf("pull"), AdbProcessResult(1, "", "device offline"))
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         assertFailsWith<RuntimeException> { cr.pull("abc", "/sdcard/file.txt", "/local/file.txt") }
+    }
+
+    @Test
+    fun is_drive_root_child_flags_only_direct_children_of_fs_root() {
+        // Windows-only path semantics — guard so the suite stays meaningful elsewhere.
+        if (!System.getProperty("os.name").lowercase().contains("win")) return
+        assertTrue(isDriveRootChild(Path.of("D:\\app.apk")), "direct drive-root child")
+        assertTrue(isDriveRootChild(Path.of("D:/app.apk")), "forward-slash form normalizes the same")
+        assertFalse(isDriveRootChild(Path.of("D:\\dir\\app.apk")), "nested path passes through")
+        assertFalse(isDriveRootChild(Path.of("app.apk")), "relative path: adb resolves it against cwd, which works")
+        assertFalse(isDriveRootChild(Path.of("D:\\")), "the root itself is not a child of a root")
+    }
+
+    @Test
+    fun pull_to_drive_root_stages_in_sibling_temp_dir_and_moves() = runTest {
+        // Windows adb cannot create a pull destination directly at a drive root —
+        // `adb pull remote D:\app.apk` fails with `cannot create file/directory: No such file
+        // or directory` although the root exists (reproduced: platform-tools 37.0.1 from a
+        // clean cmd.exe; the same pull under an existing subdirectory succeeds). CommandRunner
+        // must stage into a temp sibling dir, then Files.move into place (same volume = rename).
+        if (!System.getProperty("os.name").lowercase().contains("win")) return@runTest
+        // Pick a root where a FILE can be created directly (C:\ root's ACL allows creating
+        // directories but denies files — a directory-only probe would wrongly select it).
+        val root = File.listRoots().map { it.toPath() }
+            .firstOrNull { r -> runCatching { Files.deleteIfExists(Files.writeString(r.resolve("adbgui-probe-${System.nanoTime()}.tmp"), "p")) }.isSuccess }
+            ?: return@runTest  // no writable root — nothing this workaround can be verified against
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("pull"), AdbProcessResult(0, "1 file pulled.\n", ""))
+        // A scripted AdbProcessResult cannot create the local file — simulate adb's side effect.
+        runner.runSideEffect = { args -> if (args.contains("pull")) Files.writeString(Path.of(args.last()), "apk-bytes") }
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{}, Dispatchers.Unconfined)
+        val dest = root.resolve("adbgui-e2e-dest.apk")  // must NOT match the staging prefix checked below
+        try {
+            cr.pull("abc", "/data/app/x-1/base.apk", dest.toString())
+            assertTrue(Files.exists(dest), "pulled file must land at the drive-root destination")
+            assertEquals("apk-bytes", Files.readString(dest))
+            val pullDest = runner.runs.last { it.contains("pull") }.last()
+            assertFalse(pullDest.equals(dest.toString(), ignoreCase = true), "adb must not be given the drive-root dest directly: $pullDest")
+            assertTrue(pullDest.contains("adbgui-pull-"), "adb dest must be inside the staging dir: $pullDest")
+            val leftovers = Files.list(root).use { s -> s.filter { it.fileName.toString().startsWith("adbgui-pull-") }.count() }
+            assertEquals(0L, leftovers, "staging dir must be cleaned up")
+        } finally {
+            Files.deleteIfExists(dest)
+        }
     }
 
     @Test

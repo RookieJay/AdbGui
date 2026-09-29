@@ -66,9 +66,15 @@ class FakeAdbProcessRunner : AdbProcessRunner {
 
     override suspend fun run(adb: AdbBinary, args: List<String>, timeoutMs: Long?): AdbProcessResult {
         runs += args
+        runSideEffect?.invoke(args)
         return scripts.firstOrNull { r -> r.keywords.all { kw -> args.any { it.contains(kw) } } }?.result
             ?: default
     }
+
+    /** Optional side effect invoked on each `run` call (after argv recording) — lets a test
+     *  simulate commands that touch the local filesystem, which a scripted AdbProcessResult
+     *  cannot (e.g. `pull` actually creating the local file it reports as pulled). */
+    var runSideEffect: ((List<String>) -> Unit)? = null
 
     override suspend fun runBinary(adb: AdbBinary, args: List<String>, timeoutMs: Long?): ByteArray = binaryResponse
 
