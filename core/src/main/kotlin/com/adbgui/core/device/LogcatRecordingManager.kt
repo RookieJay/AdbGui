@@ -1,6 +1,7 @@
 package com.adbgui.core.device
 
 import com.adbgui.core.adb.CommandRunner
+import com.adbgui.core.domain.DeviceStatus
 import com.adbgui.core.log.Logger
 import com.adbgui.core.settings.SettingsStore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -10,9 +11,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
@@ -49,6 +52,15 @@ class LogcatRecordingManager(
     private val autoRecorders = mutableMapOf<String, LogcatRecorder>()   // mutex 保护
     private val autoJobs = mutableMapOf<String, Job>()                   // mutex 保护
     private var observerJob: Job? = null
+
+    init {
+        // 启动清理（spec §3.2）：删 7 天前 auto 文件；失败仅 WARN，不阻塞
+        scope.launch {
+            withContext(io) { runCatching { cleanupOldAutoFiles() } }
+                .onFailure { logger.warn("recording cleanup failed: ${it.message}") }
+        }
+        observerJob = scope.launch { observeDevices() }
+    }
 
     fun startManual(serial: String) {
         if (_manualState.value is ManualRecordState.Recording) return
@@ -132,9 +144,62 @@ class LogcatRecordingManager(
         }
     }
 
-    // --- Task 4 填充：observeDevices / startAutoLocked / stopAutoLocked / cleanupOldAutoFiles ---
-    // 本任务先留空实现，保证编译（autoStates 恒为 emptyMap）：
-    internal fun startAutoLocked(serial: String) { /* Task 4 */ }
-    internal suspend fun stopAutoLocked(serial: String) { /* Task 4 */ }
-    internal fun cleanupOldAutoFiles() { /* Task 4 */ }
+    // --- Task 4: observeDevices / startAutoLocked / stopAutoLocked / cleanupOldAutoFiles ---
+
+    /** 设备上下线 + 设置开关 → 增删 auto recorder；同时守护手动会话（设备断开即停）。 */
+    private suspend fun observeDevices() {
+        combine(settings.state, tracker.devices) { s, devs ->
+            s.logcatAutoRecord to devs
+        }.collect { (autoEnabled, devs) ->
+            val online = devs.filter { it.status == DeviceStatus.ONLINE }
+                .map { it.serial }.toSet()
+            val manual = _manualState.value
+            if (manual is ManualRecordState.Recording && manual.serial !in online) {
+                stopManual("device_disconnected")
+            }
+            mutex.withLock {
+                autoRecorders.keys.filter { it !in online }.forEach { stopAutoLocked(it) }
+                if (autoEnabled) online.filter { it !in autoRecorders }.forEach { startAutoLocked(it) }
+                else autoRecorders.keys.toList().forEach { stopAutoLocked(it) }
+            }
+        }
+    }
+
+    /** mutex 持有中调用。轮转续开：recorder 写满文件原地收尾后，这里换新文件重开（spec §3.2）。 */
+    internal fun startAutoLocked(serial: String) {
+        val file = uniqueFile(recordingsDir.resolve("auto_${sanitizeSerial(serial)}_${stamp()}.log"))
+        val rec = LogcatRecorder(commands, logger, scope, io, file, rotationBytes)
+        autoRecorders[serial] = rec
+        autoJobs[serial] = scope.launch {
+            rec.state.collect { st ->
+                _autoStates.value = _autoStates.value + (serial to st)
+                if (st.rotated) {
+                    mutex.withLock {
+                        if (autoRecorders[serial] === rec) {
+                            autoJobs.remove(serial)?.cancel()
+                            startAutoLocked(serial)
+                        }
+                    }
+                }
+            }
+        }
+        rec.start(serial)
+    }
+
+    /** mutex 持有中调用（suspend：内部 join recorder 的收尾）。 */
+    internal suspend fun stopAutoLocked(serial: String) {
+        autoJobs.remove(serial)?.cancel()
+        autoRecorders.remove(serial)?.stop(null)
+        _autoStates.value = _autoStates.value - serial
+    }
+
+    /** 删除超过 [RETENTION_MS] 的 auto_*.log；manual_*.log 永不动（spec §3.2）。io 上执行。 */
+    internal fun cleanupOldAutoFiles() {
+        val dir = recordingsDir.toFile()
+        if (!dir.isDirectory) return
+        val cutoff = clock() - RETENTION_MS
+        dir.listFiles { f -> f.isFile && f.name.startsWith("auto_") && f.name.endsWith(".log") }
+            ?.filter { it.lastModified() < cutoff }
+            ?.forEach { runCatching { it.delete() } }
+    }
 }
