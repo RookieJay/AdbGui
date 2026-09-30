@@ -81,7 +81,13 @@ fun main() = application {
             serial != null && list.any { it.serial == serial && it.status == DeviceStatus.ONLINE }
         }.stateIn(root.scope, SharingStarted.WhileSubscribed(5000), false)
     }
-    val logcatVm = remember { LogcatViewModel(logcatController, selectedSerial, deviceOnline, root.scope) }
+    val logcatRecording = remember {
+        com.adbgui.core.device.LogcatRecordingManager(
+            root.commands, root.tracker, root.settings, root.logger, root.scope,
+            root.configDir.resolve("logcat-recordings"),
+        )
+    }
+    val logcatVm = remember { LogcatViewModel(logcatController, logcatRecording, selectedSerial, deviceOnline, root.scope) }
     val systemOpsVm = remember { SystemOpsViewModel(root.repository, selectedSerial, root.scope) }
     val systemInfoVm = remember { SystemInfoViewModel(root.repository, selectedSerial, root.scope) }
     val remoteVm = remember { RemoteViewModel(root.repository, selectedSerial, root.settings, root.scope) }

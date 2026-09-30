@@ -3,11 +3,20 @@ package com.adbgui.desktop.ui
 import com.adbgui.core.adb.AdbProcessResult
 import com.adbgui.core.adb.CommandRunner
 import com.adbgui.core.adb.FakeAdbProcessRunner
+import com.adbgui.core.device.IDeviceTracker
 import com.adbgui.core.device.LogcatController
+import com.adbgui.core.device.LogcatRecordingManager
 import com.adbgui.core.device.LogcatStatus
+import com.adbgui.core.device.ManualRecordState
+import com.adbgui.core.device.RecordState
 import com.adbgui.core.domain.AdbBinary
 import com.adbgui.core.domain.AdbSource
+import com.adbgui.core.domain.DeviceSnapshot
+import com.adbgui.core.domain.DeviceStatus
 import com.adbgui.core.log.NoopLogger
+import com.adbgui.core.settings.SettingsStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -21,13 +30,38 @@ import kotlin.test.assertTrue
 class LogcatViewModelTest {
     private val adb = AdbBinary("adb", AdbSource.PATH)
 
+    private class FakeTracker(
+        initial: List<DeviceSnapshot> = emptyList(),
+    ) : IDeviceTracker {
+        override val devices = MutableStateFlow(initial)
+    }
+
+    private fun controller(
+        runner: FakeAdbProcessRunner, scope: CoroutineScope,
+    ): LogcatController {
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter {})
+        return LogcatController(cmd, NoopLogger, scope, ringCap = 5)
+    }
+
+    private fun recordingManager(
+        runner: FakeAdbProcessRunner, scope: CoroutineScope,
+    ): LogcatRecordingManager {
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter {})
+        val dir = Files.createTempDirectory("adbgui-rec")
+        return LogcatRecordingManager(
+            cmd, FakeTracker(listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))),
+            SettingsStore(dir, io = Dispatchers.Unconfined), NoopLogger,
+            scope, dir, io = Dispatchers.Unconfined,
+        )
+    }
+
     @Test fun selected_serial_change_starts_logcat_and_lines_flow() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I Tag: hi"))
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow<String?>(null)
-        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        val vm = LogcatViewModel(controller, recordingManager(runner, backgroundScope), selected, MutableStateFlow(true), this)
         vm.onPageEntered()
         // emulate auto-select
         selected.value = "abc"
@@ -43,7 +77,7 @@ class LogcatViewModelTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow("abc")
-        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        val vm = LogcatViewModel(controller, recordingManager(runner, backgroundScope), selected, MutableStateFlow(true), this)
         vm.onPageEntered()
         advanceUntilIdle()
         assertEquals(com.adbgui.core.device.LogcatStatus.RUNNING, controller.status.value)
@@ -67,7 +101,7 @@ class LogcatViewModelTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow("abc")
-        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        val vm = LogcatViewModel(controller, recordingManager(runner, backgroundScope), selected, MutableStateFlow(true), this)
         advanceUntilIdle()
         vm.fixLogcat()
         advanceUntilIdle()
@@ -89,7 +123,7 @@ class LogcatViewModelTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow("abc")
-        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        val vm = LogcatViewModel(controller, recordingManager(runner, backgroundScope), selected, MutableStateFlow(true), this)
         advanceUntilIdle()
         vm.fixLogcat()
         advanceUntilIdle()
@@ -109,7 +143,7 @@ class LogcatViewModelTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow("abc")
-        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        val vm = LogcatViewModel(controller, recordingManager(runner, backgroundScope), selected, MutableStateFlow(true), this)
         val tmp = Files.createTempFile("logcat-export", ".txt")
         vm.exportFull(tmp.toString())
         advanceUntilIdle()
@@ -127,7 +161,7 @@ class LogcatViewModelTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow(null)
-        val vm = LogcatViewModel(controller, selected, MutableStateFlow(false), this)
+        val vm = LogcatViewModel(controller, recordingManager(runner, backgroundScope), selected, MutableStateFlow(false), this)
         val tmp = Files.createTempFile("logcat-export", ".txt")
         vm.exportFull(tmp.toString())
         advanceUntilIdle()
@@ -142,7 +176,7 @@ class LogcatViewModelTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow<String?>("abc")
-        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        val vm = LogcatViewModel(controller, recordingManager(runner, backgroundScope), selected, MutableStateFlow(true), this)
         advanceUntilIdle()
         assertEquals(0, vm.lines.value.size, "must not stream before the page is entered")
         vm.stop(); controller.stop()
@@ -154,7 +188,7 @@ class LogcatViewModelTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow<String?>("abc")
-        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        val vm = LogcatViewModel(controller, recordingManager(runner, backgroundScope), selected, MutableStateFlow(true), this)
         vm.onPageEntered()
         advanceUntilIdle()
         assertEquals(1, vm.lines.value.size)
@@ -168,12 +202,39 @@ class LogcatViewModelTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         val controller = LogcatController(cmd, NoopLogger, this, ringCap = 5)
         val selected = MutableStateFlow<String?>("abc")
-        val vm = LogcatViewModel(controller, selected, MutableStateFlow(true), this)
+        val vm = LogcatViewModel(controller, recordingManager(runner, backgroundScope), selected, MutableStateFlow(true), this)
         vm.onPageEntered(); advanceUntilIdle()
         assertEquals(LogcatStatus.RUNNING, vm.status.value)
         selected.value = null
         advanceUntilIdle()
         assertEquals(LogcatStatus.IDLE, vm.status.value, "deselecting must stop the stream")
         vm.stop(); controller.stop()
+    }
+
+    @Test fun startRecording_without_device_sets_inline_error() = runTest {
+        val vm = LogcatViewModel(controller(FakeAdbProcessRunner(), backgroundScope),
+            recordingManager(FakeAdbProcessRunner(), backgroundScope),
+            MutableStateFlow(null), MutableStateFlow(false), backgroundScope)
+        vm.startRecording()
+        assertEquals(true, vm.recordError.value != null)
+        assertEquals(ManualRecordState.Idle, vm.manualRecord.value)
+    }
+
+    @Test fun start_stop_recording_transitions_manual_state() = runTest {
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I T: m"))
+        val rec = recordingManager(runner, this)
+        val serial = MutableStateFlow("abc")
+        val vm = LogcatViewModel(controller(runner, this),
+            rec, serial, MutableStateFlow(true), this)
+        vm.startRecording()
+        advanceUntilIdle()
+        assertTrue(vm.manualRecord.value is ManualRecordState.Recording)
+        vm.stopRecording()
+        advanceUntilIdle()
+        val st = vm.manualRecord.value
+        assertTrue(st is ManualRecordState.Stopped)
+        assertEquals("user", st.reason)
+        rec.stop()
+        advanceUntilIdle()
     }
 }

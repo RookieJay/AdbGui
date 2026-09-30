@@ -15,6 +15,7 @@ import java.io.FileWriter
 
 class LogcatViewModel(
     private val controller: LogcatController,
+    private val recording: com.adbgui.core.device.LogcatRecordingManager,
     private val selectedSerial: kotlinx.coroutines.flow.StateFlow<String?>,
     /** Whether the currently selected device is ONLINE. The empty-state "fix logcat" hint is
      *  gated on this — a disconnected/offline device produces an empty logcat stream too, but
@@ -43,6 +44,26 @@ class LogcatViewModel(
     val exportError: StateFlow<String?> = _exportError.asStateFlow()
     private val _savedPath = MutableStateFlow<String?>(null)
     val savedPath: StateFlow<String?> = _savedPath.asStateFlow()
+
+    // --- recording (spec §3.4): forwards only, no adb access (红线 #2) ---
+    val manualRecord: StateFlow<com.adbgui.core.device.ManualRecordState> = recording.manualState
+    val autoRecordStates: StateFlow<Map<String, com.adbgui.core.device.RecordState>> = recording.autoStates
+    val recordingsDir: java.nio.file.Path get() = recording.recordingsDir
+
+    private val _recordError = MutableStateFlow<String?>(null)
+    val recordError: StateFlow<String?> = _recordError.asStateFlow()
+
+    fun startRecording() {
+        val serial = selectedSerial.value
+        if (serial == null) {
+            _recordError.value = com.adbgui.desktop.ui.i18n.Strings.t("no_device_selected_logcat")
+            return
+        }
+        _recordError.value = null
+        recording.startManual(serial)
+    }
+
+    fun stopRecording() { scope.launch { recording.stopManual("user") } }
 
     fun setFilters(f: LogcatFilters) = controller.setFilters(f)
     fun pause() = controller.pause()
