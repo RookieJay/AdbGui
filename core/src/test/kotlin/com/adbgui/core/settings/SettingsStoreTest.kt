@@ -72,6 +72,21 @@ class SettingsStoreTest {
     }
 
     @Test
+    fun logcat_auto_record_default_and_round_trip() = runTest {
+        val dir = Files.createTempDirectory("logcat-auto")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        // Old-format JSON without logcatAutoRecord key → default true
+        val oldJson = """{"logcatRingCap": 50000}"""
+        Files.writeString(dir.resolve("settings.json"), oldJson)
+        val loaded = store.load()
+        assertEquals(true, loaded.logcatAutoRecord)
+        // Save with explicit false + reload → round-trips as false
+        store.save(loaded.copy(logcatAutoRecord = false))
+        val reloaded = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined).load()
+        assertEquals(false, reloaded.logcatAutoRecord)
+    }
+
+    @Test
     fun update_settings_default_and_round_trip() = runTest {
         val dir = Files.createTempDirectory("upd")
         val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)

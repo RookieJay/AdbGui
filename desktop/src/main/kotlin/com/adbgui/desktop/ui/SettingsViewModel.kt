@@ -27,6 +27,7 @@ class SettingsViewModel(private val store: SettingsStore, private val scope: Cor
     fun setScrcpyLaunch(profile: ScrcpyLaunchProfile) = scope.launch { store.update { it.copy(scrcpyLaunch = profile) } }
     fun setDeviceGroupBy(mode: DeviceGroupBy) = scope.launch { store.update { it.copy(deviceGroupBy = mode) } }
     fun setLogcatRingCap(cap: Int) = scope.launch { store.update { it.copy(logcatRingCap = cap) } }
+    fun setLogcatAutoRecord(b: Boolean) = scope.launch { store.update { it.copy(logcatAutoRecord = b) } }
     fun setCheckOnStartup(b: Boolean) = scope.launch {
         store.update { it.copy(update = it.update.copy(checkOnStartup = b)) }
     }

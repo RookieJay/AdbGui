@@ -91,6 +91,20 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun setLogcatAutoRecord_persists() = runTest {
+        val dir = Files.createTempDirectory("adbgui-set")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = SettingsViewModel(store, this)
+        vm.setLogcatAutoRecord(false)
+        advanceUntilIdle()
+        assertEquals(false, store.state.value.logcatAutoRecord)
+        // 序列化默认值（true）也不丢
+        vm.setLogcatAutoRecord(true)
+        advanceUntilIdle()
+        assertEquals(true, store.state.value.logcatAutoRecord)
+    }
+
+    @Test
     fun setCheckOnStartup_persists() = runTest {
         val dir = Files.createTempDirectory("check-on-startup")
         val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)

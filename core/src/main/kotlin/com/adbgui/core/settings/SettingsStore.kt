@@ -50,6 +50,9 @@ data class Settings(
      *  size" — larger = more history retained for copy/scrollback, at the cost of memory. Applied
      *  at LogcatController construction, so a change takes effect on next app start. */
     val logcatRingCap: Int = 50000,
+    /** 设备上线时自动后台录制其 logcat 到 logcat-recordings/（"行车记录仪"，spec §3.3）。
+     *  仅应用运行期间有效；auto 文件保留 7 天、单文件 100 MB 轮转。 */
+    val logcatAutoRecord: Boolean = true,
     val remoteButtons: List<RemoteButton> = listOf(
         RemoteButton("vol_up", "音量+", 24),
         RemoteButton("vol_down", "音量−", 25),
