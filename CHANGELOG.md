@@ -3,6 +3,18 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-09-30 Logcat 录制（自动 + 手动）
+
+分支：feat/logcat-recording。spec：docs/superpowers/specs/2026-09-30-logcat-recording-design.md
+
+- **LogcatRecorder（core）**：独立 `adb logcat` 进程逐行把原始行（不解析/不过滤/无上限）tee 到文件；断流退避重连（重连处写 `--------- adbgui reconnect <serial>` 标记行）；单文件 100 MB 轮转；stop 保证已写行落盘。
+- **手动录制**：Logcat 页 ●/■ 按钮，录制跨页面存活、设备断开自动停止；文件 `manual_<serial>_<stamp>.log`。
+- **自动后台录制**（默认开，设置可关）：设备上线即录、下线即停，文件 `auto_<serial>_<stamp>.log`，7 天过期清理（manual 文件永不自动删）。应用需保持运行。
+- 存放：`%APPDATA%/AdbGui/logcat-recordings/`，工具栏"后台录制中"chip 可直达。
+- 已知边界：TCL 等 logd 被禁用的设备录出空文件（沿用页面 fix logd 流程）；页面显示 ring 上限与录制无关。
+
+待办：无（PairResultParser fixture 遗留见既有 CHANGELOG 节）。
+
 ## v2 — 电视下载 APK 报错：盘根目录 pull + Android ≤9 源是目录 (2026-09-29)
 
 真机现象：TCL 电视（Android 6.0.1，`192.168.1.138:5555`）导出 APK 到 `D:\` 报 `adb: error: cannot create file/directory 'D:\xxx.apk': No such file or directory`。取证（cmd.exe 纯净环境排除 shell 转义，platform-tools 37.0.1 = 内置 adb 同版本）确认是**两个独立问题叠加**：
