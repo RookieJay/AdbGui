@@ -19,6 +19,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.RadioButton
 import androidx.compose.material.Surface
+import androidx.compose.material.Switch
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
@@ -242,6 +243,18 @@ fun SettingsScreen(
                 }) { Text(Strings.t("apply")) }
             }
             Text(Strings.t("logcat_ring_cap_hint"), style = MaterialTheme.typography.caption)
+
+            Divider()
+
+            // --- Auto logcat recording ---
+            Text(Strings.t("logcat_auto_record"), style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("logcat_auto_record_desc"), style = MaterialTheme.typography.caption)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = settings.logcatAutoRecord,
+                    onCheckedChange = { vm.setLogcatAutoRecord(it) },
+                )
+            }
 
             Divider()
 

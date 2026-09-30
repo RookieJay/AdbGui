@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -14,9 +15,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +37,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.device.LogcatFilters
 import com.adbgui.core.device.LogcatStatus
+import com.adbgui.core.device.ManualRecordState
 import com.adbgui.core.domain.LogcatLevel
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AppColors
@@ -64,6 +68,9 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     val exportProgress by vm.exportProgress.collectAsState()
     val exportError by vm.exportError.collectAsState()
     val savedPath by vm.savedPath.collectAsState()
+    val manualRecord by vm.manualRecord.collectAsState()
+    val recordError by vm.recordError.collectAsState()
+    val autoRecordStates by vm.autoRecordStates.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
     val searchFocus = remember { FocusRequester() }
     val matchHighlight = MaterialTheme.colors.primary.copy(alpha = 0.28f)
@@ -113,6 +120,25 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                         contentDescription = Strings.t(if (paused) "resume" else "pause"),
                     )
                 }
+                val recordingNow = manualRecord is ManualRecordState.Recording
+                Button(
+                    enabled = recordingNow || deviceOnline,
+                    colors = if (recordingNow) ButtonDefaults.buttonColors(
+                        backgroundColor = MaterialTheme.colors.error
+                    ) else ButtonDefaults.buttonColors(),
+                    onClick = { if (recordingNow) vm.stopRecording() else vm.startRecording() },
+                ) {
+                    Icon(
+                        if (recordingNow) Icons.Filled.Stop else Icons.Filled.FiberManualRecord,
+                        contentDescription = Strings.t(if (recordingNow) "record_stop" else "record_start"),
+                        tint = if (!recordingNow) MaterialTheme.colors.error else contentColorFor(MaterialTheme.colors.error),
+                    )
+                    if (recordingNow) {
+                        Spacer(Modifier.width(4.dp))
+                        val r = manualRecord as ManualRecordState.Recording
+                        Text(Strings.t("recording_status").format(r.lineCount, formatBytes(r.bytesWritten)))
+                    }
+                }
                 IconButton(onClick = { confirmClear = true }) {
                     Icon(Icons.Filled.Delete, contentDescription = Strings.t("clear"))
                 }
@@ -145,12 +171,36 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 }
             }
             error?.let { e -> InlineMessageBanner(e, MessageKind.Error) }
+            recordError?.let { msg -> InlineMessageBanner(msg, MessageKind.Error) }
+            when (val mr = manualRecord) {
+                is ManualRecordState.Stopped -> {
+                    if (mr.reason == "device_disconnected") {
+                        InlineMessageBanner(Strings.t("record_stopped_device_disconnected"), MessageKind.Error)
+                    } else if (mr.reason == "write_failed") {
+                        InlineMessageBanner(Strings.t("record_stopped_write_failed"), MessageKind.Error)
+                    }
+                    SavedFileBanner(
+                        path = mr.file.toFile().absolutePath,
+                        onOpen = { openFile(mr.file.toFile()) },
+                        onReveal = { revealFile(mr.file.toFile()) },
+                    )
+                }
+                else -> {}
+            }
             savedPath?.let { p ->
                 val f = File(p)
                 SavedFileBanner(path = f.absolutePath, onOpen = { openFile(f) }, onReveal = { revealFile(f) })
             }
-
             exportError?.let { msg -> InlineMessageBanner(msg, MessageKind.Error) }
+            if (autoRecordStates.isNotEmpty()) {
+                Text(
+                    Strings.t("auto_recording"),
+                    Modifier.padding(start = 4.dp).clickable { revealFile(File(vm.recordingsDir.toAbsolutePath().toString())) }
+                        .padding(4.dp),
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.primary,
+                )
+            }
 
             Divider()
             // Log list with auto-scroll-to-bottom
@@ -280,3 +330,10 @@ private fun highlightMatches(raw: String, query: String, highlight: Color): Anno
 private fun levelLabel(levelSet: Set<LogcatLevel>): String =
     if (levelSet.size == LogcatLevel.entries.size) Strings.t("level_all")
     else levelSet.joinToString(",") { it.name }
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024 * 1024 -> "%.1f GB".format(bytes / 1024.0 / 1024 / 1024)
+    bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / 1024.0 / 1024)
+    bytes >= 1024L -> "%.0f KB".format(bytes / 1024.0)
+    else -> "$bytes B"
+}
