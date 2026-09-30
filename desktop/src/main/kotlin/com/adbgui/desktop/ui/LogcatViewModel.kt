@@ -56,7 +56,7 @@ class LogcatViewModel(
     fun startRecording() {
         val serial = selectedSerial.value
         if (serial == null) {
-            _recordError.value = com.adbgui.desktop.ui.i18n.Strings.t("no_device_selected_logcat")
+            _recordError.value = com.adbgui.desktop.ui.i18n.Strings.t("no_device_selected_record")
             return
         }
         _recordError.value = null

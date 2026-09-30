@@ -67,6 +67,7 @@ class LogcatRecorderTest {
         val text = Files.readString(f)
         assertTrue(text.contains(line1))
         assertTrue(text.contains("--------- adbgui reconnect"))
+        assertTrue(text.contains("serial=abc"))
         assertTrue(text.endsWith(line2 + "\n"))
     }
 

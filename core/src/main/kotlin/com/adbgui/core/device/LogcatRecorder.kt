@@ -97,33 +97,47 @@ class LogcatRecorder(
     }
 
     /** 断流退避重连循环。文件写入走 BufferedWriter（缓冲写，非阻塞 syscall）；
-     *  delay 在父 context 以兼容 TestDispatcher 虚拟时间。 */
+     *  delay 在父 context 以兼容 TestDispatcher 虚拟时间。
+     *  流收集+行写入跑在 [io] 上，避免阻塞 Default 池（auto-record 每设备一条流，
+     *  Default 池会被少量设备耗尽）。 */
     private suspend fun runLoop(serial: String) {
         var backoff = 1000L
         var exitLoop = false
+        var firstAttempt = true
         while (!exitLoop) {
             try {
-                val s = commands.streamLogcat(serial)
-                stream = s
-                var done = false
-                s.lines.collect { line ->
-                    if (done) return@collect
-                    val w = writer
-                    if (w == null) { done = true; s.kill(); return@collect }
-                    w.write(line); w.write("\n")   // 显式 \n，不用 appendLine（避免 \r\n）
-                    val bytes = _state.value.bytesWritten + line.length + 1L
-                    _state.value = _state.value.copy(
-                        lineCount = _state.value.lineCount + 1, bytesWritten = bytes
-                    )
-                    if (bytes >= rotationBytes) {
-                        w.flush()
-                        _state.value = _state.value.copy(rotated = true)
-                        done = true
-                        s.kill()   // 关通道 → flow 排空缓冲后结束 → collect 返回
-                        return@collect
+                withContext(io) {
+                    val s = commands.streamLogcat(serial)
+                    stream = s
+                    // spec §3.5：重连标记每次实际重连写一次（不是在每次退避前）
+                    if (!firstAttempt) {
+                        val ts = java.time.LocalDateTime.now().format(
+                            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+                        )
+                        writer?.write("--------- adbgui reconnect $ts serial=$serial\n")
                     }
+                    firstAttempt = false
+                    var done = false
+                    s.lines.collect { line ->
+                        if (done) return@collect
+                        val w = writer
+                        if (w == null) { done = true; s.kill(); return@collect }
+                        w.write(line); w.write("\n")   // 显式 \n，不用 appendLine（避免 \r\n）
+                        // 字节计数（UTF-8）：CJK 3 字节/字符，避免 UI/轮转阈值被低估
+                        val bytes = _state.value.bytesWritten + line.toByteArray(Charsets.UTF_8).size.toLong() + 1L
+                        _state.value = _state.value.copy(
+                            lineCount = _state.value.lineCount + 1, bytesWritten = bytes
+                        )
+                        if (bytes >= rotationBytes) {
+                            w.flush()
+                            _state.value = _state.value.copy(rotated = true)
+                            done = true
+                            s.kill()   // 关通道 → flow 排空缓冲后结束 → collect 返回
+                            return@collect
+                        }
+                    }
+                    exitLoop = done   // rotation or writer nulled → exit loop
                 }
-                exitLoop = done   // rotation or writer nulled → exit loop
                 if (!exitLoop) logger.warn("logcat record stream ended for $serial (reconnecting)")
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
@@ -133,7 +147,6 @@ class LogcatRecorder(
             if (!exitLoop) {
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(30_000L)
-                writer?.write("--------- adbgui reconnect $serial\n")
             }
         }
     }
