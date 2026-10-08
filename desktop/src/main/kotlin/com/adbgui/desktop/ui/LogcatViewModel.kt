@@ -50,22 +50,12 @@ class LogcatViewModel(
     val autoRecordStates: StateFlow<Map<String, com.adbgui.core.device.RecordState>> = recording.autoStates
     val recordingsDir: java.nio.file.Path get() = recording.recordingsDir
 
-    // 常驻"定位最近录制"按钮数据源：录制目录里 lastModified 最新的 .log。manual/auto 状态
-    // 一变就重扫（录制收尾时状态在文件 flush 之后更新，顺序天然对齐）；初始即扫一次，
-    // 所以跨重启也能定位到历史录制文件。
-    private val _latestRecording = MutableStateFlow<java.nio.file.Path?>(null)
-    val latestRecording: StateFlow<java.nio.file.Path?> = _latestRecording.asStateFlow()
-    private var latestJob: Job? = null
-
-    init {
-        latestJob = scope.launch {
-            kotlinx.coroutines.flow.combine(recording.manualState, recording.autoStates) { _, _ -> Unit }
-                .collect { _latestRecording.value = recording.latestRecordingFile() }
-        }
-    }
-
     private val _recordError = MutableStateFlow<String?>(null)
     val recordError: StateFlow<String?> = _recordError.asStateFlow()
+
+    /** 常驻定位按钮的目标：最新录制文件，**点击时实时取**（不缓存）——外部删除/新增文件
+     *  立刻可见。null = 目录空，UI 转而打开录制目录。 */
+    suspend fun latestRecordingFile(): java.nio.file.Path? = recording.latestRecordingFile()
 
     fun startRecording() {
         val serial = selectedSerial.value
@@ -151,5 +141,5 @@ class LogcatViewModel(
         }
     }
 
-    fun stop() { pageJob?.cancel(); pageJob = null; latestJob?.cancel(); latestJob = null }
+    fun stop() { pageJob?.cancel(); pageJob = null }
 }

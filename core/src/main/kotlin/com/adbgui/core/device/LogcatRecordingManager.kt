@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -51,7 +52,9 @@ class LogcatRecordingManager(
     private val mutex = Mutex()
     private val autoRecorders = mutableMapOf<String, LogcatRecorder>()   // mutex 保护
     private val autoJobs = mutableMapOf<String, Job>()                   // mutex 保护
+    private val autoFiles = mutableMapOf<String, Path>()                 // mutex 保护（watchdog 检查文件存活用）
     private var observerJob: Job? = null
+    private var watchdogJob: Job? = null
 
     init {
         // 启动清理（spec §3.2）：删 7 天前 auto 文件；失败仅 WARN，不阻塞
@@ -60,6 +63,7 @@ class LogcatRecordingManager(
                 .onFailure { logger.warn("recording cleanup failed: ${it.message}") }
         }
         observerJob = scope.launch { observeDevices() }
+        watchdogJob = scope.launch { fileWatchdog() }
     }
 
     suspend fun startManual(serial: String) {
@@ -68,23 +72,7 @@ class LogcatRecordingManager(
             // 持锁 getprop（数百 ms）：短暂阻塞 observeDevices 增删 auto recorder，可接受；
             // 换来"断连时 stopManual 等待起录完成再停"的正确顺序（否则 stopManual 会因
             // manualRecorder 尚未就位而 no-op，把录制漏在断连设备上）。
-            val label = deviceLabel(serial)
-            val file = uniqueFile(recordingsDir.resolve("${label}_${stamp()}.log"))
-            val rec = LogcatRecorder(commands, logger, scope, io, file, rotationBytes)
-            manualJob?.cancel()
-            manualRecorder = rec
-            manualFile = file
-            manualJob = scope.launch {
-                rec.state.collect { st ->
-                    _manualState.value = when (st.status) {
-                        RecordStatus.RECORDING ->
-                            ManualRecordState.Recording(serial, file, st.lineCount, st.bytesWritten)
-                        RecordStatus.STOPPED ->
-                            ManualRecordState.Stopped(file, st.lineCount, st.bytesWritten, st.stopReason)
-                    }
-                }
-            }
-            rec.start(serial)
+            startManualLocked(serial)
         }
     }
 
@@ -105,8 +93,30 @@ class LogcatRecordingManager(
         }
     }
 
+    /** mutex 持有中调用。watchdog 重启手动会话也走这里。 */
+    private suspend fun startManualLocked(serial: String) {
+        val label = deviceLabel(serial)
+        val file = uniqueFile(recordingsDir.resolve("${label}_${stamp()}.log"))
+        val rec = LogcatRecorder(commands, logger, scope, io, file, rotationBytes)
+        manualJob?.cancel()
+        manualRecorder = rec
+        manualFile = file
+        manualJob = scope.launch {
+            rec.state.collect { st ->
+                _manualState.value = when (st.status) {
+                    RecordStatus.RECORDING ->
+                        ManualRecordState.Recording(serial, file, st.lineCount, st.bytesWritten)
+                    RecordStatus.STOPPED ->
+                        ManualRecordState.Stopped(file, st.lineCount, st.bytesWritten, st.stopReason)
+                }
+            }
+        }
+        rec.start(serial)
+    }
+
     fun stop() {
         observerJob?.cancel(); observerJob = null
+        watchdogJob?.cancel(); watchdogJob = null
         manualJob?.cancel(); manualJob = null
         val rec = manualRecorder
         val file = manualFile
@@ -131,6 +141,9 @@ class LogcatRecordingManager(
 
     companion object {
         const val RETENTION_MS: Long = 7L * 24 * 60 * 60 * 1000
+
+        /** 文件存活检测周期（真实时间，跑在 io 上）。 */
+        private const val FILE_WATCH_INTERVAL_MS = 5000L
 
         /** serial → 文件名安全段：':'（无线 serial）与 Windows 非法字符统一 '_'（spec §3.2）。 */
         fun sanitizeSerial(serial: String): String =
@@ -183,6 +196,7 @@ class LogcatRecordingManager(
         val file = uniqueFile(recordingsDir.resolve("auto_${label}_${stamp()}.log"))
         val rec = LogcatRecorder(commands, logger, scope, io, file, rotationBytes)
         autoRecorders[serial] = rec
+        autoFiles[serial] = file
         autoJobs[serial] = scope.launch {
             rec.state.collect { st ->
                 _autoStates.value = _autoStates.value + (serial to st)
@@ -203,6 +217,7 @@ class LogcatRecordingManager(
     internal suspend fun stopAutoLocked(serial: String) {
         autoJobs.remove(serial)?.cancel()
         autoRecorders.remove(serial)?.stop(null)
+        autoFiles.remove(serial)
         _autoStates.value = _autoStates.value - serial
     }
 
@@ -234,5 +249,38 @@ class LogcatRecordingManager(
             if (label.isNotBlank()) return label
         }
         return sanitizeSerial(serial)
+    }
+
+    /** 周期检测活动会话的录制文件是否被用户在外部删除（Windows 下打开中的文件通常删不掉，
+     *  但应用关闭后删除/其他平台/目录被删等场景仍会出现"UI 显示后台录制中却没有文件"的失配），
+     *  删了就原地重启会话换新文件。delay 在 [io] 上走真实时间（同 LogcatRecorder.flushLoop，
+     *  避免给 TestDispatcher 虚拟时间塞进无限自续任务把 advanceUntilIdle 挂死）。 */
+    private suspend fun fileWatchdog() {
+        withContext(io) {
+            while (true) {
+                delay(FILE_WATCH_INTERVAL_MS)
+                runCatching { restartRecordersWithMissingFiles() }
+                    .onFailure { logger.warn("recording file watchdog failed: ${it.message}") }
+            }
+        }
+    }
+
+    /** 文件不存在的活动会话原地重启、换新文件（手动会话重启不产生 Stopped 状态——否则 UI
+     *  的"停止后自动弹定位"会误触发）。[exists] 注入以便测试模拟"文件被删"。 */
+    internal suspend fun restartRecordersWithMissingFiles(exists: (Path) -> Boolean = { Files.exists(it) }) {
+        mutex.withLock {
+            val manual = _manualState.value
+            if (manual is ManualRecordState.Recording && !exists(manual.file)) {
+                logger.info("recording file deleted externally; restarting manual session for ${manual.serial}")
+                manualJob?.cancel()   // 先断 collector，recorder 收尾的 STOPPED 不再进 UI 状态
+                manualRecorder?.stop(null)
+                startManualLocked(manual.serial)
+            }
+            autoFiles.filterValues { !exists(it) }.keys.forEach { serial ->
+                logger.info("recording file deleted externally; restarting auto session for $serial")
+                stopAutoLocked(serial)
+                startAutoLocked(serial)
+            }
+        }
     }
 }

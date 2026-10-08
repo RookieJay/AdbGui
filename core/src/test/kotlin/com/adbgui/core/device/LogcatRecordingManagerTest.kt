@@ -259,6 +259,48 @@ class LogcatRecordingManagerTest {
         advanceUntilIdle()
     }
 
+    // --- file watchdog：活动会话的文件被外部删除 → 原地重启换新文件 ---
+
+    @Test fun restartRecordersWithMissingFiles_restarts_auto_session() = runTest {
+        // exists 注入 false 模拟"文件被删"（Windows 下打开中的文件真实删不掉）
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val m = manager(runner, this, dir, tracker)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        advanceUntilIdle()
+        val before = dir.toFile().listFiles { f -> f.name.startsWith("auto_") }
+        assertEquals(1, before?.size)
+        m.restartRecordersWithMissingFiles(exists = { _ -> false })
+        advanceUntilIdle()
+        assertTrue(m.autoStates.value.containsKey("abc"), "auto 会话应重启而非消失")
+        val after = dir.toFile().listFiles { f -> f.name.startsWith("auto_") }
+        assertEquals(2, after?.size, "应换新文件重开（旧文件保留、新文件生成）")
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun restartRecordersWithMissingFiles_restarts_manual_without_stopped_state() = runTest {
+        // 手动会话重启不得产生 Stopped 状态——否则 UI 的"停止后自动弹定位"会误触发
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val m = manager(runner, this, dir, tracker)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        m.startManual("abc")
+        advanceUntilIdle()
+        assertTrue(m.manualState.value is ManualRecordState.Recording)
+        val oldFile = (m.manualState.value as ManualRecordState.Recording).file
+        m.restartRecordersWithMissingFiles(exists = { _ -> false })
+        advanceUntilIdle()
+        val st = m.manualState.value
+        assertTrue(st is ManualRecordState.Recording, "watchdog 重启应保持 Recording，got: $st")
+        assertTrue(st.file != oldFile, "应换新文件")
+        m.stopManual("user")
+        m.stop()
+        advanceUntilIdle()
+    }
+
     // --- startup cleanup ---
 
     @Test fun startup_cleanup_deletes_old_auto_but_keeps_manual() = runTest {

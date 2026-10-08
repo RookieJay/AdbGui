@@ -72,10 +72,10 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     val manualRecord by vm.manualRecord.collectAsState()
     val recordError by vm.recordError.collectAsState()
     val autoRecordStates by vm.autoRecordStates.collectAsState()
-    val latestRecording by vm.latestRecording.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
     val searchFocus = remember { FocusRequester() }
     val matchHighlight = MaterialTheme.colors.primary.copy(alpha = 0.28f)
+    val revealScope = rememberCoroutineScope()
 
     // 手动录制结束（用户停止/断连/写失败）→ 立即在资源管理器中定位并选中该文件；
     // 文件不存在（从未写入）则跳过。
@@ -150,11 +150,15 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                         Text(Strings.t("recording_status").format(r.lineCount, formatBytes(r.bytesWritten)))
                     }
                 }
-                // 常驻定位按钮：随时定位最近一次录制文件（含后台录制，跨重启有效）
-                IconButton(
-                    enabled = latestRecording != null,
-                    onClick = { latestRecording?.let { revealFile(it.toFile()) } },
-                ) {
+                // 常驻定位按钮：始终可点——有录制文件时定位并选中最新一个（含后台录制，
+                // 跨重启有效，点击时实时扫描所以外部删/增文件立刻可见）；目录空时打开录制目录
+                IconButton(onClick = {
+                    revealScope.launch {
+                        val latest = vm.latestRecordingFile()
+                        if (latest != null) revealFile(latest.toFile())
+                        else openFile(File(vm.recordingsDir.toAbsolutePath().toString()))
+                    }
+                }) {
                     Icon(Icons.Filled.FolderOpen, contentDescription = Strings.t("locate_latest_recording"))
                 }
                 IconButton(onClick = { confirmClear = true }) {
