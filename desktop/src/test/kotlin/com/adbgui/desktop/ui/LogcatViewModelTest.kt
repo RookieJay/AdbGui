@@ -18,9 +18,11 @@ import com.adbgui.core.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -234,6 +236,37 @@ class LogcatViewModelTest {
         val st = vm.manualRecord.value
         assertTrue(st is ManualRecordState.Stopped)
         assertEquals("user", st.reason)
+        vm.stop()
+        rec.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun latestRecording_tracks_newest_file_across_start_and_stop() = runTest {
+        // 常驻定位按钮数据源：初始即反映录制目录里的历史文件；录制结束后更新为新文件。
+        // 关掉 auto 录制，避免 helper 的在线设备抢先生成更新的 auto 文件干扰断言。
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I T: m"))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
+        val settings = SettingsStore(dir, io = Dispatchers.Unconfined)
+        settings.update { it.copy(logcatAutoRecord = false) }
+        val rec = LogcatRecordingManager(
+            cmd, FakeTracker(listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))),
+            settings, NoopLogger, this, dir, io = Dispatchers.Unconfined,
+        )
+        val preexisting = dir.resolve("pre.log"); preexisting.writeText("x")
+        val vm = LogcatViewModel(controller(runner, this),
+            rec, MutableStateFlow("abc"), MutableStateFlow(true), this)
+        advanceUntilIdle()
+        assertEquals(preexisting, vm.latestRecording.value)
+        vm.startRecording()
+        advanceUntilIdle()
+        assertTrue(vm.manualRecord.value is ManualRecordState.Recording)
+        vm.stopRecording()
+        advanceUntilIdle()
+        val newest = vm.latestRecording.value
+        assertNotNull(newest)
+        assertTrue(newest != preexisting, "newest should be the freshly recorded file, was $newest")
+        vm.stop()
         rec.stop()
         advanceUntilIdle()
     }

@@ -1,5 +1,6 @@
 package com.adbgui.core.device
 
+import com.adbgui.core.adb.AdbProcessResult
 import com.adbgui.core.adb.CommandRunner
 import com.adbgui.core.adb.FakeAdbProcessRunner
 import com.adbgui.core.domain.AdbBinary
@@ -16,6 +17,7 @@ import java.nio.file.Files
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LogcatRecordingManagerTest {
@@ -26,6 +28,14 @@ class LogcatRecordingManagerTest {
     }
 
     private val line1 = "08-17 10:23:45.100  100  200 I Tag1: hello"
+
+    /** 品牌型号安卓版本命名用 getprop 脚本输出（Parser 本身有独立 fixture，这里是 manager 层脚本）。 */
+    private fun getpropOut(brand: String, model: String, version: String): String =
+        "[ro.product.brand]: [$brand]\n" +
+            "[ro.product.manufacturer]: [$brand]\n" +
+            "[ro.product.model]: [$model]\n" +
+            "[ro.build.version.release]: [$version]\n" +
+            "[ro.build.version.sdk]: [23]\n"
 
     private fun manager(
         runner: FakeAdbProcessRunner, scope: kotlinx.coroutines.CoroutineScope, dir: java.nio.file.Path,
@@ -48,7 +58,8 @@ class LogcatRecordingManagerTest {
         val rec = m.manualState.value
         assertTrue(rec is ManualRecordState.Recording)
         assertEquals("192.168.1.5:5555", rec.serial)
-        assertTrue(rec.file.fileName.toString().startsWith("manual_192.168.1.5_5555_"))
+        assertTrue(rec.file.fileName.toString().startsWith("192.168.1.5_5555_"))   // getprop 失败 → 回退 serial
+        assertTrue(!rec.file.fileName.toString().startsWith("manual_"))            // 不再区分 manual 前缀
         assertTrue(rec.file.fileName.toString().endsWith(".log"))
         m.stopManual("user")
         advanceUntilIdle()
@@ -57,6 +68,43 @@ class LogcatRecordingManagerTest {
         assertEquals("user", stopped.reason)
         assertTrue(Files.exists(stopped.file))
         assertTrue(Files.readString(stopped.file).contains(line1))
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun manual_filename_uses_brand_model_androidversion() = runTest {
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        runner.whenArgsContains(listOf("getprop"), AdbProcessResult(0, getpropOut("TCL", "618D", "6.0"), ""))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val m = manager(runner, this, dir, tracker)
+        tracker.devices.value = listOf(DeviceSnapshot("192.168.1.5:5555", DeviceStatus.ONLINE))
+        m.startManual("192.168.1.5:5555")
+        advanceUntilIdle()
+        val rec = m.manualState.value
+        assertTrue(rec is ManualRecordState.Recording)
+        val name = rec.file.fileName.toString()
+        assertTrue(name.startsWith("TCL_618D_Android6.0_"), "got: $name")   // 品牌_型号_Android版本，非 IP
+        assertTrue(!name.startsWith("manual_"))
+        m.stopManual("user")
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun manual_filename_falls_back_to_serial_when_props_unknown() = runTest {
+        // getprop 成功但全是 unknown（Parser 缺 key 的默认值）→ 回退 serial
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        runner.whenArgsContains(listOf("getprop"), AdbProcessResult(0, "", ""))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val m = manager(runner, this, dir, tracker)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        m.startManual("abc")
+        advanceUntilIdle()
+        val rec = m.manualState.value
+        assertTrue(rec is ManualRecordState.Recording)
+        assertTrue(rec.file.fileName.toString().startsWith("abc_"))
+        m.stopManual("user")
         m.stop()
         advanceUntilIdle()
     }
@@ -106,6 +154,21 @@ class LogcatRecordingManagerTest {
         val auto = dir.toFile().listFiles { f -> f.name.startsWith("auto_abc_") }
         assertEquals(1, auto?.size)
         assertTrue(Files.readString(auto[0].toPath()).contains(line1))
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun auto_filename_uses_brand_model_androidversion() = runTest {
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        runner.whenArgsContains(listOf("getprop"), AdbProcessResult(0, getpropOut("TCL", "618D", "6.0"), ""))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val m = manager(runner, this, dir, tracker)
+        tracker.devices.value = listOf(DeviceSnapshot("192.168.1.5:5555", DeviceStatus.ONLINE))
+        advanceUntilIdle()
+        assertTrue(m.autoStates.value.containsKey("192.168.1.5:5555"))
+        val auto = dir.toFile().listFiles { f -> f.name.startsWith("auto_TCL_618D_Android6.0_") }
+        assertEquals(1, auto?.size)
         m.stop()
         advanceUntilIdle()
     }
@@ -165,6 +228,33 @@ class LogcatRecordingManagerTest {
         assertEquals(2, autoFiles?.size)
         val lineCounts = autoFiles!!.map { Files.readString(it.toPath()).lines().count { l -> l.isNotBlank() } }
         assertEquals(1, lineCounts.count { it == 1 })
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    // --- latest recording file (常驻定位按钮的数据源) ---
+
+    @Test fun latestRecordingFile_returns_most_recent_log_ignoring_other_files() = runTest {
+        val runner = FakeAdbProcessRunner()   // tracker 空 → 无 auto 文件干扰
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val older = dir.resolve("a.log"); older.writeText("x")
+        val newer = dir.resolve("b.log"); newer.writeText("x")
+        dir.resolve("notes.txt").writeText("x")
+        val now = System.currentTimeMillis()
+        older.toFile().setLastModified(now - 60_000L)
+        newer.toFile().setLastModified(now)
+        val m = manager(runner, this, dir)
+        advanceUntilIdle()
+        assertEquals(newer, m.latestRecordingFile())
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun latestRecordingFile_null_when_no_recordings() = runTest {
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val m = manager(FakeAdbProcessRunner(), this, dir)
+        advanceUntilIdle()
+        assertNull(m.latestRecordingFile())
         m.stop()
         advanceUntilIdle()
     }
