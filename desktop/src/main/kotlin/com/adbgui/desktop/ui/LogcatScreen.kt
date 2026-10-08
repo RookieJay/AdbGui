@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -71,9 +72,19 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     val manualRecord by vm.manualRecord.collectAsState()
     val recordError by vm.recordError.collectAsState()
     val autoRecordStates by vm.autoRecordStates.collectAsState()
+    val latestRecording by vm.latestRecording.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
     val searchFocus = remember { FocusRequester() }
     val matchHighlight = MaterialTheme.colors.primary.copy(alpha = 0.28f)
+
+    // 手动录制结束（用户停止/断连/写失败）→ 立即在资源管理器中定位并选中该文件；
+    // 文件不存在（从未写入）则跳过。
+    LaunchedEffect(manualRecord) {
+        val st = manualRecord
+        if (st is ManualRecordState.Stopped && java.nio.file.Files.exists(st.file)) {
+            revealFile(st.file.toFile())
+        }
+    }
 
     Surface(modifier = modifier.fillMaxSize().onPreviewKeyEvent { e ->
         // Ctrl+F focuses the search box (browser-style find). Fires when focus is anywhere in Logcat.
@@ -138,6 +149,13 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                         val r = manualRecord as ManualRecordState.Recording
                         Text(Strings.t("recording_status").format(r.lineCount, formatBytes(r.bytesWritten)))
                     }
+                }
+                // 常驻定位按钮：随时定位最近一次录制文件（含后台录制，跨重启有效）
+                IconButton(
+                    enabled = latestRecording != null,
+                    onClick = { latestRecording?.let { revealFile(it.toFile()) } },
+                ) {
+                    Icon(Icons.Filled.FolderOpen, contentDescription = Strings.t("locate_latest_recording"))
                 }
                 IconButton(onClick = { confirmClear = true }) {
                     Icon(Icons.Filled.Delete, contentDescription = Strings.t("clear"))
