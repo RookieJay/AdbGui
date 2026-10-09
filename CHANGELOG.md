@@ -3,6 +3,15 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-08 Logcat 录制体验优化
+
+分支：feat/logcat-recording（续 2026-09-30 节）。
+
+- **文件名改品牌型号**：手动录制 `<brand>_<model>_Android<version>_<stamp>.log`（不再有 `manual_` 前缀、不用 serial/IP）；auto 文件保留 `auto_` 前缀（7 天清理与轮转依赖）但同样用品牌型号。getprop 失败或 brand/model 为 unknown 时回退 serial，起录不因此失败。`startManual` 改 suspend + mutex 串行（修复断连时 stopManual 在 recorder 未就位时 no-op 的竞态）。
+- **停止后自动定位**：手动录制结束（用户停止/断连/写失败）立即在资源管理器中定位并选中该文件；原有 SavedFileBanner（打开/复制）保留。
+- **常驻定位按钮**：Logcat 工具栏录制按钮旁 FolderOpen 图标，始终可点——点击时实时扫描录制目录，有文件则定位选中最新一个（含后台录制，跨重启有效，外部删/增立刻可见），目录空则直接打开录制目录。
+- **文件删除 watchdog**（core，5s 周期，真实时间跑 io）：活动会话的文件被外部删除时原地重启换新文件，"后台录制中"提示不与实际脱节；手动会话重启绕过 Stopped 状态，不触发停止自动弹出。
+
 ## v2 — 2026-09-30 Logcat 录制（自动 + 手动）
 
 分支：feat/logcat-recording。spec：docs/superpowers/specs/2026-09-30-logcat-recording-design.md
