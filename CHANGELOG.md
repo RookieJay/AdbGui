@@ -3,6 +3,17 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-09 标签管理（右键菜单 + 管理面板）
+
+用户反馈：想"改"一个标签只能逐台设备重新设置，旧标签残留在其他设备上——等于只会新增标签，没有管理能力。本次补齐 rename/merge/delete。
+
+- **`renameTag` 原子重命名**（core `DeviceHistoryStore.renameTag`）：单次 read-modify-write 把所有带旧标签的设备改到新标签（照 `clearTag` 的原子模式，避免逐台 setTag 的并发丢写）；**改名撞上已有标签 = 合并**（两组归一，旧标签消失）；空串 no-op（清除仍归 `clearTag` 管辖，防止误清）。`DeviceRepository` / `DeviceListViewModel` 同路径暴露。
+- **标签分组右键菜单**（`DeviceListPane` `GroupHeaderRow`）：按标签分组时右键分组头弹出 重命名 / 删除 / 管理所有标签——**替换了原来的内联删除小图标**（所有标签操作收归一处，头部回归安静的行；右键检测复用 DeviceRow 的 `pointerInput` Secondary 模式）。
+- **重命名对话框**：输入新名，目标撞上已有标签时内联提示"X 已存在（N 台设备），确认后两组合并"；名字为空或与原名相同禁用确认。草案按 tag 记忆（`remember(tag)`），换一个标签重开时重置。
+- **管理所有标签对话框**：每行 = 🏷 标签名 + 设备数 + 重命名/删除按钮；空状态给引导文案（去设备行菜单"设置标签"）。从分组下拉菜单也能进（不必先切到"按标签"模式）。
+- i18n 新增：`rename_tag` / `rename_tag_merge_hint` / `manage_tags`（带 … 的菜单项）/ `manage_tags_title` / `manage_tags_empty` / `tag_device_count`（中英）。
+
+**测试**（TDD 全程先红后绿）：`DeviceHistoryStoreTest` +3（重命名保字段、合并入已有、空串 no-op）；`DeviceRepositoryTest` +1（rename 合并后视图与持久化都生效）；`DeviceListViewModelTest` +1（`renameTag` 后 items 流的分组头即时更新）。无 fixture/parser 变化。
 ## v2 — 2026-10-09 搜索框重构（IDE 风格 + 正则）与应用管理页按钮层级
 
 用户反馈三连：工具栏搜索框丑、文字被裁、应用页按钮布置不合理。整体取向：工具栏搜索框统一为 IDE（Android Studio/VS Code）风格组件，应用管理页按操作语义重排按钮层级。
