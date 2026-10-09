@@ -3,6 +3,18 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-09 搜索框重构（IDE 风格 + 正则）与应用管理页按钮层级
+
+用户反馈三连：工具栏搜索框丑、文字被裁、应用页按钮布置不合理。整体取向：工具栏搜索框统一为 IDE（Android Studio/VS Code）风格组件，应用管理页按操作语义重排按钮层级。
+
+- **`SearchField` 共享组件**（desktop `ui/SearchField.kt`，Logcat / 应用管理 / CDP 三页统一替换裸 `OutlinedTextField`）：40dp 紧凑高 + 10dp 圆角 + `surfaceVariant` 填充底色（无灰描边）；前置放大镜、placeholder 提示、有内容时出现清空 ✕。第一版用 `OutlinedTextField` 强制 40dp 高，M2 装饰盒给浮动标签预留垂直空间导致**文字底部被裁**——改为 `Surface` + `BasicTextField` 自绘（Row 垂直居中，裁切从根上消失）；边框常驻绘制（未聚焦=透明色）避免聚焦瞬间布局抖动。注意 CMP 1.7.3 的 M2 没有 `OutlinedTextFieldDefaults`（Google M2 1.2 拆出来的 API），自定义颜色要走老的 `TextFieldDefaults.outlinedTextFieldColors`——本版已不依赖。
+- **Logcat 正则匹配**（core `LogcatFilters.textIsRegex` + `matches`）：搜索框尾部 AS 式 `.*` 药丸开关（等宽字体、激活 primary 填充，toggleable + contentDescription 无障碍语义）；正则模式**大小写敏感**（`(?i)` 可切换）；无效模式：边框变错误红内联提示，core 侧降级为普通子串匹配（日志流不中断，DEBUG 记一条）。正则编译按模式文本缓存（`@Volatile` 双字段，matches 在 mutex 内单线程访问）——逐行 `toRegex()` 在日志洪流下会拖垮过滤。Logcat 搜索框改为填满工具栏（`weight(1f)`），三处 `setFilters` 调用点（级别下拉、输入、开关切换）都带上 `textIsRegex`。
+- **应用管理页工具栏**：标题/搜索/checkbox 居左，刷新+安装 APK 移到右侧弹性分隔；刷新降级为描边按钮，**安装 APK 成为唯一实心主 CTA**；busy 转圈移到按钮旁。
+- **应用管理页操作行**：启动=实心 / 停止、重启=描边同级；破坏性操作（清除数据、卸载）右对齐独立成组并染错误色——新增 `OutlinedDangerButton`（红描边，次要破坏性）与既有 `DangerButton`（红实心，确认弹窗/首要破坏性）配对。
+- i18n 新增：`clear_search`（清空搜索）、`regex_match`（正则匹配）。对话框表单字段保持 `OutlinedTextField`（表单与工具栏是不同语境）。
+
+**测试**：`LogcatControllerTest` +2（正则大小写敏感命中、无效模式降级为普通包含——首版实现 `return@let` 在无效分支也跳过兜底 contains，被测试当场抓出；另测试语义本身踩坑：降级是拿原始文本做字面子串，fixture 行必须含该字面文本）。
+
 ## v2 — 2026-10-09 修复：开启分组后侧栏头部"添加设备"按钮消失
 
 真机现象：侧栏 280dp 宽，头部单行 Row 里分组下拉 + （`hasGroups` 时）展开/收起各 48dp + 配对 + 加号，非 weight 子项按声明顺序用剩余宽度测量，开启分组后总固有宽度 ~338dp 溢出，尾部的配对/加号被饿到 0 宽/裁剪，加号消失。
