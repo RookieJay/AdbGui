@@ -82,6 +82,17 @@ class DeviceHistoryStore(
         entries.map { if (it.tag == tag) it.copy(tag = null) else it }
     }
 
+    /**
+     * Rename [oldTag] to [newTag] on every entry bearing it, in a single read-modify-write —
+     * the atomic counterpart to looping `setTag` per device (same race as [clearTag]). Renaming
+     * onto an existing tag merges the two groups. A blank [newTag] is a no-op: clearing tags is
+     * [clearTag]'s job, and a stray blank would silently wipe the old tag.
+     */
+    suspend fun renameTag(oldTag: String, newTag: String) = mutate { entries ->
+        if (newTag.isBlank()) entries
+        else entries.map { if (it.tag == oldTag) it.copy(tag = newTag) else it }
+    }
+
     suspend fun remove(serial: String) = mutate { entries -> entries.filterNot { it.serial == serial } }
 
     private suspend fun mutate(transform: (List<DeviceHistoryEntry>) -> List<DeviceHistoryEntry>) =

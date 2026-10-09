@@ -231,6 +231,12 @@ class DeviceRepository(
         recompute(tracker.devices.value)
     }
 
+    /** Rename [oldTag] to [newTag] on every device bearing it, atomically (merge when [newTag] exists). See [DeviceHistoryStore.renameTag]. */
+    suspend fun renameTag(oldTag: String, newTag: String) {
+        history.renameTag(oldTag, newTag)
+        recompute(tracker.devices.value)
+    }
+
     suspend fun forgetDevice(serial: String) {
         history.remove(serial)
         recompute(tracker.devices.value)

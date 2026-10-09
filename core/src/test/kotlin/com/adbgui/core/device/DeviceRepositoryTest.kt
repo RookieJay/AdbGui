@@ -301,4 +301,37 @@ class DeviceRepositoryTest {
         assertEquals(null, hist["c"]?.tag)
         repo.stop()
     }
+
+    @Test
+    fun renameTag_renames_tag_on_all_devices_and_merges_into_existing() = runTest {
+        // "a" and "b" wear "lab"; "c" already wears "desk". Renaming lab→desk must move both
+        // into "desk" in one write — the per-device setTag race clearTag guards against applies
+        // here too.
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(
+                DeviceSnapshot("a", DeviceStatus.ONLINE),
+                DeviceSnapshot("b", DeviceStatus.ONLINE),
+                DeviceSnapshot("c", DeviceStatus.ONLINE),
+            ))
+        }
+        val dir = Files.createTempDirectory("rep7")
+        val history = DeviceHistoryStore(dir, clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        history.upsert("a", DeviceType.USB, null, null); history.setTag("a", "lab")
+        history.upsert("b", DeviceType.USB, null, null); history.setTag("b", "lab")
+        history.upsert("c", DeviceType.USB, null, null); history.setTag("c", "desk")
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        repo.renameTag("lab", "desk")
+        // View reflects the merge immediately:
+        val views = repo.devices.value.associateBy { it.serial }
+        assertEquals("desk", views["a"]?.tag)
+        assertEquals("desk", views["b"]?.tag)
+        assertEquals("desk", views["c"]?.tag)
+        // Persisted too:
+        val hist = history.load().associateBy { it.serial }
+        assertEquals("desk", hist["a"]?.tag)
+        assertEquals("desk", hist["b"]?.tag)
+        repo.stop()
+    }
 }

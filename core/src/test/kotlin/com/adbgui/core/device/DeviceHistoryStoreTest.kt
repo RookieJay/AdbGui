@@ -135,4 +135,52 @@ class DeviceHistoryStoreTest {
         assertEquals(null, loaded["b"]?.tag)
         assertEquals("other", loaded["c"]?.tag)  // unrelated tag untouched
     }
+
+    @Test
+    fun renameTag_replaces_tag_on_all_bearing_entries_and_preserves_rest() = runTest {
+        val dir = Files.createTempDirectory("renametag")
+        val store = DeviceHistoryStore(dir, clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        store.upsert("a", DeviceType.USB, null, null, alias = "Phone A")
+        store.upsert("b", DeviceType.USB, null, null)
+        store.upsert("c", DeviceType.USB, null, null)
+        store.setTag("a", "lab")
+        store.setTag("b", "lab")
+        store.setTag("c", "other")
+        store.renameTag("lab", "desk")
+        val loaded = store.load().associateBy { it.serial }
+        assertEquals("desk", loaded["a"]?.tag)
+        assertEquals("desk", loaded["b"]?.tag)
+        assertEquals("other", loaded["c"]?.tag)          // unrelated tag untouched
+        assertEquals("Phone A", loaded["a"]?.alias)      // other fields preserved
+    }
+
+    @Test
+    fun renameTag_to_existing_tag_merges_groups() = runTest {
+        // Renaming "lab" onto existing "desk" is a merge: every "lab" device joins "desk",
+        // and the "lab" group disappears.
+        val store = DeviceHistoryStore(Files.createTempDirectory("renametag"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        store.upsert("a", DeviceType.USB, null, null)
+        store.upsert("b", DeviceType.USB, null, null)
+        store.upsert("c", DeviceType.USB, null, null)
+        store.setTag("a", "lab")
+        store.setTag("b", "desk")
+        store.setTag("c", "desk")
+        store.renameTag("lab", "desk")
+        val loaded = store.load().associateBy { it.serial }
+        assertEquals("desk", loaded["a"]?.tag)
+        assertEquals("desk", loaded["b"]?.tag)
+        assertEquals("desk", loaded["c"]?.tag)
+        assertEquals(0, loaded.values.count { it.tag == "lab" })  // old tag is gone
+    }
+
+    @Test
+    fun renameTag_blank_newTag_is_noop() = runTest {
+        // Clearing is clearTag's job; a blank rename must not wipe tags behind the UI's back.
+        val store = DeviceHistoryStore(Files.createTempDirectory("renametag"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        store.upsert("a", DeviceType.USB, null, null)
+        store.setTag("a", "lab")
+        store.renameTag("lab", "")
+        store.renameTag("lab", "   ")
+        assertEquals("lab", store.load().first().tag)
+    }
 }

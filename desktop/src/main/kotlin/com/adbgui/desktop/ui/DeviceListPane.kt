@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -84,10 +85,14 @@ fun DeviceListPane(
     val busy by vm.busy.collectAsState()
     val settings = settingsVm?.settings?.collectAsState()?.value ?: com.adbgui.core.settings.Settings()
     var groupMenuOpen by remember { mutableStateOf(false) }
-    // Tag pending deletion (null = no dialog). Set by a tag-group header's delete button;
-    // confirming clears that tag from every device bearing it in one shot — saves unsetting it
-    // per-device.
+    // Tag pending deletion (null = no dialog). Set by a tag-group header's context menu or the
+    // manage-tags dialog; confirming clears that tag from every device bearing it in one shot —
+    // saves unsetting it per-device.
     var tagToDelete by remember { mutableStateOf<String?>(null) }
+    // Tag pending rename (null = no dialog). Confirming renames it on every device bearing it;
+    // renaming onto an existing tag merges the two groups.
+    var tagToRename by remember { mutableStateOf<String?>(null) }
+    var showManageTags by remember { mutableStateOf(false) }
     // Collapsed groups: transient (per session), default expanded. Keyed by group key so it
     // survives a settings round-trip as long as the same group key reappears.
     val collapsed = remember { mutableStateMapOf<String, Boolean>() }
@@ -151,6 +156,13 @@ fun DeviceListPane(
                             onClick = { groupKeys.forEach { collapsed[it] = true } },
                             enabled = hasGroups && groupKeys.any { collapsed[it] != true },
                         ) { Text(Strings.t("collapse_all")) }
+                        Divider()
+                        // Tag management is reachable without switching into TAG grouping
+                        // mode first — the dialog lists every tag regardless of group mode.
+                        DropdownMenuItem(onClick = {
+                            groupMenuOpen = false
+                            showManageTags = true
+                        }) { Text(Strings.t("manage_tags")) }
                     }
                 }
                 Spacer(Modifier.weight(1f))
@@ -209,9 +221,10 @@ fun DeviceListPane(
                         items(visibleItems, key = { item -> item.key() }) { item ->
                             when (item) {
                                 is DeviceListItem.Header -> {
-                                    // Tag groups (but not the "tag_none" bucket) can be deleted
-                                    // outright — clears that tag from every device bearing it.
-                                    val canDeleteTag =
+                                    // Tag groups (but not the "tag_none" bucket) get a
+                                    // right-click context menu: rename (merge when the target
+                                    // exists), delete, manage all tags.
+                                    val canManageTag =
                                         settings.deviceGroupBy == DeviceGroupBy.TAG && item.key != "tag_none"
                                     GroupHeaderRow(
                                         header = item,
@@ -220,8 +233,14 @@ fun DeviceListPane(
                                             val now = collapsed[item.key] == true
                                             collapsed[item.key] = !now
                                         },
-                                        onDeleteTag = if (canDeleteTag) {
+                                        onRenameTag = if (canManageTag) {
+                                            { tagToRename = item.key }
+                                        } else null,
+                                        onDeleteTag = if (canManageTag) {
                                             { tagToDelete = item.key }
+                                        } else null,
+                                        onManageTags = if (canManageTag) {
+                                            { showManageTags = true }
                                         } else null,
                                     )
                                 }
@@ -276,26 +295,167 @@ fun DeviceListPane(
             dismissButton = { TextButton(onClick = { tagToDelete = null }) { Text(Strings.t("cancel")) } },
         )
     }
+
+    tagToRename?.let { tag ->
+        RenameTagDialog(
+            tag = tag,
+            // Other existing tags: typing one of them means "merge into it" — hinted inline.
+            otherTags = existingTags - tag,
+            deviceCountFor = { t -> allDevices.count { it.tag == t } },
+            onConfirm = { newTag ->
+                tagToRename = null
+                vm.renameTag(tag, newTag)
+            },
+            onDismiss = { tagToRename = null },
+        )
+    }
+
+    if (showManageTags) {
+        ManageTagsDialog(
+            tags = existingTags,
+            deviceCountFor = { t -> allDevices.count { it.tag == t } },
+            onRename = { tagToRename = it },
+            onDelete = { tagToDelete = it },
+            onDismiss = { showManageTags = false },
+        )
+    }
 }
 
+@Composable
+private fun RenameTagDialog(
+    tag: String,
+    otherTags: List<String>,
+    deviceCountFor: (String) -> Int,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var draft by remember(tag) { mutableStateOf(tag) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(Strings.t("rename_tag")) },
+        text = {
+            Column {
+                TextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    placeholder = { Text(tag) },
+                )
+                // Typing an existing tag is a merge, not an error — say so before the user
+                // commits, so "lab → desk" doesn't silently swallow the "desk" group.
+                draft.trim().takeIf { it.isNotBlank() && it != tag && otherTags.contains(it) }?.let { target ->
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        Strings.t("rename_tag_merge_hint").format(target, deviceCountFor(target)),
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.primary.copy(alpha = 0.8f),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = draft.isNotBlank() && draft.trim() != tag,
+                onClick = { onConfirm(draft.trim()) },
+            ) { Text(Strings.t("ok")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.t("cancel")) } },
+    )
+}
+
+@Composable
+private fun ManageTagsDialog(
+    tags: List<String>,
+    deviceCountFor: (String) -> Int,
+    onRename: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(Strings.t("manage_tags_title")) },
+        text = {
+            if (tags.isEmpty()) {
+                Text(Strings.t("manage_tags_empty"))
+            } else {
+                Column {
+                    tags.forEach { t ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "🏷 $t",
+                                style = MaterialTheme.typography.body2,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                Strings.t("tag_device_count").format(deviceCountFor(t)),
+                                style = MaterialTheme.typography.caption,
+                                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                            )
+                            IconButton(onClick = { onRename(t) }, modifier = Modifier.size(28.dp)) {
+                                Icon(
+                                    Icons.Filled.Edit,
+                                    contentDescription = Strings.t("rename_tag"),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                            IconButton(onClick = { onDelete(t) }, modifier = Modifier.size(28.dp)) {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = Strings.t("delete_tag"),
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(Strings.t("ok")) } },
+    )
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun GroupHeaderRow(
     header: DeviceListItem.Header,
     collapsed: Boolean,
     onToggle: () -> Unit,
+    onRenameTag: (() -> Unit)? = null,
     onDeleteTag: (() -> Unit)? = null,
+    onManageTags: (() -> Unit)? = null,
 ) {
     // A sticky-feeling section header: collapse chevron + label + online/total counts. The
     // online dot+count stays visible when the group is collapsed, so the user can still tell
     // which group has a connected device without expanding every group. The toggle is scoped to
     // the label block so a click on the delete button (when present) doesn't also collapse.
+    // Tag groups expose rename/delete/manage via right-click — replaces the old inline delete
+    // icon so the header stays a single quiet row and all tag operations live in one place.
+    var menuOpen by remember { mutableStateOf(false) }
+    val hasTagMenu = onRenameTag != null || onDeleteTag != null || onManageTags != null
     Row(
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colors.background)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
-            modifier = Modifier.weight(1f).clickable { onToggle() },
+            modifier = Modifier.weight(1f)
+                .clickable { onToggle() }
+                .pointerInput(hasTagMenu) {
+                    if (hasTagMenu) awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Press &&
+                                event.button == PointerButton.Secondary
+                            ) {
+                                menuOpen = true
+                            }
+                        }
+                    }
+                },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -326,14 +486,25 @@ private fun GroupHeaderRow(
                 )
             }
         }
-        if (onDeleteTag != null) {
-            IconButton(onClick = onDeleteTag, modifier = Modifier.size(20.dp)) {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = Strings.t("delete_tag"),
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
-                )
+        if (hasTagMenu) {
+            Box {
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    onRenameTag?.let { cb ->
+                        DropdownMenuItem(onClick = { menuOpen = false; cb() }) {
+                            Text(Strings.t("rename_tag"))
+                        }
+                    }
+                    onDeleteTag?.let { cb ->
+                        DropdownMenuItem(onClick = { menuOpen = false; cb() }) {
+                            Text(Strings.t("delete_tag"))
+                        }
+                    }
+                    onManageTags?.let { cb ->
+                        DropdownMenuItem(onClick = { menuOpen = false; cb() }) {
+                            Text(Strings.t("manage_tags"))
+                        }
+                    }
+                }
             }
         }
     }

@@ -296,4 +296,37 @@ class DeviceListViewModelTest {
         )
         job.cancel(); repo.stop()
     }
+
+    @Test
+    fun renameTag_updates_tag_groups_in_items_flow() = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(
+                DeviceSnapshot("a", DeviceStatus.ONLINE),
+                DeviceSnapshot("b", DeviceStatus.ONLINE),
+            ))
+        }
+        val dir = Files.createTempDirectory("renametag")
+        val history = DeviceHistoryStore(dir, clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        history.upsert("a", DeviceType.USB, null, null); history.setTag("a", "lab")
+        history.upsert("b", DeviceType.USB, null, null); history.setTag("b", "desk")
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        val settingsFlow = MutableStateFlow(Settings(deviceGroupBy = DeviceGroupBy.TAG))
+        val vm = DeviceListViewModel(repo, this, settingsFlow)
+        val collected = mutableListOf<List<DeviceListItem>>()
+        val job = launch { vm.items.collect { collected.add(it) } }
+        advanceUntilIdle()
+        vm.renameTag("lab", "desk")  // merge "lab" into "desk"
+        advanceUntilIdle()
+        // "lab" group gone; both devices sit under "desk".
+        assertEquals(
+            listOf("desk", "a", "b"),
+            collected.last().map { item -> when (item) {
+                is DeviceListItem.Header -> item.key
+                is DeviceListItem.Device -> item.view.serial
+            } },
+        )
+        job.cancel(); repo.stop()
+    }
 }
