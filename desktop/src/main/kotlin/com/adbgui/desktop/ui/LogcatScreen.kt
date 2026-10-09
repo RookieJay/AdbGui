@@ -64,6 +64,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     // not uncheck and textfields not type. Local state drives the inputs; setFilters applies async.
     var levelSet by remember { mutableStateOf(LogcatLevel.entries.toSet()) }
     var text by remember { mutableStateOf("") }
+    var useRegex by remember { mutableStateOf(false) }
     var levelMenuOpen by remember { mutableStateOf(false) }
     val exporting by vm.exporting.collectAsState()
     val exportProgress by vm.exportProgress.collectAsState()
@@ -106,24 +107,31 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                             DropdownMenuItem(onClick = {
                                 val ns = if (lvl in levelSet) levelSet - lvl else levelSet + lvl
                                 levelSet = ns
-                                vm.setFilters(LogcatFilters(levelSet = ns, text = text.ifBlank { null }))
+                                vm.setFilters(LogcatFilters(levelSet = ns, text = text.ifBlank { null }, textIsRegex = useRegex))
                             }) {
                                 Text("${if (lvl in levelSet) "✓" else "•"}  ${lvl.name}")
                             }
                         }
                     }
                 }
-                // One text input (matches across the raw line: tag + message + timestamp + pid)
-                OutlinedTextField(
-                    value = text, singleLine = true,
+                // One text input (matches across the raw line: tag + message + timestamp + pid).
+                // Fills the toolbar like AS logcat; the `.*` pill toggles regex mode
+                // (case-sensitive — embed `(?i)` for insensitive; invalid pattern degrades
+                // to plain contains and turns the border red).
+                SearchField(
+                    value = text,
                     onValueChange = {
                         text = it
-                        vm.setFilters(LogcatFilters(levelSet = levelSet, text = it.ifBlank { null }))
+                        vm.setFilters(LogcatFilters(levelSet = levelSet, text = it.ifBlank { null }, textIsRegex = useRegex))
                     },
-                    label = { Text(Strings.t("text_search")) },
-                    modifier = Modifier.width(220.dp).focusRequester(searchFocus),
+                    placeholder = Strings.t("text_search"),
+                    regex = useRegex,
+                    onRegexChange = {
+                        useRegex = it
+                        vm.setFilters(LogcatFilters(levelSet = levelSet, text = text.ifBlank { null }, textIsRegex = it))
+                    },
+                    modifier = Modifier.weight(1f).focusRequester(searchFocus),
                 )
-                Spacer(Modifier.weight(1f))
                 val paused = status == LogcatStatus.PAUSED
                 IconButton(onClick = { if (paused) vm.resume() else vm.pause() }) {
                     Icon(

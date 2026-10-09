@@ -168,11 +168,10 @@ fun CdpDebugScreen(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(Strings.t("cdp_console"), style = MaterialTheme.typography.subtitle2)
                         Spacer(Modifier.width(4.dp))
-                        OutlinedTextField(
+                        SearchField(
                             value = filterText,
                             onValueChange = { filterText = it },
-                            singleLine = true,
-                            placeholder = { Text(Strings.t("text_search")) },
+                            placeholder = Strings.t("text_search"),
                             modifier = Modifier.width(180.dp),
                         )
                         Spacer(Modifier.weight(1f))

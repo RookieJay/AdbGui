@@ -4,6 +4,7 @@ import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.RowScope
@@ -31,6 +32,32 @@ fun DangerButton(
             contentColor = MaterialTheme.colors.onError,
             disabledBackgroundColor = error.copy(alpha = ContentAlpha.disabled),
             disabledContentColor = MaterialTheme.colors.onError.copy(alpha = ContentAlpha.disabled),
+        ),
+        content = content,
+    )
+}
+
+/**
+ * Outlined destructive-action button: error-colored border + error text. Use for destructive
+ * actions that are visually secondary to a filled primary action in the same row
+ * (e.g. Clear data next to a filled Start) — signals danger without competing for attention
+ * with [DangerButton], which is for the confirm action of irreversible confirmations.
+ */
+@Composable
+fun OutlinedDangerButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val error = MaterialTheme.colors.error
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = error,
+            disabledContentColor = error.copy(alpha = ContentAlpha.disabled),
         ),
         content = content,
     )

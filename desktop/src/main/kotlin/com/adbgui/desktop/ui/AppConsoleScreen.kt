@@ -161,22 +161,24 @@ fun AppConsoleScreen(
             modifier = Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // --- Toolbar ---
+            // --- Toolbar: title + search left; refresh/install right (install is the only
+            // filled CTA — refresh is secondary so it stays outlined) ---
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(Strings.t("app_console"), style = MaterialTheme.typography.h6)
                 Spacer(Modifier.width(12.dp))
-                OutlinedTextField(
+                SearchField(
                     value = search,
-                    singleLine = true,
                     onValueChange = { search = it },
-                    placeholder = { Text(Strings.t("text_search")) },
+                    placeholder = Strings.t("text_search"),
                     modifier = Modifier.width(220.dp),
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(12.dp))
                 Checkbox(checked = showSystemApps, onCheckedChange = { showSystemApps = it })
                 Text(Strings.t("show_system_apps"), style = MaterialTheme.typography.body2)
+                Spacer(Modifier.weight(1f))
+                if (busy) CircularProgressIndicator(modifier = Modifier.heightIn(max = 18.dp))
                 Spacer(Modifier.width(8.dp))
-                Button(enabled = !busy, onClick = { vm.load() }) { Text(Strings.t("refresh")) }
+                OutlinedButton(enabled = !busy, onClick = { vm.load() }) { Text(Strings.t("refresh")) }
                 Spacer(Modifier.width(8.dp))
                 Button(
                     enabled = !busy,
@@ -190,8 +192,6 @@ fun AppConsoleScreen(
                         }
                     },
                 ) { Text(Strings.t("install_apk")) }
-                Spacer(Modifier.width(8.dp))
-                if (busy) CircularProgressIndicator(modifier = Modifier.heightIn(max = 18.dp))
             }
 
             // Install flags row — mirrors adb install switches; passed to both picker and drop installs.
@@ -316,12 +316,16 @@ fun AppConsoleScreen(
                             )
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Start is the primary action; stop/restart are outlined peers. Destructive
+                    // actions (clear data, uninstall) are pushed right and tinted with the error
+                    // color so they read as a separate group, not peers of start/stop.
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Button(enabled = !busy, onClick = { vm.startApp(sel) }) { Text(Strings.t("start_app")) }
-                        Button(enabled = !busy, onClick = { vm.forceStop(sel) }) { Text(Strings.t("force_stop")) }
-                        Button(enabled = !busy, onClick = { vm.restart(sel) }) { Text(Strings.t("restart_app")) }
-                        OutlinedButton(enabled = !busy, onClick = { confirmClearData = sel }) { Text(Strings.t("clear")) }
-                        OutlinedButton(enabled = !busy, onClick = { confirmUninstall = sel }) {
+                        OutlinedButton(enabled = !busy, onClick = { vm.forceStop(sel) }) { Text(Strings.t("force_stop")) }
+                        OutlinedButton(enabled = !busy, onClick = { vm.restart(sel) }) { Text(Strings.t("restart_app")) }
+                        Spacer(Modifier.weight(1f))
+                        OutlinedDangerButton(enabled = !busy, onClick = { confirmClearData = sel }) { Text(Strings.t("clear")) }
+                        DangerButton(enabled = !busy, onClick = { confirmUninstall = sel }) {
                             Text(Strings.t("uninstall"))
                         }
                     }
