@@ -124,6 +124,47 @@ class LogcatControllerTest {
         c.stop()
     }
 
+    @Test fun setFilters_text_regex_matches_pattern_case_sensitive() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I Tag: foo 123",
+            "08-17 10:23:45.200  100  201 I Tag: bar abc",
+            "08-17 10:23:45.300  100  202 I Tag: Foo 456",
+        ))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(
+            levelSet = com.adbgui.core.domain.LogcatLevel.entries.toSet(),
+            text = "foo\\s\\d+",
+            textIsRegex = true,
+        ))
+        advanceUntilIdle()
+        assertEquals(1, c.lines.value.size)
+        assertEquals("foo 123", c.lines.value[0].message)
+        c.stop()
+    }
+
+    @Test fun setFilters_text_invalid_regex_falls_back_to_plain_contains() = runTest {
+        // Bad pattern must not crash the stream; degrade to plain-contains (same text as a
+        // literal substring) so filtering still works.
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I Tag: logcat said [unclosed bracket",
+            "08-17 10:23:45.200  100  201 I Tag: other line",
+        ))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(
+            levelSet = com.adbgui.core.domain.LogcatLevel.entries.toSet(),
+            text = "[unclosed",
+            textIsRegex = true,
+        ))
+        advanceUntilIdle()
+        assertEquals(1, c.lines.value.size)
+        assertEquals("logcat said [unclosed bracket", c.lines.value[0].message)
+        c.stop()
+    }
+
     @Test fun export_returns_filtered_raw_lines_joined() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.setStreamLines(listOf(

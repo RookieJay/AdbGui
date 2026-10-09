@@ -26,6 +26,9 @@ data class LogcatFilters(
     val tagInclude: String? = null,
     val tagExclude: String? = null,
     val text: String? = null,
+    /** When true, [text] is a regex (case-sensitive — embed `(?i)` for case-insensitive).
+     * An invalid pattern falls back to plain-contains matching so the stream never dies. */
+    val textIsRegex: Boolean = false,
     val pid: Int? = null,
 )
 
@@ -197,8 +200,35 @@ class LogcatController(
         if (line.level !in f.levelSet) return false
         f.tagInclude?.takeIf { it.isNotBlank() }?.let { if (!line.tag.contains(it, ignoreCase = true)) return false }
         f.tagExclude?.takeIf { it.isNotBlank() }?.let { if (line.tag.contains(it, ignoreCase = true)) return false }
-        f.text?.takeIf { it.isNotBlank() }?.let { if (!line.raw.contains(it, ignoreCase = true)) return false }
+        f.text?.takeIf { it.isNotBlank() }?.let { t ->
+            val textOk = if (f.textIsRegex) {
+                val re = compiledRegexFor(t)
+                if (re != null) re.containsMatchIn(line.raw) else line.raw.contains(t, ignoreCase = true)
+            } else {
+                line.raw.contains(t, ignoreCase = true)
+            }
+            if (!textOk) return false
+        }
         f.pid?.let { if (line.pid != it) return false }
         return true
+    }
+
+    // Regex cache: `matches` runs per line under the mutex, so a compile-per-line would dominate
+    // under a log flood. Keyed by pattern text; null = pattern invalid → plain-contains fallback.
+    // @Volatile per the cross-thread mutable-state rule (setFilters/onLine race window).
+    @Volatile private var regexCacheKey: String? = null
+    @Volatile private var regexCacheValue: Regex? = null
+
+    private fun compiledRegexFor(pattern: String): Regex? {
+        if (regexCacheKey != pattern) {
+            regexCacheValue = try {
+                pattern.toRegex()
+            } catch (e: Exception) {
+                logger.debug("logcat text regex invalid, falling back to plain contains: '$pattern' (${e.message})")
+                null
+            }
+            regexCacheKey = pattern
+        }
+        return regexCacheValue
     }
 }
