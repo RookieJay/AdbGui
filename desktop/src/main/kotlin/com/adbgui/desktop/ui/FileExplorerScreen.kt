@@ -1,7 +1,9 @@
 package com.adbgui.desktop.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -29,7 +32,7 @@ import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.io.File
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun FileExplorerScreen(
     vm: FileExplorerViewModel,
@@ -97,7 +100,7 @@ fun FileExplorerScreen(
                     val localPath = com.adbgui.desktop.platform.FileDialogs.pickFile(title = Strings.t("upload"), currentPath = null)
                     if (localPath != null) {
                         val name = localPath.substringAfterLast(File.separator)
-                        val target = "${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}$name"
+                        val target = joinPath(currentPath, name)
                         pendingPush = localPath to target
                     }
                 }) { Text(Strings.t("upload")) }
@@ -143,6 +146,21 @@ fun FileExplorerScreen(
                 sd + sf
             }
 
+            // Selection: single click selects the row (primary-tinted highlight), double click
+            // opens (directory → navigate, file → save dialog + pull). Right click also selects.
+            // remember(currentPath) resets the selection whenever the directory changes.
+            var selectedName by remember(currentPath) { mutableStateOf<String?>(null) }
+            val saveEntryFile: (FileEntry) -> Unit = { entry ->
+                val saved = com.adbgui.desktop.platform.FileDialogs.saveFile(
+                    title = Strings.t("save_file"),
+                    defaultName = entry.name,
+                )
+                if (saved != null) vm.pull(joinPath(currentPath, entry.name), saved)
+            }
+            val openEntry: (FileEntry) -> Unit = { entry ->
+                if (entry.isDirectory) vm.navigate(joinPath(currentPath, entry.name)) else saveEntryFile(entry)
+            }
+
             // File list
             val density = androidx.compose.ui.platform.LocalDensity.current
             LazyColumn(Modifier.fillMaxSize()) {
@@ -153,8 +171,15 @@ fun FileExplorerScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .background(
+                                if (selectedName == entry.name) MaterialTheme.colors.primary.copy(alpha = 0.12f)
+                                else Color.Transparent,
+                            )
                             .padding(vertical = 4.dp)
-                            .clickable { if (entry.isDirectory) vm.navigate("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}") }
+                            .combinedClickable(
+                                onDoubleClick = { openEntry(entry) },
+                                onClick = { selectedName = entry.name },
+                            )
                             .pointerInput(Unit) {
                                 awaitPointerEventScope {
                                     while (true) {
@@ -162,6 +187,7 @@ fun FileExplorerScreen(
                                         if (event.type == PointerEventType.Press && event.button == PointerButton.Secondary) {
                                             val pos = event.changes.firstOrNull()?.position
                                             if (pos != null) { clickX = pos.x; clickY = pos.y }
+                                            selectedName = entry.name
                                             menuOpen = true
                                         }
                                     }
@@ -185,17 +211,11 @@ fun FileExplorerScreen(
                         ) {
                             DropdownMenuItem(onClick = {
                                 menuOpen = false
-                                val saved = com.adbgui.desktop.platform.FileDialogs.saveFile(
-                                    title = Strings.t("save_file"),
-                                    defaultName = entry.name,
-                                )
-                                if (saved != null) {
-                                    vm.pull("${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}", saved)
-                                }
+                                saveEntryFile(entry)
                             }) { Text(Strings.t("save_file")) }
                             DropdownMenuItem(onClick = {
                                 menuOpen = false
-                                val path = "${if (currentPath.endsWith("/")) currentPath else "$currentPath/"}${entry.name}"
+                                val path = joinPath(currentPath, entry.name)
                                 Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null)
                             }) { Text(Strings.t("copy_path")) }
                         }
@@ -228,6 +248,10 @@ private fun formatSize(bytes: Long): String {
     if (mb < 1024) return "%.1f MB".format(mb)
     return "%.1f GB".format(mb / 1024.0)
 }
+
+/** Appends [name] to a device-side directory [dir], avoiding a doubled slash when dir is "/". */
+private fun joinPath(dir: String, name: String): String =
+    if (dir.endsWith("/")) "$dir$name" else "$dir/$name"
 
 /**
  * Folder/file row icon. Folder → [Icons.Filled.Folder], file → [Icons.Filled.InsertDriveFile].
