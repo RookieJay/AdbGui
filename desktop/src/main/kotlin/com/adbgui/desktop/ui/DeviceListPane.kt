@@ -34,12 +34,11 @@ import androidx.compose.material.TextButton
 import androidx.compose.material.TextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.UnfoldLess
-import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -101,7 +100,12 @@ fun DeviceListPane(
 
     Surface(modifier = modifier, color = MaterialTheme.colors.surface) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header
+            // Header — single row. Expand/collapse-all live inside the group-by dropdown as
+            // menu items (they are list-view options, same family as the grouping mode)
+            // instead of inline icon buttons: in the 280dp sidebar the two extra 48dp
+            // buttons overflowed the row and starved the trailing pair/add buttons to zero
+            // width. Keeping the row at the NONE-mode footprint (~242dp) guarantees the
+            // actions always fit.
             Row(
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -122,17 +126,31 @@ fun DeviceListPane(
                             DropdownMenuItem(onClick = {
                                 groupMenuOpen = false
                                 settingsVm?.setDeviceGroupBy(mode)
-                            }) { Text(groupByLabel(mode)) }
+                            }) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // Checkmark marks the active mode; keeps a fixed column so
+                                    // the labels align across items.
+                                    if (mode == settings.deviceGroupBy) {
+                                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    } else {
+                                        Spacer(Modifier.size(16.dp))
+                                    }
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(groupByLabel(mode))
+                                }
+                            }
                         }
-                    }
-                }
-                // Expand-all / collapse-all. Only when grouped (NONE has no headers to toggle).
-                if (hasGroups) {
-                    IconButton(onClick = { collapsed.clear() }, enabled = groupKeys.any { collapsed[it] == true }) {
-                        Icon(Icons.Filled.UnfoldMore, contentDescription = Strings.t("expand_all"))
-                    }
-                    IconButton(onClick = { groupKeys.forEach { collapsed[it] = true } }, enabled = groupKeys.any { collapsed[it] != true }) {
-                        Icon(Icons.Filled.UnfoldLess, contentDescription = Strings.t("collapse_all"))
+                        Divider()
+                        // Expand/collapse-all, only meaningful with headers. Disabled (not
+                        // hidden) in NONE mode so the menu stays stable and self-explaining.
+                        DropdownMenuItem(
+                            onClick = { collapsed.clear() },
+                            enabled = hasGroups && groupKeys.any { collapsed[it] == true },
+                        ) { Text(Strings.t("expand_all")) }
+                        DropdownMenuItem(
+                            onClick = { groupKeys.forEach { collapsed[it] = true } },
+                            enabled = hasGroups && groupKeys.any { collapsed[it] != true },
+                        ) { Text(Strings.t("collapse_all")) }
                     }
                 }
                 Spacer(Modifier.weight(1f))
