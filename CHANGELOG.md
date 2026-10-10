@@ -3,6 +3,20 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-10 Logcat 录制配置（目录可改 + 总量上限 + 按日合并）
+
+分支：feat/logcat-recording-config。spec：docs/superpowers/specs/2026-10-10-logcat-recording-config-design.md（修订 2026-09-30 录制子系统）
+
+- **录制目录可配置**：设置页「录制存储」节可更改目录（`FileDialogs.pickDirectory`），热切换自动迁移已有文件（旧目录 `auto/`、`manual/` 及根目录残留 `.log` 逐个移动到新目录对应位置，单文件失败跳过 + WARN）、正在录的 auto 自动重启、manual 以 `recording_dir_changed` 收尾（已写内容不丢）；「打开」按钮直达当前目录；「重置为默认」回到 `configDir/logcat-recordings`。
+- **auto 录制总占用上限**：默认 500 MB，可设 50–100000；超出删 `auto/` 下最旧文件（`lastModified` 排序），正在写的文件与 `manual/` 不受影响；与既有 7 天保留双约束，谁先触发谁删。触发时机：启动清理、每次开新 auto 文件（含轮转续开）、设置里改上限后。
+- **auto 文件按日合并**：同设备同天追加续写（当天文件存在则 append 模式，写 `--------- adbgui session start <ts> serial=<serial>` 标记行区分会话），重连不再碎片化；跨午夜靠重连/轮转自然分界。轮转文件命名改 `<label>_<yyyyMMdd>_<n>.log`（目录内最小未用 n），100 MB/文件封顶不变。
+- **auto/manual 子目录布局**：`<录制目录>/auto/` 与 `<录制目录>/manual/`，文件名不再带 `auto_` 前缀；清理只扫 `auto/`，`latestRecordingFile()` 扫两个子目录取最新。首次启动旧文件自动归位：根目录 `auto_*.log` 挪进 `auto/`（保留前缀，7 天内自然清掉），其余 `.log` 挪进 `manual/`；挪不动的 WARN 跳过下次再试。
+- **设置页录制管理 UI**：「录制存储」节显示当前有效路径（`SelectableText`）+ 更改/打开/重置默认按钮；总上限数字输入 + 应用（校验范围）；已用空间展示（经 `totalRecordingBytes()` 扫描两个子目录求和，目录/上限变化后自动刷新）。`SettingsViewModel` 注入 `LogcatRecordingManager` 转发，不越层。i18n 新增 zh/en 双语键（目录标签/更改/打开/重置默认、上限标签/校验错误、占用展示、迁移失败状态）。
+- **清理增强**：`cleanupOnStartup()`（原 `cleanupOldAutoFiles`）依次做归位 → 7 天清理 → 0 字节清理（`auto/` 下 0 字节且 `lastModified` 超 1 天，正在录的新鲜 0 字节不删）→ `enforceSizeCap()`；全 `runCatching`，失败 WARN 不阻塞启动。
+- **修复**：desktop `LogcatViewModelTest` 断言随新目录布局更新（文件路径从根目录改 `auto/` 子目录）。
+
+**测试**（TDD）：`LogcatRecorderTest` +2（append 模式保留已有内容 + `bytesWritten` 起始 = 现有大小、append 起录制 session start 标记行）；`LogcatRecordingManagerTest` +8（按日命名追加、轮转续开 `_n` 最小未用、`enforceSizeCap` 删最旧跳过活动文件与 manual、目录热切换迁移序列、迁移单文件失败跳过、启动归位 `auto_*.log`/手动文件分别归位、0 字节超 1 天删除而新鲜不删、既有命名断言更新）；`SettingsStoreTest` +2（两新字段序列化默认值）；`SettingsViewModelTest` +2（目录/上限转发、占用加载）。
+
 ## v2 — 2026-10-10 纯图标按钮悬停提示（tooltip）
 
 纯图标按钮（复制、删除、暂停/继续、导出等）此前只有无障碍 `contentDescription`，鼠标用户悬停无任何提示。本次统一补齐 hover tooltip。
