@@ -26,7 +26,6 @@ import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
@@ -173,7 +172,7 @@ fun DeviceListPane(
                     )
                 }
                 TextButton(onClick = { showPair = true }) { Text(Strings.t("pair")) }
-                IconButton(onClick = onOpenConnect) {
+                TooltipIconButton(onClick = onOpenConnect, tooltip = { Strings.t("connect") }) {
                     Icon(Icons.Filled.Add, contentDescription = Strings.t("connect"))
                 }
             }
@@ -394,14 +393,22 @@ private fun ManageTagsDialog(
                                 style = MaterialTheme.typography.caption,
                                 color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
                             )
-                            IconButton(onClick = { onRename(t) }, modifier = Modifier.size(28.dp)) {
+                            TooltipIconButton(
+                                onClick = { onRename(t) },
+                                modifier = Modifier.size(28.dp),
+                                tooltip = { Strings.t("rename_tag") },
+                            ) {
                                 Icon(
                                     Icons.Filled.Edit,
                                     contentDescription = Strings.t("rename_tag"),
                                     modifier = Modifier.size(16.dp),
                                 )
                             }
-                            IconButton(onClick = { onDelete(t) }, modifier = Modifier.size(28.dp)) {
+                            TooltipIconButton(
+                                onClick = { onDelete(t) },
+                                modifier = Modifier.size(28.dp),
+                                tooltip = { Strings.t("delete_tag") },
+                            ) {
                                 Icon(
                                     Icons.Filled.Delete,
                                     contentDescription = Strings.t("delete_tag"),
@@ -636,7 +643,7 @@ private fun DeviceRow(
                 }
             }
             Box {
-                IconButton(onClick = { menuOpen = true }) {
+                TooltipIconButton(onClick = { menuOpen = true }, tooltip = { Strings.t("more") }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = Strings.t("more"))
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {

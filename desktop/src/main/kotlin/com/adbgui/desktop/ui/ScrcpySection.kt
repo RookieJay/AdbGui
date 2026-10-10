@@ -203,7 +203,7 @@ fun ScrcpySection(
             TextButton(onClick = { optionsOpen.value = !optionsOpen.value }) {
                 Icon(
                     if (optionsOpen.value) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
+                    contentDescription = Strings.t(if (optionsOpen.value) "collapse" else "expand"),
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(Strings.t("scrcpy_options"))

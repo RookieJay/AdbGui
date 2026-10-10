@@ -103,22 +103,26 @@ fun SearchField(
                 },
             )
             if (regex != null && onRegexChange != null) {
-                RegexToggle(on = regexOn, onToggle = { onRegexChange(!regexOn) })
+                Tooltip(text = { Strings.t("regex_match") }) {
+                    RegexToggle(on = regexOn, onToggle = { onRegexChange(!regexOn) })
+                }
                 Spacer(Modifier.width(4.dp))
             }
             if (value.isNotEmpty()) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = Strings.t("clear_search"),
-                    tint = hint,
-                    modifier = Modifier
-                        .size(18.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onValueChange("") },
-                        ),
-                )
+                Tooltip(text = { Strings.t("clear_search") }) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = Strings.t("clear_search"),
+                        tint = hint,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onValueChange("") },
+                            ),
+                    )
+                }
             }
         }
     }

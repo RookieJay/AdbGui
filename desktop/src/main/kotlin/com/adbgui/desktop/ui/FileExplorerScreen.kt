@@ -62,8 +62,10 @@ fun FileExplorerScreen(
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             // Toolbar: back + clickable breadcrumb + upload + refresh
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { vm.back() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Strings.t("back"))
+                Tooltip(text = { Strings.t("back") }) {
+                    OutlinedButton(onClick = { vm.back() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Strings.t("back"))
+                    }
                 }
                 Row(
                     modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),

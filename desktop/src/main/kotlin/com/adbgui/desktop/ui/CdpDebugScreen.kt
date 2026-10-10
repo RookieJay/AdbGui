@@ -25,7 +25,6 @@ import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.OutlinedButton
@@ -175,22 +174,31 @@ fun CdpDebugScreen(
                             modifier = Modifier.width(180.dp),
                         )
                         Spacer(Modifier.weight(1f))
-                        IconButton(onClick = {
-                            paused = !paused
-                            frozenConsole = if (paused) consoleEntries else null
-                        }) {
+                        TooltipIconButton(
+                            onClick = {
+                                paused = !paused
+                                frozenConsole = if (paused) consoleEntries else null
+                            },
+                            tooltip = { Strings.t(if (paused) "resume" else "pause") },
+                        ) {
                             Icon(
                                 if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                                 contentDescription = Strings.t(if (paused) "resume" else "pause"),
                             )
                         }
-                        IconButton(onClick = { vm.clearConsole() }) {
+                        TooltipIconButton(
+                            onClick = { vm.clearConsole() },
+                            tooltip = { Strings.t("clear") },
+                        ) {
                             Icon(Icons.Filled.Delete, contentDescription = Strings.t("clear"))
                         }
-                        IconButton(onClick = {
-                            val sel = StringSelection(filteredConsole.joinToString("\n") { it.text })
-                            Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
-                        }) { Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy")) }
+                        TooltipIconButton(
+                            onClick = {
+                                val sel = StringSelection(filteredConsole.joinToString("\n") { it.text })
+                                Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
+                            },
+                            tooltip = { Strings.t("copy") },
+                        ) { Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy")) }
                         Button(onClick = {
                             val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                             val target = com.adbgui.desktop.platform.FileDialogs.saveFile(
@@ -204,7 +212,7 @@ fun CdpDebugScreen(
                                     .onFailure { exportError = Strings.t("status_save_failed").format(it.message) }
                             }
                         }) {
-                            Icon(Icons.Filled.Download, contentDescription = null)
+                            Icon(Icons.Filled.Download, contentDescription = Strings.t("export"))
                             Spacer(Modifier.width(4.dp))
                             Text(Strings.t("export"))
                         }
@@ -255,7 +263,11 @@ fun CdpDebugScreen(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(Strings.t("cdp_network"), style = MaterialTheme.typography.subtitle2)
                         Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { vm.clearNetwork() }, enabled = networkRequests.isNotEmpty()) {
+                        TooltipIconButton(
+                            onClick = { vm.clearNetwork() },
+                            enabled = networkRequests.isNotEmpty(),
+                            tooltip = { Strings.t("cdp_clear_network") },
+                        ) {
                             Icon(Icons.Filled.Delete, contentDescription = Strings.t("cdp_clear_network"))
                         }
                     }

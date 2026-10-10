@@ -17,7 +17,6 @@ import androidx.compose.material.Button
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Surface
@@ -207,10 +206,13 @@ private fun PropRow(label: String, value: String, mono: Boolean = true) {
             modifier = Modifier.width(160.dp),
         )
         Text(value, style = valueStyle, modifier = Modifier.weight(1f))
-        IconButton(onClick = {
-            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(value), null)
-            copied = true
-        }) {
+        TooltipIconButton(
+            onClick = {
+                Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(value), null)
+                copied = true
+            },
+            tooltip = { Strings.t(if (copied) "copied" else "copy") },
+        ) {
             Icon(
                 if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
                 contentDescription = Strings.t("copy"),

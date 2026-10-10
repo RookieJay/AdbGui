@@ -28,7 +28,6 @@ import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.OutlinedTextField
@@ -414,16 +413,19 @@ private fun PackageSelectRow(
                 Text(Strings.t("system"), style = MaterialTheme.typography.caption)
             }
         }
-        IconButton(onClick = onToggleExpand) {
+        TooltipIconButton(onClick = onToggleExpand, tooltip = { Strings.t(if (expanded) "collapse" else "expand") }) {
             Icon(
                 if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
                 contentDescription = Strings.t(if (expanded) "collapse" else "expand"),
                 modifier = Modifier.size(18.dp),
             )
         }
-        IconButton(onClick = {
-            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(pkg.name), null)
-        }) {
+        TooltipIconButton(
+            onClick = {
+                Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(pkg.name), null)
+            },
+            tooltip = { Strings.t("copy") },
+        ) {
             Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(18.dp))
         }
     }
@@ -446,7 +448,10 @@ private fun AppDetailBlock(vm: AppConsoleViewModel, pkg: String) {
                     d.codePath?.let { path ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("${Strings.t("code_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
+                            TooltipIconButton(
+                                onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) },
+                                tooltip = { Strings.t("copy") },
+                            ) {
                                 Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
                             }
                         }
@@ -454,13 +459,16 @@ private fun AppDetailBlock(vm: AppConsoleViewModel, pkg: String) {
                     d.publicSourceDir?.let { path ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("${Strings.t("apk_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) }) {
+                            TooltipIconButton(
+                                onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) },
+                                tooltip = { Strings.t("copy") },
+                            ) {
                                 Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
                             }
                             // Export APK: adb pull <publicSourceDir> → user-chosen local file.
                             // Save dialog lives in platform FileDialogs (UI layer owns OS pickers,
                             // VM owns the pull). Disabled while any console op is running.
-                            IconButton(
+                            TooltipIconButton(
                                 enabled = !consoleBusy,
                                 onClick = {
                                     val dest = com.adbgui.desktop.platform.FileDialogs.saveFile(
@@ -469,6 +477,7 @@ private fun AppDetailBlock(vm: AppConsoleViewModel, pkg: String) {
                                     )
                                     if (dest != null) vm.exportApk(pkg, dest)
                                 },
+                                tooltip = { Strings.t("export_apk") },
                             ) {
                                 Icon(Icons.Filled.Download, contentDescription = Strings.t("export_apk"), modifier = Modifier.size(16.dp))
                             }

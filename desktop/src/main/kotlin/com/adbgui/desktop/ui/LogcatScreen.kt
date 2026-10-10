@@ -133,7 +133,10 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                     modifier = Modifier.weight(1f).focusRequester(searchFocus),
                 )
                 val paused = status == LogcatStatus.PAUSED
-                IconButton(onClick = { if (paused) vm.resume() else vm.pause() }) {
+                TooltipIconButton(
+                    onClick = { if (paused) vm.resume() else vm.pause() },
+                    tooltip = { Strings.t(if (paused) "resume" else "pause") },
+                ) {
                     Icon(
                         if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                         contentDescription = Strings.t(if (paused) "resume" else "pause"),
@@ -160,22 +163,31 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 }
                 // 常驻定位按钮：始终可点——有录制文件时定位并选中最新一个（含后台录制，
                 // 跨重启有效，点击时实时扫描所以外部删/增文件立刻可见）；目录空时打开录制目录
-                IconButton(onClick = {
-                    revealScope.launch {
-                        val latest = vm.latestRecordingFile()
-                        if (latest != null) revealFile(latest.toFile())
-                        else openFile(File(vm.recordingsDir.toAbsolutePath().toString()))
-                    }
-                }) {
+                TooltipIconButton(
+                    onClick = {
+                        revealScope.launch {
+                            val latest = vm.latestRecordingFile()
+                            if (latest != null) revealFile(latest.toFile())
+                            else openFile(File(vm.recordingsDir.toAbsolutePath().toString()))
+                        }
+                    },
+                    tooltip = { Strings.t("locate_latest_recording") },
+                ) {
                     Icon(Icons.Filled.FolderOpen, contentDescription = Strings.t("locate_latest_recording"))
                 }
-                IconButton(onClick = { confirmClear = true }) {
+                TooltipIconButton(
+                    onClick = { confirmClear = true },
+                    tooltip = { Strings.t("clear") },
+                ) {
                     Icon(Icons.Filled.Delete, contentDescription = Strings.t("clear"))
                 }
-                IconButton(onClick = {
-                    val sel = StringSelection(vm.export())
-                    Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
-                }) { Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy")) }
+                TooltipIconButton(
+                    onClick = {
+                        val sel = StringSelection(vm.export())
+                        Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
+                    },
+                    tooltip = { Strings.t("copy") },
+                ) { Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy")) }
                 Button(
                     enabled = !exporting,
                     onClick = {
@@ -189,7 +201,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                         }
                     },
                 ) {
-                    Icon(Icons.Filled.Download, contentDescription = null)
+                    Icon(Icons.Filled.Download, contentDescription = Strings.t("export"))
                     Spacer(Modifier.width(4.dp))
                     Text(if (exporting) Strings.t("export_progress").format(exportProgress) else Strings.t("export"))
                 }
@@ -278,10 +290,14 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 // Floating "jump to latest" button when the user has scrolled up. Instant snap
                 // (animate gets interrupted by new lines on a fast stream and never reaches bottom).
                 if (!userAtBottom && lines.isNotEmpty()) {
-                    OutlinedButton(
-                        onClick = { scrollScope.launch { listState.scrollToItem(lines.size - 1) } },
+                    Tooltip(
+                        text = { Strings.t("scroll_to_latest") },
                         modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-                    ) { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = Strings.t("scroll_to_latest")) }
+                    ) {
+                        OutlinedButton(onClick = { scrollScope.launch { listState.scrollToItem(lines.size - 1) } }) {
+                            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = Strings.t("scroll_to_latest"))
+                        }
+                    }
                 }
                 // Right-edge scrollbar so the user can see position and drag (animateScrollToItem
                 // failing left them with no cue where they were on a laggy device).

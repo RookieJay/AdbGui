@@ -84,11 +84,13 @@ fun InlineMessageBanner(
                         }
                     }
                     if (onDismiss != null) {
-                        TextButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.padding(start = 4.dp).width(40.dp),
-                        ) {
-                            Icon(Icons.Filled.Close, contentDescription = Strings.t("clear"))
+                        Tooltip(text = { Strings.t("close") }) {
+                            TextButton(
+                                onClick = onDismiss,
+                                modifier = Modifier.padding(start = 4.dp).width(40.dp),
+                            ) {
+                                Icon(Icons.Filled.Close, contentDescription = Strings.t("close"))
+                            }
                         }
                     }
                 }

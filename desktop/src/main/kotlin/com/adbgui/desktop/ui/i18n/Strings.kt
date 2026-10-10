@@ -49,6 +49,7 @@ object Strings {
         "more" to "更多",
         "collapse" to "折叠",
         "expand" to "展开",
+        "close" to "关闭",
         "adb_error" to "adb 错误",
         // Device list
         "devices" to "设备",
@@ -504,6 +505,7 @@ object Strings {
         "more" to "More",
         "collapse" to "Collapse",
         "expand" to "Expand",
+        "close" to "Close",
         "adb_error" to "adb error",
         // Device list
         "devices" to "Devices",
