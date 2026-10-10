@@ -56,14 +56,20 @@ class LogcatRecordingManager(
     private val autoFiles = mutableMapOf<String, Path>()                 // mutex 保护（watchdog 检查文件存活用）
     private var observerJob: Job? = null
     private var watchdogJob: Job? = null
+    private val maintenance = LogcatRecordingMaintenance(logger, clock)
+
+    private fun capBytes(): Long = settings.state.value.logcatRecordingMaxTotalMb * 1024L * 1024L
+    private suspend fun activeFilesSnapshot(): Set<Path> =
+        mutex.withLock { autoFiles.values.toSet() + listOfNotNull(manualFile) }
 
     init {
         // 确保子目录存在（auto/manual）
         runCatching { Files.createDirectories(autoDir()) }
         runCatching { Files.createDirectories(manualDir()) }
-        // 启动清理（spec §3.2）：删 7 天前 auto 文件；失败仅 WARN，不阻塞
+        // 启动清理（spec §3.2 + D4/D5）：归位 → 7 天 → 0 字节 → 总量上限；失败仅 WARN，不阻塞
         scope.launch {
-            withContext(io) { runCatching { cleanupOldAutoFiles() } }
+            val active = activeFilesSnapshot()
+            withContext(io) { runCatching { maintenance.cleanupOnStartup(recordingsDir, capBytes(), active) } }
                 .onFailure { logger.warn("recording cleanup failed: ${it.message}") }
         }
         observerJob = scope.launch { observeDevices() }
@@ -144,8 +150,6 @@ class LogcatRecordingManager(
     }
 
     companion object {
-        const val RETENTION_MS: Long = 7L * 24 * 60 * 60 * 1000
-
         /** 文件存活检测周期（真实时间，跑在 io 上）。 */
         private const val FILE_WATCH_INTERVAL_MS = 5000L
 
@@ -175,7 +179,7 @@ class LogcatRecordingManager(
         }
     }
 
-    // --- Task 4: observeDevices / startAutoLocked / stopAutoLocked / cleanupOldAutoFiles ---
+    // --- observeDevices / startAutoLocked / stopAutoLocked ---
 
     private fun autoDir(): Path = recordingsDir.resolve("auto")
     private fun manualDir(): Path = recordingsDir.resolve("manual")
@@ -230,6 +234,10 @@ class LogcatRecordingManager(
             }
         }
         rec.start(serial)
+        scope.launch {
+            val active = activeFilesSnapshot()
+            withContext(io) { runCatching { maintenance.enforceSizeCap(recordingsDir, capBytes(), active) } }
+        }
     }
 
     /** mutex 持有中调用（suspend：内部 join recorder 的收尾）。 */
@@ -240,16 +248,6 @@ class LogcatRecordingManager(
         _autoStates.value = _autoStates.value - serial
     }
 
-    /** 删除超过 [RETENTION_MS] 的 auto_*.log；非 auto_ 文件（手动录制）永不动（spec §3.2）。io 上执行。 */
-    internal fun cleanupOldAutoFiles() {
-        val cutoff = clock() - RETENTION_MS
-        val rootAuto = recordingsDir.toFile()
-            .listFiles { f -> f.isFile && f.name.startsWith("auto_") && f.name.endsWith(".log") }?.toList() ?: emptyList()
-        val subAuto = autoDir().toFile().listFiles { f -> f.isFile && f.name.endsWith(".log") }?.toList() ?: emptyList()
-        (rootAuto + subAuto).filter { it.lastModified() < cutoff }
-            .forEach { runCatching { it.delete() } }
-    }
-
     /** 录制目录里 lastModified 最新的 .log 文件（录制页常驻"定位最近录制"按钮用）；
      *  无录制文件返回 null。目录扫描在 [io] 上执行。 */
     suspend fun latestRecordingFile(): Path? = withContext(io) {
@@ -258,6 +256,9 @@ class LogcatRecordingManager(
         }
         files.maxByOrNull { it.lastModified() }?.toPath()
     }
+
+    /** auto/ + manual/ 总占用（设置页展示）。目录扫描在 [io] 上执行。 */
+    suspend fun totalRecordingBytes(): Long = withContext(io) { maintenance.totalBytes(recordingsDir) }
 
     /** serial → 录制文件名前缀段：`品牌_型号_Android版本`（getprop）；失败或 brand/model
      *  为 unknown 时回退 [sanitizeSerial]，保证起录永不因取属性失败而失败。 */
