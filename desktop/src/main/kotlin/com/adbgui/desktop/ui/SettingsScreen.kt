@@ -52,7 +52,8 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 /**
- * Settings screen: adb path override, log level, open/export logs.
+ * Settings screen: adb/scrcpy paths, app logs (level, open, export), device logcat
+ * (view buffer, auto-record, recording storage), adb version, updates.
  *
  * @param vm the settings view model.
  * @param configDir the app config dir; logs live at `configDir/logs`.
@@ -204,8 +205,10 @@ fun SettingsScreen(
 
             Divider()
 
-            // --- Log level ---
-            Text(Strings.t("log_level"), style = MaterialTheme.typography.subtitle1)
+            // --- App logs: level + open/export of the app's own diagnostic logs ---
+            Text(Strings.t("logs_app_section"), style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("logs_app_hint"), style = MaterialTheme.typography.caption)
+            Text(Strings.t("log_level"), style = MaterialTheme.typography.subtitle2)
             SegmentedSelector(
                 options = LogLevel.entries,
                 selected = settings.logLevel,
@@ -215,11 +218,43 @@ fun SettingsScreen(
                 },
                 optionLabel = { lvl -> lvl.name },
             )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = {
+                    val logDir = configDir.resolve("logs").toFile()
+                    runCatching {
+                        if (!logDir.exists()) logDir.mkdirs()
+                        Desktop.getDesktop().open(logDir)
+                    }.onFailure { status = Strings.t("status_open_failed").format(it.message) }
+                }) { Text(Strings.t("open_logs_folder")) }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val logDir = configDir.resolve("logs").toFile()
+                    if (!logDir.exists() || logDir.listFiles()?.isNotEmpty() == false) {
+                        status = Strings.t("status_no_logs")
+                        return@Button
+                    }
+                    val parent = Frame()
+                    val dialog = FileDialog(parent, Strings.t("save_logs_zip"), FileDialog.SAVE)
+                    dialog.file = "adbgui-logs.zip"
+                    dialog.isVisible = true
+                    val sel = dialog.file
+                    if (sel != null) {
+                        val target = File(dialog.directory, sel)
+                        runCatching { zipDirectory(logDir, target) }
+                            .onSuccess { status = Strings.t("status_exported_to").format(target.absolutePath) }
+                            .onFailure { status = Strings.t("status_export_failed").format(it.message) }
+                    }
+                }) { Text(Strings.t("export_logs")) }
+            }
 
             Divider()
 
+            // --- Device logs (logcat): view + recording settings ---
+            Text(Strings.t("logcat_section"), style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("logcat_section_hint"), style = MaterialTheme.typography.caption)
+
             // --- Logcat ring buffer cap ---
-            Text(Strings.t("logcat_ring_cap"), style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("logcat_ring_cap"), style = MaterialTheme.typography.subtitle2)
             var ringCapDraft by remember(settings.logcatRingCap) {
                 mutableStateOf(settings.logcatRingCap.toString())
             }
@@ -244,10 +279,8 @@ fun SettingsScreen(
             }
             Text(Strings.t("logcat_ring_cap_hint"), style = MaterialTheme.typography.caption)
 
-            Divider()
-
             // --- Auto logcat recording ---
-            Text(Strings.t("logcat_auto_record"), style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("logcat_auto_record"), style = MaterialTheme.typography.subtitle2)
             Text(Strings.t("logcat_auto_record_desc"), style = MaterialTheme.typography.caption)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(
@@ -256,10 +289,8 @@ fun SettingsScreen(
                 )
             }
 
-            Divider()
-
             // --- Recording storage (dir + cap + usage) ---
-            Text(Strings.t("logcat_rec_storage"), style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("logcat_rec_storage"), style = MaterialTheme.typography.subtitle2)
             val effectiveDir = vm.recordingsDir?.toAbsolutePath().toString()
                 ?: (settings.logcatRecordingsDir ?: configDir.resolve("logcat-recordings").toAbsolutePath().toString())
             val usage by vm.recordingsUsage.collectAsState()
@@ -320,39 +351,6 @@ fun SettingsScreen(
                 }) { Text(Strings.t("apply")) }
             }
             Text(Strings.t("logcat_rec_cap_hint"), style = MaterialTheme.typography.caption)
-
-            Divider()
-
-            // --- Logs ---
-            Text(Strings.t("logs"), style = MaterialTheme.typography.subtitle1)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = {
-                    val logDir = configDir.resolve("logs").toFile()
-                    runCatching {
-                        if (!logDir.exists()) logDir.mkdirs()
-                        Desktop.getDesktop().open(logDir)
-                    }.onFailure { status = Strings.t("status_open_failed").format(it.message) }
-                }) { Text(Strings.t("open_logs_folder")) }
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = {
-                    val logDir = configDir.resolve("logs").toFile()
-                    if (!logDir.exists() || logDir.listFiles()?.isNotEmpty() == false) {
-                        status = Strings.t("status_no_logs")
-                        return@Button
-                    }
-                    val parent = Frame()
-                    val dialog = FileDialog(parent, Strings.t("save_logs_zip"), FileDialog.SAVE)
-                    dialog.file = "adbgui-logs.zip"
-                    dialog.isVisible = true
-                    val sel = dialog.file
-                    if (sel != null) {
-                        val target = File(dialog.directory, sel)
-                        runCatching { zipDirectory(logDir, target) }
-                            .onSuccess { status = Strings.t("status_exported_to").format(target.absolutePath) }
-                            .onFailure { status = Strings.t("status_export_failed").format(it.message) }
-                    }
-                }) { Text(Strings.t("export_logs")) }
-            }
 
             status?.let {
                 Spacer(Modifier.height(8.dp))

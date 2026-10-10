@@ -3,6 +3,15 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-10 设置页日志分区：应用日志 vs 设备日志（Logcat）
+
+用户反馈：设置页里「日志级别」（本应用日志的级别）紧挨着 logcat 三块设置（缓冲行数 / 自动录制 / 录制存储），而「日志」（打开/导出应用日志）又孤悬在这三块之后——两类"日志"交错，扫一眼分不清哪块管哪边。
+
+- **「应用日志」组**（合并原「日志级别」+「日志」两节）：组标题 + 一行说明（"本应用自身的运行日志，用于排查应用问题（位于用户配置目录 logs/）"）；组内 = 日志级别选择器 + 打开日志文件夹 / 导出日志按钮（原在最底部，上移合并）。
+- **「设备日志（Logcat）」组**：缓冲行数 / 自动录制 / 录制存储 三块收进同一组标题 + 一行说明（"查看与录制设备 logcat 的相关设置"）之下；原三块各自的节标题（subtitle1 + Divider）降为组内小标题（subtitle2），组内不再插 Divider。
+- i18n：新增 `logs_app_section` / `logs_app_hint` / `logcat_section` / `logcat_section_hint`（zh/en）；删除仅此一处使用的旧 key `logs`。
+- 纯布局/文案重排，无 VM / `:core` 变化，无新增单测；`:desktop:test` 通过 + 运行应用查看实际效果。
+
 ## v2 — 2026-10-10 Logcat 录制配置（目录可改 + 总量上限 + 按日合并）
 
 分支：feat/logcat-recording-config。spec：docs/superpowers/specs/2026-10-10-logcat-recording-config-design.md（修订 2026-09-30 录制子系统）
