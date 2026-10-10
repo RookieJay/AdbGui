@@ -260,8 +260,8 @@ fun SettingsScreen(
 
             // --- Recording storage (dir + cap + usage) ---
             Text(Strings.t("logcat_rec_storage"), style = MaterialTheme.typography.subtitle1)
-            val effectiveDir = settings.logcatRecordingsDir
-                ?: configDir.resolve("logcat-recordings").toAbsolutePath().toString()
+            val effectiveDir = vm.recordingsDir?.toAbsolutePath().toString()
+                ?: (settings.logcatRecordingsDir ?: configDir.resolve("logcat-recordings").toAbsolutePath().toString())
             val usage by vm.recordingsUsage.collectAsState()
             LaunchedEffect(settings.logcatRecordingsDir, settings.logcatRecordingMaxTotalMb) {
                 vm.refreshRecordingsUsage()

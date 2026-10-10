@@ -19,6 +19,9 @@ class SettingsViewModel(
     val settings: StateFlow<Settings> = store.state
     init { scope.launch { store.load() } }
 
+    /** Effective recordings dir from core (handles custom dir + invalid-path fallback). Null when no manager injected (tests). */
+    val recordingsDir: java.nio.file.Path? get() = recording?.recordingsDir
+
     fun setAdbPath(path: String?) = scope.launch { store.update { it.copy(adbPathOverride = path) } }
     fun setScrcpyPath(path: String?) = scope.launch { store.update { it.copy(scrcpyPathOverride = path) } }
     fun setScrcpyMode(mode: String) = scope.launch { store.update { it.copy(scrcpyMode = mode) } }
