@@ -19,6 +19,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -57,6 +58,9 @@ class LogcatRecordingManager(
     private var watchdogJob: Job? = null
 
     init {
+        // 确保子目录存在（auto/manual）
+        runCatching { Files.createDirectories(autoDir()) }
+        runCatching { Files.createDirectories(manualDir()) }
         // 启动清理（spec §3.2）：删 7 天前 auto 文件；失败仅 WARN，不阻塞
         scope.launch {
             withContext(io) { runCatching { cleanupOldAutoFiles() } }
@@ -96,7 +100,7 @@ class LogcatRecordingManager(
     /** mutex 持有中调用。watchdog 重启手动会话也走这里。 */
     private suspend fun startManualLocked(serial: String) {
         val label = deviceLabel(serial)
-        val file = uniqueFile(recordingsDir.resolve("${label}_${stamp()}.log"))
+        val file = uniqueFile(manualDir().resolve("${label}_${stamp()}.log"))
         val rec = LogcatRecorder(commands, logger, scope, io, file, rotationBytes)
         manualJob?.cancel()
         manualRecorder = rec
@@ -155,6 +159,9 @@ class LogcatRecordingManager(
         private fun stamp(): String =
             LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS"))
 
+        private fun today(): String =
+            LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
+
         private fun uniqueFile(path: Path): Path {
             if (!Files.exists(path)) return path
             var i = 1
@@ -169,6 +176,16 @@ class LogcatRecordingManager(
     }
 
     // --- Task 4: observeDevices / startAutoLocked / stopAutoLocked / cleanupOldAutoFiles ---
+
+    private fun autoDir(): Path = recordingsDir.resolve("auto")
+    private fun manualDir(): Path = recordingsDir.resolve("manual")
+
+    /** 轮转/watchdog 重启用：取目录里最小未用的序号开新文件（spec D3，不追加）。 */
+    private fun nextRotationFile(label: String): Path {
+        var n = 1
+        while (Files.exists(autoDir().resolve("${label}_${today()}_$n.log"))) n++
+        return autoDir().resolve("${label}_${today()}_$n.log")
+    }
 
     /** 设备上下线 + 设置开关 → 增删 auto recorder；同时守护手动会话（设备断开即停）。 */
     private suspend fun observeDevices() {
@@ -191,10 +208,12 @@ class LogcatRecordingManager(
 
     /** mutex 持有中调用。轮转续开：recorder 写满文件原地收尾后，这里换新文件重开（spec §3.2）。
      *  每次起录（含轮转）重新 getprop 取品牌型号——轮转按 N MB 触发，开销可忽略。 */
-    internal suspend fun startAutoLocked(serial: String) {
+    internal suspend fun startAutoLocked(serial: String, forceNewFile: Boolean = false) {
         val label = deviceLabel(serial)   // 同 startManual：持锁 getprop 的短暂阻塞可接受
-        val file = uniqueFile(recordingsDir.resolve("auto_${label}_${stamp()}.log"))
-        val rec = LogcatRecorder(commands, logger, scope, io, file, rotationBytes)
+        val file = if (forceNewFile) nextRotationFile(label)
+                   else autoDir().resolve("${label}_${today()}.log")
+        val append = !forceNewFile && Files.exists(file)
+        val rec = LogcatRecorder(commands, logger, scope, io, file, rotationBytes, append)
         autoRecorders[serial] = rec
         autoFiles[serial] = file
         autoJobs[serial] = scope.launch {
@@ -204,7 +223,7 @@ class LogcatRecordingManager(
                     mutex.withLock {
                         if (autoRecorders[serial] === rec) {
                             autoJobs.remove(serial)?.cancel()
-                            startAutoLocked(serial)
+                            startAutoLocked(serial, forceNewFile = true)
                         }
                     }
                 }
@@ -223,21 +242,21 @@ class LogcatRecordingManager(
 
     /** 删除超过 [RETENTION_MS] 的 auto_*.log；非 auto_ 文件（手动录制）永不动（spec §3.2）。io 上执行。 */
     internal fun cleanupOldAutoFiles() {
-        val dir = recordingsDir.toFile()
-        if (!dir.isDirectory) return
         val cutoff = clock() - RETENTION_MS
-        dir.listFiles { f -> f.isFile && f.name.startsWith("auto_") && f.name.endsWith(".log") }
-            ?.filter { it.lastModified() < cutoff }
-            ?.forEach { runCatching { it.delete() } }
+        val rootAuto = recordingsDir.toFile()
+            .listFiles { f -> f.isFile && f.name.startsWith("auto_") && f.name.endsWith(".log") }?.toList() ?: emptyList()
+        val subAuto = autoDir().toFile().listFiles { f -> f.isFile && f.name.endsWith(".log") }?.toList() ?: emptyList()
+        (rootAuto + subAuto).filter { it.lastModified() < cutoff }
+            .forEach { runCatching { it.delete() } }
     }
 
     /** 录制目录里 lastModified 最新的 .log 文件（录制页常驻"定位最近录制"按钮用）；
      *  无录制文件返回 null。目录扫描在 [io] 上执行。 */
     suspend fun latestRecordingFile(): Path? = withContext(io) {
-        recordingsDir.toFile()
-            .listFiles { f -> f.isFile && f.name.endsWith(".log") }
-            ?.maxByOrNull { it.lastModified() }
-            ?.toPath()
+        val files = listOf(autoDir(), manualDir()).flatMap { d ->
+            d.toFile().listFiles { f -> f.isFile && f.name.endsWith(".log") }?.toList() ?: emptyList()
+        }
+        files.maxByOrNull { it.lastModified() }?.toPath()
     }
 
     /** serial → 录制文件名前缀段：`品牌_型号_Android版本`（getprop）；失败或 brand/model
@@ -279,7 +298,7 @@ class LogcatRecordingManager(
             autoFiles.filterValues { !exists(it) }.keys.forEach { serial ->
                 logger.info("recording file deleted externally; restarting auto session for $serial")
                 stopAutoLocked(serial)
-                startAutoLocked(serial)
+                startAutoLocked(serial, forceNewFile = true)
             }
         }
     }

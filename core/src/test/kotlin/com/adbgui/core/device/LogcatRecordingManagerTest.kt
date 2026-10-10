@@ -151,7 +151,7 @@ class LogcatRecordingManagerTest {
         tracker.devices.value = emptyList()   // 设备下线 → stop recorder → flush file
         advanceUntilIdle()
         assertTrue(!m.autoStates.value.containsKey("abc"))
-        val auto = dir.toFile().listFiles { f -> f.name.startsWith("auto_abc_") }
+        val auto = dir.resolve("auto").toFile().listFiles { f -> f.name.startsWith("abc_") }
         assertEquals(1, auto?.size)
         assertTrue(Files.readString(auto[0].toPath()).contains(line1))
         m.stop()
@@ -167,7 +167,7 @@ class LogcatRecordingManagerTest {
         tracker.devices.value = listOf(DeviceSnapshot("192.168.1.5:5555", DeviceStatus.ONLINE))
         advanceUntilIdle()
         assertTrue(m.autoStates.value.containsKey("192.168.1.5:5555"))
-        val auto = dir.toFile().listFiles { f -> f.name.startsWith("auto_TCL_618D_Android6.0_") }
+        val auto = dir.resolve("auto").toFile().listFiles { f -> f.name.startsWith("TCL_618D_Android6.0_") }
         assertEquals(1, auto?.size)
         m.stop()
         advanceUntilIdle()
@@ -183,11 +183,11 @@ class LogcatRecordingManagerTest {
         val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir, io = Dispatchers.Unconfined)
         tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
         advanceUntilIdle()
-        assertEquals(0, dir.toFile().listFiles { f -> f.name.startsWith("auto_") }?.size)
+        assertEquals(0, dir.resolve("auto").toFile().listFiles { f -> f.name.startsWith("abc_") }?.size ?: 0)
         // 运行时打开开关 → 立即补启（spec §3.2）
         settings.update { it.copy(logcatAutoRecord = true) }
         advanceUntilIdle()
-        assertEquals(1, dir.toFile().listFiles { f -> f.name.startsWith("auto_abc_") }?.size)
+        assertEquals(1, dir.resolve("auto").toFile().listFiles { f -> f.name.startsWith("abc_") }?.size ?: 0)
         m.stop()
         advanceUntilIdle()
     }
@@ -224,7 +224,7 @@ class LogcatRecordingManagerTest {
         tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
         advanceUntilIdle()
         // recorder1 轮转收尾（1 行），manager 续开 recorder2（空流、存活）→ auto_ 文件共 2 个
-        val autoFiles = dir.toFile().listFiles { f -> f.name.startsWith("auto_abc_") }
+        val autoFiles = dir.resolve("auto").toFile().listFiles { f -> f.name.startsWith("abc_") }
         assertEquals(2, autoFiles?.size)
         val lineCounts = autoFiles!!.map { Files.readString(it.toPath()).lines().count { l -> l.isNotBlank() } }
         assertEquals(1, lineCounts.count { it == 1 })
@@ -237,8 +237,9 @@ class LogcatRecordingManagerTest {
     @Test fun latestRecordingFile_returns_most_recent_log_ignoring_other_files() = runTest {
         val runner = FakeAdbProcessRunner()   // tracker 空 → 无 auto 文件干扰
         val dir = Files.createTempDirectory("adbgui-rec")
-        val older = dir.resolve("a.log"); older.writeText("x")
-        val newer = dir.resolve("b.log"); newer.writeText("x")
+        Files.createDirectories(dir.resolve("manual"))
+        val older = dir.resolve("manual").resolve("a.log"); older.writeText("x")
+        val newer = dir.resolve("manual").resolve("b.log"); newer.writeText("x")
         dir.resolve("notes.txt").writeText("x")
         val now = System.currentTimeMillis()
         older.toFile().setLastModified(now - 60_000L)
@@ -269,12 +270,12 @@ class LogcatRecordingManagerTest {
         val m = manager(runner, this, dir, tracker)
         tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
         advanceUntilIdle()
-        val before = dir.toFile().listFiles { f -> f.name.startsWith("auto_") }
+        val before = dir.resolve("auto").toFile().listFiles { f -> f.name.startsWith("abc_") }
         assertEquals(1, before?.size)
         m.restartRecordersWithMissingFiles(exists = { _ -> false })
         advanceUntilIdle()
         assertTrue(m.autoStates.value.containsKey("abc"), "auto 会话应重启而非消失")
-        val after = dir.toFile().listFiles { f -> f.name.startsWith("auto_") }
+        val after = dir.resolve("auto").toFile().listFiles { f -> f.name.startsWith("abc_") }
         assertEquals(2, after?.size, "应换新文件重开（旧文件保留、新文件生成）")
         m.stop()
         advanceUntilIdle()
@@ -306,8 +307,10 @@ class LogcatRecordingManagerTest {
     @Test fun startup_cleanup_deletes_old_auto_but_keeps_manual() = runTest {
         val runner = FakeAdbProcessRunner()
         val dir = Files.createTempDirectory("adbgui-rec")
-        val oldAuto = dir.resolve("auto_old.log"); oldAuto.writeText("x")
-        val oldManual = dir.resolve("manual_old.log"); oldManual.writeText("x")
+        Files.createDirectories(dir.resolve("auto"))
+        Files.createDirectories(dir.resolve("manual"))
+        val oldAuto = dir.resolve("auto").resolve("old.log"); oldAuto.writeText("x")
+        val oldManual = dir.resolve("manual").resolve("old.log"); oldManual.writeText("x")
         val now = System.currentTimeMillis()
         oldAuto.toFile().setLastModified(now - 8L * 24 * 60 * 60 * 1000)
         oldManual.toFile().setLastModified(now - 8L * 24 * 60 * 60 * 1000)
@@ -320,6 +323,62 @@ class LogcatRecordingManagerTest {
         advanceUntilIdle()
         assertTrue(!Files.exists(oldAuto))     // 8 天前 auto → 删
         assertTrue(Files.exists(oldManual))    // manual 永不自动删（spec §3.2）
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    private fun today(): String =
+        java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"))
+
+    @Test fun auto_same_day_session_appends_to_existing_file() = runTest {
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val autoDir = Files.createDirectories(dir.resolve("auto"))
+        val existing = autoDir.resolve("abc_${today()}.log"); existing.writeText("morning log\n")
+        val tracker = FakeTracker()
+        val m = manager(runner, this, dir, tracker)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        advanceUntilIdle()
+        tracker.devices.value = emptyList()   // 下线 → flush 收尾
+        advanceUntilIdle()
+        val text = Files.readString(existing)
+        assertTrue(text.startsWith("morning log\n"), "当天已有文件必须追加不截断")
+        assertTrue(text.contains("--------- adbgui session start"))
+        assertTrue(text.contains(line1))
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun auto_rotation_opens_fresh_suffixed_file_not_append() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLinesOnce(listOf(line1, line1))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
+        val settings = SettingsStore(dir, io = Dispatchers.Unconfined)
+        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir,
+            io = Dispatchers.Unconfined, rotationBytes = line1.length + 1L)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        advanceUntilIdle()
+        // recorder1 写 1 行即轮转 → 续开 abc_<day>_1.log（不追加当天主文件）
+        val names = dir.resolve("auto").toFile().listFiles { f -> f.name.startsWith("abc_") }!!.map { it.name }.sorted()
+        assertEquals(listOf("abc_${today()}.log", "abc_${today()}_1.log"), names)
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun manual_files_are_written_to_manual_subdir() = runTest {
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val m = manager(runner, this, dir, tracker)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        m.startManual("abc")
+        advanceUntilIdle()
+        val rec = m.manualState.value
+        assertTrue(rec is ManualRecordState.Recording)
+        assertEquals(dir.resolve("manual"), rec.file.parent)
+        m.stopManual("user")
         m.stop()
         advanceUntilIdle()
     }
