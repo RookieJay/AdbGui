@@ -54,7 +54,13 @@ fun main() = application {
     LaunchedEffect(Unit) {
         if (settings.update.checkOnStartup) root.updateViewModel.checkForUpdates(userInitiated = false)
     }
-    val settingsVm = remember { SettingsViewModel(root.settings, root.scope) }
+    val logcatRecording = remember {
+        com.adbgui.core.device.LogcatRecordingManager(
+            root.commands, root.tracker, root.settings, root.logger, root.scope,
+            root.configDir.resolve("logcat-recordings"),
+        )
+    }
+    val settingsVm = remember { SettingsViewModel(root.settings, root.scope, logcatRecording) }
     val vm = remember { DeviceListViewModel(root.repository, root.scope, settingsVm.settings) }
     val selectedSerial = remember { MutableStateFlow<String?>(null) }
     var showScreenshot by remember { mutableStateOf(false) }
@@ -80,12 +86,6 @@ fun main() = application {
         combine(root.repository.devices, selectedSerial) { list, serial ->
             serial != null && list.any { it.serial == serial && it.status == DeviceStatus.ONLINE }
         }.stateIn(root.scope, SharingStarted.WhileSubscribed(5000), false)
-    }
-    val logcatRecording = remember {
-        com.adbgui.core.device.LogcatRecordingManager(
-            root.commands, root.tracker, root.settings, root.logger, root.scope,
-            root.configDir.resolve("logcat-recordings"),
-        )
     }
     val logcatVm = remember { LogcatViewModel(logcatController, logcatRecording, selectedSerial, deviceOnline, root.scope) }
     val systemOpsVm = remember { SystemOpsViewModel(root.repository, selectedSerial, root.scope) }

@@ -220,6 +220,8 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                         InlineMessageBanner(Strings.t("record_stopped_device_disconnected"), MessageKind.Error)
                     } else if (mr.reason == "write_failed") {
                         InlineMessageBanner(Strings.t("record_stopped_write_failed"), MessageKind.Error)
+                    } else if (mr.reason == "recording_dir_changed") {
+                        InlineMessageBanner(Strings.t("record_stopped_dir_changed"), MessageKind.Success)
                     }
                     SavedFileBanner(
                         path = mr.file.toFile().absolutePath,

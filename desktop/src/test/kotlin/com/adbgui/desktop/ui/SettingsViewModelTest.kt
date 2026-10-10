@@ -114,4 +114,55 @@ class SettingsViewModelTest {
         assertEquals(false, vm.settings.value.update.checkOnStartup)
         assertEquals(false, store.load().update.checkOnStartup)
     }
+
+    private val adb = com.adbgui.core.domain.AdbBinary("adb", com.adbgui.core.domain.AdbSource.PATH)
+
+    private class FakeTracker : com.adbgui.core.device.IDeviceTracker {
+        override val devices = kotlinx.coroutines.flow.MutableStateFlow<List<com.adbgui.core.domain.DeviceSnapshot>>(emptyList())
+    }
+
+    @Test
+    fun setLogcatRecordingsDir_persists_and_resets() = runTest {
+        val dir = Files.createTempDirectory("rec-dir")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = SettingsViewModel(store, this)
+        vm.setLogcatRecordingsDir("D:/logs")
+        advanceUntilIdle()
+        assertEquals("D:/logs", store.state.value.logcatRecordingsDir)
+        vm.setLogcatRecordingsDir(null)
+        advanceUntilIdle()
+        assertEquals(null, store.state.value.logcatRecordingsDir)
+    }
+
+    @Test
+    fun setLogcatRecordingMaxTotalMb_persists() = runTest {
+        val dir = Files.createTempDirectory("rec-cap")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = SettingsViewModel(store, this)
+        vm.setLogcatRecordingMaxTotalMb(2000)
+        advanceUntilIdle()
+        assertEquals(2000, store.state.value.logcatRecordingMaxTotalMb)
+    }
+
+    @Test
+    fun refreshRecordingsUsage_reports_total_of_auto_and_manual() = runTest {
+        val recDir = Files.createTempDirectory("adbgui-rec")
+        Files.createDirectories(recDir.resolve("auto")); Files.createDirectories(recDir.resolve("manual"))
+        recDir.resolve("auto").resolve("a.log").toFile().writeText("x")
+        recDir.resolve("manual").resolve("b.log").toFile().writeText("xy")
+        val runner = com.adbgui.core.adb.FakeAdbProcessRunner()
+        val cmd = com.adbgui.core.adb.CommandRunner(
+            { adb }, runner, com.adbgui.core.log.NoopLogger, this, com.adbgui.core.adb.CommandRunner.AdbServerStarter {})
+        val settings = SettingsStore(recDir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        settings.update { it.copy(logcatAutoRecord = false) }
+        val rec = com.adbgui.core.device.LogcatRecordingManager(
+            cmd, FakeTracker(), settings, com.adbgui.core.log.NoopLogger, this, recDir,
+            io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = SettingsViewModel(settings, this, rec)
+        vm.refreshRecordingsUsage()
+        advanceUntilIdle()
+        assertEquals(3L, vm.recordingsUsage.value)
+        rec.stop()
+        advanceUntilIdle()
+    }
 }

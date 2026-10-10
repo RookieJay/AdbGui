@@ -258,6 +258,71 @@ fun SettingsScreen(
 
             Divider()
 
+            // --- Recording storage (dir + cap + usage) ---
+            Text(Strings.t("logcat_rec_storage"), style = MaterialTheme.typography.subtitle1)
+            val effectiveDir = settings.logcatRecordingsDir
+                ?: configDir.resolve("logcat-recordings").toAbsolutePath().toString()
+            val usage by vm.recordingsUsage.collectAsState()
+            LaunchedEffect(settings.logcatRecordingsDir, settings.logcatRecordingMaxTotalMb) {
+                vm.refreshRecordingsUsage()
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SelectableText(
+                    effectiveDir,
+                    style = MaterialTheme.typography.body2,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val picked = com.adbgui.desktop.platform.FileDialogs.pickDirectory(
+                        Strings.t("logcat_rec_pick_dir"), effectiveDir)
+                    if (picked != null) vm.setLogcatRecordingsDir(picked)
+                }) { Text(Strings.t("logcat_rec_dir_change")) }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val d = File(effectiveDir)
+                    runCatching { if (!d.exists()) d.mkdirs(); Desktop.getDesktop().open(d) }
+                        .onFailure { status = Strings.t("status_open_failed").format(it.message) }
+                }) { Text(Strings.t("logcat_rec_dir_open")) }
+                if (settings.logcatRecordingsDir != null) {
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { vm.setLogcatRecordingsDir(null) }) {
+                        Text(Strings.t("logcat_rec_dir_reset"))
+                    }
+                }
+            }
+            usage?.let {
+                Text(
+                    Strings.t("logcat_rec_usage").format(fmtBytes(it), settings.logcatRecordingMaxTotalMb),
+                    style = MaterialTheme.typography.caption,
+                )
+            }
+            var capDraft by remember(settings.logcatRecordingMaxTotalMb) {
+                mutableStateOf(settings.logcatRecordingMaxTotalMb.toString())
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = capDraft,
+                    onValueChange = { capDraft = it.filter { c -> c.isDigit() } },
+                    label = { Text(Strings.t("logcat_rec_cap")) },
+                    singleLine = true,
+                    modifier = Modifier.width(200.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val n = capDraft.trim().toIntOrNull()
+                    if (n != null && n in 50..100_000) {
+                        vm.setLogcatRecordingMaxTotalMb(n)
+                        status = Strings.t("logcat_rec_cap_set").format(n)
+                    } else {
+                        status = Strings.t("logcat_rec_cap_err")
+                    }
+                }) { Text(Strings.t("apply")) }
+            }
+            Text(Strings.t("logcat_rec_cap_hint"), style = MaterialTheme.typography.caption)
+
+            Divider()
+
             // --- Logs ---
             Text(Strings.t("logs"), style = MaterialTheme.typography.subtitle1)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -459,3 +524,7 @@ private fun zipDirectory(sourceDir: File, zipFile: File) {
         }
     }
 }
+
+private fun fmtBytes(bytes: Long): String =
+    if (bytes < 1024L * 1024) "%d KB".format(bytes / 1024)
+    else "%d MB".format(bytes / (1024 * 1024))

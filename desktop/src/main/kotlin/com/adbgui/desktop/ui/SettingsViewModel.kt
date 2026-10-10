@@ -11,7 +11,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class SettingsViewModel(private val store: SettingsStore, private val scope: CoroutineScope) {
+class SettingsViewModel(
+    private val store: SettingsStore,
+    private val scope: CoroutineScope,
+    private val recording: com.adbgui.core.device.LogcatRecordingManager? = null,
+) {
     val settings: StateFlow<Settings> = store.state
     init { scope.launch { store.load() } }
 
@@ -28,6 +32,13 @@ class SettingsViewModel(private val store: SettingsStore, private val scope: Cor
     fun setDeviceGroupBy(mode: DeviceGroupBy) = scope.launch { store.update { it.copy(deviceGroupBy = mode) } }
     fun setLogcatRingCap(cap: Int) = scope.launch { store.update { it.copy(logcatRingCap = cap) } }
     fun setLogcatAutoRecord(b: Boolean) = scope.launch { store.update { it.copy(logcatAutoRecord = b) } }
+    fun setLogcatRecordingsDir(path: String?) = scope.launch { store.update { it.copy(logcatRecordingsDir = path) } }
+    fun setLogcatRecordingMaxTotalMb(mb: Int) = scope.launch { store.update { it.copy(logcatRecordingMaxTotalMb = mb) } }
+
+    private val _recordingsUsage = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
+    val recordingsUsage: kotlinx.coroutines.flow.StateFlow<Long?> = _recordingsUsage
+    fun refreshRecordingsUsage() = scope.launch { _recordingsUsage.value = recording?.totalRecordingBytes() }
+
     fun setCheckOnStartup(b: Boolean) = scope.launch {
         store.update { it.copy(update = it.update.copy(checkOnStartup = b)) }
     }
