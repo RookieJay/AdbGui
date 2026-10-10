@@ -53,6 +53,10 @@ data class Settings(
     /** 设备上线时自动后台录制其 logcat 到 logcat-recordings/（"行车记录仪"，spec §3.3）。
      *  仅应用运行期间有效；auto 文件保留 7 天、单文件 100 MB 轮转。 */
     val logcatAutoRecord: Boolean = true,
+    /** 录制文件存放目录（null = 默认 <配置目录>/logcat-recordings；spec 2026-10-10 D2）。 */
+    val logcatRecordingsDir: String? = null,
+    /** auto 录制总占用上限（MB）。超出删最旧 auto 文件；manual 永不自动删（spec 2026-10-10 D4）。 */
+    val logcatRecordingMaxTotalMb: Int = 500,
     val remoteButtons: List<RemoteButton> = listOf(
         RemoteButton("vol_up", "音量+", 24),
         RemoteButton("vol_down", "音量−", 25),

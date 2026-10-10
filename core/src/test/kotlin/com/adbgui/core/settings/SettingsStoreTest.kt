@@ -115,6 +115,21 @@ class SettingsStoreTest {
     }
 
     @Test
+    fun logcat_recording_config_default_and_round_trip() = runTest {
+        val dir = Files.createTempDirectory("logcat-rec-cfg")
+        // 旧格式 JSON（无新字段）→ 默认值
+        Files.writeString(dir.resolve("settings.json"), """{"logcatRingCap": 50000}""")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val loaded = store.load()
+        assertNull(loaded.logcatRecordingsDir)
+        assertEquals(500, loaded.logcatRecordingMaxTotalMb)
+        store.save(loaded.copy(logcatRecordingsDir = "D:/logs", logcatRecordingMaxTotalMb = 2000))
+        val reloaded = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined).load()
+        assertEquals("D:/logs", reloaded.logcatRecordingsDir)
+        assertEquals(2000, reloaded.logcatRecordingMaxTotalMb)
+    }
+
+    @Test
     fun update_settings_custom_manifest_url_round_trips() = runTest {
         val dir = Files.createTempDirectory("upd-custom")
         val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
