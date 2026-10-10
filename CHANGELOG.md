@@ -3,6 +3,16 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-10 纯图标按钮悬停提示（tooltip）
+
+纯图标按钮（复制、删除、暂停/继续、导出等）此前只有无障碍 `contentDescription`，鼠标用户悬停无任何提示。本次统一补齐 hover tooltip。
+
+- **`Tooltip` 共享组件**（desktop `ui/Tooltip.kt`）：包装式 composable——悬停 500ms 后在控件**正下方**弹非聚焦 `Popup`（不抢焦点、不挡操作），移开即隐；**禁用态同样显示**（用户往往正想知道灰掉的按钮是干什么的）。`text` 传 lambda（locale 切换即时生效），文案直接复用各图标 `contentDescription` 已有的 i18n key，仅新增 `close`（关闭）。配套 `TooltipIconButton`（IconButton + Tooltip 一体），各页 `IconButton` 调用点直接替换。
+- **首版踩坑（真机反馈修）**：`Popup(alignment = BottomStart)` 的语义是把 tooltip 底边对齐到**锚点内部**底边——气泡实际画在按钮下半部分上，悬停到被气泡覆盖的区域时指针落入弹窗窗口，Enter/Exit 循环触发 → **气泡不停闪现，只有悬停图标正中心才稳定**。改 `TopStart` + `onSizeChanged` 取按钮高度把气泡整体下移到按钮下方（带 4dp 间隙），与指针区域不再重叠后消失。
+- **覆盖范围**（按合理性，非全量）：Logcat / 应用管理 / CDP / 设备信息 / 设备列表（加号、标签管理、更多菜单）/ 文件浏览器返回 / 搜索框清空 ✕ 与 `.*` 正则开关 / 消息条关闭按钮。跳过：装饰性图标（文件类型、搜索前置放大镜）、导航项（自带文字标签）、Remote 方向键（箭头自解释）。
+- 顺手补 3 处 `contentDescription = null` 的功能图标（Logcat/CDP 导出按钮内的 Download、scrcpy 选项折叠箭头）；消息条关闭按钮的 contentDescription 从语义不符的 `clear` 改为新增的 `close`。
+- 纯 UI 展示行为，无 `:core`/VM 变化，无新增单测；真机悬停验证。
+
 ## v2 — 2026-10-09 标签管理（右键菜单 + 管理面板）
 
 用户反馈：想"改"一个标签只能逐台设备重新设置，旧标签残留在其他设备上——等于只会新增标签，没有管理能力。本次补齐 rename/merge/delete。
