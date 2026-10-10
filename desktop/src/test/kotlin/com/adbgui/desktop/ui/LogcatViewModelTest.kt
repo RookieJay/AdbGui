@@ -245,8 +245,10 @@ class LogcatViewModelTest {
         // 常驻定位按钮数据源（点击时实时取，不缓存）：目录有文件 → 最新 .log；空 → null（UI 转而打开目录）
         val runner = FakeAdbProcessRunner()
         val rec = recordingManager(runner, backgroundScope)
-        val older = rec.recordingsDir.resolve("a.log"); older.writeText("x")
-        val newer = rec.recordingsDir.resolve("b.log"); newer.writeText("x")
+        val autoDir = rec.recordingsDir.resolve("auto")
+        Files.createDirectories(autoDir)
+        val older = autoDir.resolve("a.log"); older.writeText("x")
+        val newer = autoDir.resolve("b.log"); newer.writeText("x")
         newer.toFile().setLastModified(System.currentTimeMillis() + 60_000L)
         val vm = LogcatViewModel(controller(runner, backgroundScope),
             rec, MutableStateFlow("abc"), MutableStateFlow(true), backgroundScope)

@@ -382,4 +382,77 @@ class LogcatRecordingManagerTest {
         m.stop()
         advanceUntilIdle()
     }
+
+    // --- hot-switch recordings dir (spec D2) ---
+
+    @Test fun changing_dir_migrates_files_and_restarts_auto_in_new_dir() = runTest {
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        val dir1 = Files.createTempDirectory("adbgui-rec1")
+        val dir2 = Files.createTempDirectory("adbgui-rec2")
+        val tracker = FakeTracker()
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
+        val settings = SettingsStore(dir1, io = Dispatchers.Unconfined)
+        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir1, io = Dispatchers.Unconfined)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        advanceUntilIdle()
+        assertTrue(m.autoStates.value.containsKey("abc"))
+        val oldFile = dir1.resolve("auto").toFile().listFiles { f -> f.name.startsWith("abc_") }!!.single().toPath()
+        settings.update { it.copy(logcatRecordingsDir = dir2.toString()) }
+        advanceUntilIdle()
+        // 迁移：文件到新目录；auto 在新目录重启（当天文件被续写，仍只有这一个 abc_ 文件）
+        assertTrue(m.autoStates.value.containsKey("abc"))
+        assertTrue(Files.exists(dir2.resolve("auto").resolve(oldFile.fileName)))
+        assertTrue(!Files.exists(oldFile))
+        assertEquals(dir2, m.recordingsDir)
+        assertEquals(1, dir2.resolve("auto").toFile().listFiles { f -> f.name.startsWith("abc_") }!!.size)
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun changing_dir_stops_manual_with_reason_and_moves_file() = runTest {
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        val dir1 = Files.createTempDirectory("adbgui-rec1")
+        val dir2 = Files.createTempDirectory("adbgui-rec2")
+        val tracker = FakeTracker()
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
+        val settings = SettingsStore(dir1, io = Dispatchers.Unconfined)   // 默认目录 = dir1
+        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir1, io = Dispatchers.Unconfined)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        m.startManual("abc")
+        advanceUntilIdle()
+        val manualFile = (m.manualState.value as ManualRecordState.Recording).file
+        settings.update { it.copy(logcatRecordingsDir = dir2.toString()) }
+        advanceUntilIdle()
+        val st = m.manualState.value
+        assertTrue(st is ManualRecordState.Stopped)
+        assertEquals("recording_dir_changed", st.reason)
+        assertTrue(Files.exists(dir2.resolve("manual").resolve(manualFile.fileName)))
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun migration_skips_conflicting_file_and_continues() = runTest {
+        val runner = FakeAdbProcessRunner()
+        val dir1 = Files.createTempDirectory("adbgui-rec1")
+        val dir2 = Files.createTempDirectory("adbgui-rec2")
+        val tracker = FakeTracker()
+        val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
+        val settings = SettingsStore(dir1, io = Dispatchers.Unconfined)
+        settings.update { it.copy(logcatAutoRecord = false) }
+        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir1, io = Dispatchers.Unconfined)
+        advanceUntilIdle()
+        // dir1/auto 放两个文件；dir2/auto 预置同名冲突文件 → 该文件 move 失败跳过，另一个照常迁移
+        Files.createDirectories(dir1.resolve("auto")); Files.createDirectories(dir2.resolve("auto"))
+        val conflict = dir1.resolve("auto").resolve("x.log"); conflict.writeText("1")
+        val plain = dir1.resolve("auto").resolve("y.log"); plain.writeText("2")
+        dir2.resolve("auto").resolve("x.log").writeText("conflict")
+        settings.update { it.copy(logcatRecordingsDir = dir2.toString()) }
+        advanceUntilIdle()
+        assertTrue(Files.exists(dir2.resolve("auto").resolve("y.log")), "无冲突文件照常迁移")
+        assertTrue(!Files.exists(plain), "源文件已移走")
+        assertTrue(Files.exists(conflict), "冲突文件留在原地")
+        assertTrue(Files.readString(dir2.resolve("auto").resolve("x.log")) == "conflict", "目标既有文件不被覆盖")
+        m.stop()
+        advanceUntilIdle()
+    }
 }

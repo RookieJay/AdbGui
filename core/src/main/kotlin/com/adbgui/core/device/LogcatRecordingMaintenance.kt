@@ -66,6 +66,34 @@ internal class LogcatRecordingMaintenance(
                 .listFiles { f -> f.isFile && f.name.endsWith(".log") }?.sumOf { it.length() } ?: 0L
         }
 
+    /** 目录切换迁移（spec D2）：旧目录根 .log 与 auto/、manual/ 子目录文件搬到新目录对应位置；
+     *  逐文件失败跳过 + WARN；旧目录空了删空目录。调用方先停录制、后调用、再重启。 */
+    fun migrateFiles(oldDir: Path, newDir: Path) {
+        if (!oldDir.toFile().isDirectory) return
+        runCatching {
+            Files.createDirectories(newDir.resolve("auto"))
+            Files.createDirectories(newDir.resolve("manual"))
+            // 旧布局根文件（从未归位的）
+            oldDir.toFile().listFiles { f -> f.isFile && f.name.endsWith(".log") }?.forEach { f ->
+                val sub = if (f.name.startsWith("auto_")) "auto" else "manual"
+                moveOrWarn(f.toPath(), newDir.resolve(sub).resolve(f.name))
+            }
+            listOf("auto", "manual").forEach { sub ->
+                oldDir.resolve(sub).toFile().listFiles { f -> f.isFile }?.forEach { f ->
+                    moveOrWarn(f.toPath(), newDir.resolve(sub).resolve(f.name))
+                }
+            }
+            if (oldDir.toFile().listFiles()?.isEmpty() == true) {
+                runCatching { Files.deleteIfExists(oldDir) }
+            }
+        }.onFailure { logger.warn("recording migration failed: ${it.message}") }
+    }
+
+    private fun moveOrWarn(src: Path, dst: Path) {
+        runCatching { Files.move(src, dst) }
+            .onFailure { logger.warn("migration skipped ${src.fileName}: ${it.message}") }
+    }
+
     private fun autoLogFiles(dir: Path) =
         dir.resolve("auto").toFile().listFiles { f -> f.isFile && f.name.endsWith(".log") }
 
