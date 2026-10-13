@@ -3,6 +3,17 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-13 修复剪贴板被占用时复制闪退（SafeClipboard + CrashGuard）
+
+真机反馈（2026-10-13）：系统信息页点「当前焦点窗口」后，选中右侧输出文字复制，弹框报 `cannot open system clipboard`，点确定后应用闪退。根因两层：① Windows 剪贴板被其他进程短暂持锁（剪贴板管理器/截图工具/输入法等）时 AWT 抛 `IllegalStateException("cannot open system clipboard")`，属环境竞争无法杜绝；② 该异常从 UI 事件逃逸后无任何兜底——app 没装全局未捕获异常 handler，JVM 直接退出，日志里连崩溃记录都没有。
+
+- **`SafeClipboard`（`desktop/platform`）**：所有剪贴板写入的统一入口。`copyText()` 对 `IllegalStateException` 做 3 次尝试 × 50ms 重试（竞争通常是瞬时的），耗尽后返回 false 而非抛出；其他异常照常传播（真 bug 归 CrashGuard 记录）。`SafeClipboardManager` 包装 Compose `ClipboardManager`，覆盖 `SelectionContainer`/`SelectableText` 选中后 Ctrl+C 这条绕过应用代码的内部路径（读写均兜底，读失败回退 null/false）。主窗口与截图窗口均经 `LocalClipboardManager provides` 注入。
+- **替换全部裸调用**：AppConsole（包名/代码路径/APK 路径复制）、CdpDebug（控制台导出、消息详情复制）、DeviceInfo（属性值复制，`copied` 现反映真实结果）、FileExplorer（路径复制）、Logcat（导出复制）、SystemInfo（原 `runCatching` 换 helper，保留 copied/copy_failed 内联反馈）共 6 屏 8 处；各屏 `Toolkit`/`StringSelection` import 一并清除。`ImageClipboard` 已有 `runCatching` 防护，不动。
+- **`CrashGuard`（`desktop/platform`）**：进程级兜底。`Thread.setDefaultUncaughtExceptionHandler` + `sun.awt.exception.handler`（AWT 事件分发线程的反射契约，handler 类须 public 无参构造）双路把未捕获异常写入应用日志（自身失败退 stderr）。定位为诊断安全网而非恢复机制——这次崩溃在日志里零痕迹，排障全靠猜。
+- 依据既有约定「错误本地化，不弹模态打断」：复制失败不再有系统弹框，最多静默失败（或既有内联 copy_failed 提示）。
+
+**测试**（TDD）：`SafeClipboardTest` +9（成功直写、瞬时锁重试、持续锁 3 次后放弃、非竞争异常传播、manager 的 set/get/hasText 各路径）；`CrashGuardTest` +3（线程名与异常落日志、AWT handler 记录、注册 handler 类名）。
+
 ## v2 — 2026-10-13 录制文件命名兜底链（重试 + 历史别名）
 
 真机排查（2026-10-12）：同一台 Hisense TV 一天内出现 `hisense_VIDAA_TV_Android9_*.log` 与 `192.168.88.240_5555_*.log` 两套命名。根因是 `deviceLabel()` 的回退太急——应用冷启动/断流重连的瞬间 getprop 常失败，直接落到 serial（IP）命名。

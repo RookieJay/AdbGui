@@ -39,8 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
+import com.adbgui.desktop.platform.SafeClipboard
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -208,8 +207,7 @@ private fun PropRow(label: String, value: String, mono: Boolean = true) {
         Text(value, style = valueStyle, modifier = Modifier.weight(1f))
         TooltipIconButton(
             onClick = {
-                Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(value), null)
-                copied = true
+                copied = SafeClipboard.copyText(value)
             },
             tooltip = { Strings.t(if (copied) "copied" else "copy") },
         ) {

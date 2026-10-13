@@ -32,8 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.adbgui.desktop.ui.i18n.Strings
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
+import com.adbgui.desktop.platform.SafeClipboard
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -129,11 +128,11 @@ fun SystemInfoScreen(
                     enabled = result != null,
                     onClick = {
                         val r = result ?: return@OutlinedButton
-                        runCatching {
-                            Toolkit.getDefaultToolkit().systemClipboard
-                                .setContents(StringSelection(r), null)
-                        }.onSuccess { savedFile = null; saveError = Strings.t("copied") }
-                            .onFailure { saveError = Strings.t("copy_failed") }
+                        if (SafeClipboard.copyText(r)) {
+                            savedFile = null; saveError = Strings.t("copied")
+                        } else {
+                            saveError = Strings.t("copy_failed")
+                        }
                     },
                 ) { Text(Strings.t("copy")) }
                 Spacer(Modifier.width(8.dp))

@@ -63,8 +63,7 @@ import com.adbgui.core.domain.ExtraType
 import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.desktop.ui.i18n.Strings
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
+import com.adbgui.desktop.platform.SafeClipboard
 import java.io.File
 
 /**
@@ -421,9 +420,7 @@ private fun PackageSelectRow(
             )
         }
         TooltipIconButton(
-            onClick = {
-                Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(pkg.name), null)
-            },
+            onClick = { SafeClipboard.copyText(pkg.name) },
             tooltip = { Strings.t("copy") },
         ) {
             Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(18.dp))
@@ -449,7 +446,7 @@ private fun AppDetailBlock(vm: AppConsoleViewModel, pkg: String) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("${Strings.t("code_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
                             TooltipIconButton(
-                                onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) },
+                                onClick = { SafeClipboard.copyText(path) },
                                 tooltip = { Strings.t("copy") },
                             ) {
                                 Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))
@@ -460,7 +457,7 @@ private fun AppDetailBlock(vm: AppConsoleViewModel, pkg: String) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("${Strings.t("apk_path")}: $path", style = MaterialTheme.typography.body2, modifier = Modifier.weight(1f))
                             TooltipIconButton(
-                                onClick = { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null) },
+                                onClick = { SafeClipboard.copyText(path) },
                                 tooltip = { Strings.t("copy") },
                             ) {
                                 Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy"), modifier = Modifier.size(16.dp))

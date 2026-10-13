@@ -1,7 +1,11 @@
 package com.adbgui.desktop.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.window.Window
+import com.adbgui.desktop.platform.SafeClipboard
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AdbGuiTheme
 
@@ -20,8 +24,14 @@ fun ScreenshotWindow(vm: ScreenshotViewModel, themeCode: String, onClose: () -> 
         onCloseRequest = onClose,
         title = Strings.t("screenshot"),
     ) {
-        AdbGuiTheme(themeCode) {
-            ScreenshotScreen(vm = vm)
+        // Same clipboard guard as the main window: Ctrl+C in this window must not crash on
+        // "cannot open system clipboard" while another process holds the Windows clipboard.
+        val platformClipboard = LocalClipboardManager.current
+        val safeClipboardManager = remember { SafeClipboard.wrapManager(platformClipboard) }
+        CompositionLocalProvider(LocalClipboardManager provides safeClipboardManager) {
+            AdbGuiTheme(themeCode) {
+                ScreenshotScreen(vm = vm)
+            }
         }
     }
 }

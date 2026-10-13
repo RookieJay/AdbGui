@@ -43,8 +43,7 @@ import com.adbgui.core.domain.LogcatLevel
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AppColors
 import kotlinx.coroutines.launch
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
+import com.adbgui.desktop.platform.SafeClipboard
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -183,8 +182,7 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                 }
                 TooltipIconButton(
                     onClick = {
-                        val sel = StringSelection(vm.export())
-                        Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
+                        SafeClipboard.copyText(vm.export())
                     },
                     tooltip = { Strings.t("copy") },
                 ) { Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy")) }
