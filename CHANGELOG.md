@@ -3,6 +3,15 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-13 录制文件命名兜底链（重试 + 历史别名）
+
+真机排查（2026-10-12）：同一台 Hisense TV 一天内出现 `hisense_VIDAA_TV_Android9_*.log` 与 `192.168.88.240_5555_*.log` 两套命名。根因是 `deviceLabel()` 的回退太急——应用冷启动/断流重连的瞬间 getprop 常失败，直接落到 serial（IP）命名。
+
+- **getprop 重试**：起录取 label 失败/unknown 时重试（3 次尝试 × 1s 间隔），覆盖 adb connect 未就绪的冷启动竞态。
+- **历史别名兜底**：重试耗尽后回退 `devices.json` 里 auto-name 持久化的设备别名（如 `hisense VIDAA_TV`，fileSafe 化），连别名都没有（全新设备）才回退 serial 命名；别名兜底命中记 INFO 便于排查。`LogcatRecordingManager` 注入 `DeviceHistoryStore`（与 `DeviceRepository` 共享同一实例）。
+- **修复既有隐患**：轮转续开路径先自取消 collector 再跑挂起代码——旧代码无挂起点侥幸成立，`deviceLabel` 引入 delay 后当场 `CancellationException` 使续开夭折。自取消挪到续开之后，语义不变（老 recorder 后续状态照旧进不了 UI）。
+- **测试**（TDD）：`LogcatRecordingManagerTest` +3（getprop 两败一成重试后取 label、getprop 恒败回退历史别名、props unknown 回退别名）；构造签名加 `history` 参数，既有用例与 desktop 两处构造点同步更新。
+
 ## v2 — 2026-10-10 设置页日志分区：应用日志 vs 设备日志（Logcat）
 
 用户反馈：设置页里「日志级别」（本应用日志的级别）紧挨着 logcat 三块设置（缓冲行数 / 自动录制 / 录制存储），而「日志」（打开/导出应用日志）又孤悬在这三块之后——两类"日志"交错，扫一眼分不清哪块管哪边。

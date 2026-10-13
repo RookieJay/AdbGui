@@ -156,8 +156,9 @@ class SettingsViewModelTest {
         val settings = SettingsStore(recDir, io = kotlinx.coroutines.Dispatchers.Unconfined)
         settings.update { it.copy(logcatAutoRecord = false) }
         val rec = com.adbgui.core.device.LogcatRecordingManager(
-            cmd, FakeTracker(), settings, com.adbgui.core.log.NoopLogger, this, recDir,
-            io = kotlinx.coroutines.Dispatchers.Unconfined)
+            cmd, FakeTracker(), settings,
+            com.adbgui.core.device.DeviceHistoryStore(recDir, clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined),
+            com.adbgui.core.log.NoopLogger, this, recDir, io = kotlinx.coroutines.Dispatchers.Unconfined)
         val vm = SettingsViewModel(settings, this, rec)
         vm.refreshRecordingsUsage()
         advanceUntilIdle()

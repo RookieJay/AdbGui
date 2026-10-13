@@ -52,8 +52,9 @@ class LogcatViewModelTest {
         val dir = Files.createTempDirectory("adbgui-rec")
         return LogcatRecordingManager(
             cmd, FakeTracker(listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))),
-            SettingsStore(dir, io = Dispatchers.Unconfined), NoopLogger,
-            scope, dir, io = Dispatchers.Unconfined,
+            SettingsStore(dir, io = Dispatchers.Unconfined),
+            com.adbgui.core.device.DeviceHistoryStore(dir, clock = { 0L }, io = Dispatchers.Unconfined),
+            NoopLogger, scope, dir, io = Dispatchers.Unconfined,
         )
     }
 

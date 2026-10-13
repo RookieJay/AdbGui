@@ -34,6 +34,7 @@ class LogcatRecordingManager(
     private val commands: CommandRunner,
     private val tracker: IDeviceTracker,
     private val settings: SettingsStore,
+    private val history: DeviceHistoryStore,
     private val logger: Logger,
     private val scope: CoroutineScope,
     private val defaultDir: Path,
@@ -162,6 +163,10 @@ class LogcatRecordingManager(
         /** 文件存活检测周期（真实时间，跑在 io 上）。 */
         private const val FILE_WATCH_INTERVAL_MS = 5000L
 
+        /** [deviceLabel] 的 getprop 重试：总尝试次数与间隔（虚拟时间下测试可快进）。 */
+        private const val LABEL_GETPROP_ATTEMPTS = 3
+        private const val LABEL_RETRY_MS = 1000L
+
         /** serial → 文件名安全段：':'（无线 serial）与 Windows 非法字符统一 '_'（spec §3.2）。 */
         fun sanitizeSerial(serial: String): String =
             serial.replace(":", "_").replace(Regex("""[\\/*?"<>|]"""), "_")
@@ -254,8 +259,12 @@ class LogcatRecordingManager(
                 if (st.rotated) {
                     mutex.withLock {
                         if (autoRecorders[serial] === rec) {
-                            autoJobs.remove(serial)?.cancel()
+                            // 自取消放在续开之后：已取消的协程里跑挂起代码（deviceLabel 的重试
+                            // delay）会当场抛 CancellationException，续开半途夭折。先续开再自断，
+                            // 老 recorder 的后续状态同样进不了 UI。
+                            val oldJob = autoJobs.remove(serial)
                             startAutoLocked(serial, forceNewFile = true)
+                            oldJob?.cancel()
                         }
                     }
                 }
@@ -288,13 +297,26 @@ class LogcatRecordingManager(
     /** auto/ + manual/ 总占用（设置页展示）。目录扫描在 [io] 上执行。 */
     suspend fun totalRecordingBytes(): Long = withContext(io) { maintenance.totalBytes(_recordingsDir.value) }
 
-    /** serial → 录制文件名前缀段：`品牌_型号_Android版本`（getprop）；失败或 brand/model
-     *  为 unknown 时回退 [sanitizeSerial]，保证起录永不因取属性失败而失败。 */
+    /** serial → 录制文件名前缀段：`品牌_型号_Android版本`（getprop）。起录瞬间设备常未就绪
+     * （adb connect 冷启动、断流重连），故失败/unknown 时重试；重试耗尽后回退历史设备别名
+     * （auto-name 已持久化到 devices.json），仍无才回退 [sanitizeSerial]——保证起录永不因
+     * 取属性失败而失败，且同一设备不会仅因起录竞态就换成 IP 命名（spec §3.2）。 */
     private suspend fun deviceLabel(serial: String): String {
-        val props = runCatching { commands.deviceProps(serial) }.getOrNull()
-        if (props != null && props.brand != "unknown" && props.model != "unknown") {
-            val label = fileSafe("${props.brand} ${props.model} Android${props.androidVersion}")
-            if (label.isNotBlank()) return label
+        repeat(LABEL_GETPROP_ATTEMPTS) { attempt ->
+            val props = runCatching { commands.deviceProps(serial) }.getOrNull()
+            if (props != null && props.brand != "unknown" && props.model != "unknown") {
+                val label = fileSafe("${props.brand} ${props.model} Android${props.androidVersion}")
+                if (label.isNotBlank()) return label
+            }
+            if (attempt < LABEL_GETPROP_ATTEMPTS - 1) delay(LABEL_RETRY_MS)
+        }
+        val alias = runCatching { history.load().firstOrNull { it.serial == serial }?.alias }.getOrNull()
+        if (!alias.isNullOrBlank()) {
+            val label = fileSafe(alias)
+            if (label.isNotBlank()) {
+                logger.info("recording label for $serial: getprop unavailable after retries, using history alias \"$alias\"")
+                return label
+            }
         }
         return sanitizeSerial(serial)
     }

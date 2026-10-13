@@ -30,7 +30,7 @@
     └── <label>_<stamp>.log
 ```
 
-语义编码在目录而非文件名：清理只扫 `auto/`，`latestRecordingFile()` 扫两个子目录取最新。`<label>` 维持现状（品牌_型号_Android版本，getprop 失败回退 serialSafe）。
+语义编码在目录而非文件名：清理只扫 `auto/`，`latestRecordingFile()` 扫两个子目录取最新。`<label>` = 品牌_型号_Android版本（getprop）；起录瞬间设备常未就绪（adb connect 冷启动、断流重连），故 getprop 失败/unknown 时重试（3 次 × 1s），仍失败回退历史设备别名（auto-name 持久化的 `devices.json` 别名，fileSafe 化），连别名都没有才回退 serialSafe——同一设备不因起录竞态换 IP 命名。
 
 ### D2：目录可配置，热切换 + 自动迁移
 

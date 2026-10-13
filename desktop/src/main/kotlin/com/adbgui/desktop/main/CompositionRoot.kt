@@ -34,7 +34,7 @@ class CompositionRoot {
     val locator = AdbLocator(settings, ResourceBundledAdbProvider(), SystemPathProbe())
     val server = AdbServerController({ locator.locate() }, runner, logger)
     val commands = CommandRunner({ locator.locate() }, runner, logger, scope, CommandRunner.AdbServerStarter { server.ensureStarted() })
-    private val history = DeviceHistoryStore(configDir, clock = { System.currentTimeMillis() })
+    val history = DeviceHistoryStore(configDir, clock = { System.currentTimeMillis() })
     val tracker = DeviceTracker({ locator.locate() }, server, runner, logger, scope)
     val repository = DeviceRepository(tracker, history, commands, logger, scope)
     // scrcpy wiring (Task 5)

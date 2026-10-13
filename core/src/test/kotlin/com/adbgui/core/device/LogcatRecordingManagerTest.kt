@@ -37,13 +37,18 @@ class LogcatRecordingManagerTest {
             "[ro.build.version.release]: [$version]\n" +
             "[ro.build.version.sdk]: [23]\n"
 
+    /** 空历史的设备存储（绝大多数用例不关心别名兜底）。 */
+    private fun noHistory(p: java.nio.file.Path): DeviceHistoryStore =
+        DeviceHistoryStore(p, clock = { 0L }, io = Dispatchers.Unconfined)
+
     private fun manager(
         runner: FakeAdbProcessRunner, scope: kotlinx.coroutines.CoroutineScope, dir: java.nio.file.Path,
         tracker: FakeTracker = FakeTracker(),
+        history: DeviceHistoryStore = noHistory(dir),
     ): LogcatRecordingManager {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter {})
         val settings = SettingsStore(dir, io = Dispatchers.Unconfined)
-        return LogcatRecordingManager(cmd, tracker, settings, NoopLogger, scope, dir, io = Dispatchers.Unconfined)
+        return LogcatRecordingManager(cmd, tracker, settings, history, NoopLogger, scope, dir, io = Dispatchers.Unconfined)
     }
 
     @Test fun manual_record_lifecycle_and_filename_sanitization() = runTest {
@@ -104,6 +109,74 @@ class LogcatRecordingManagerTest {
         val rec = m.manualState.value
         assertTrue(rec is ManualRecordState.Recording)
         assertTrue(rec.file.fileName.toString().startsWith("abc_"))
+        m.stopManual("user")
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun manual_filename_retries_getprop_before_falling_back() = runTest {
+        // 冷启动竞态：getprop 前两次失败（adb connect 未就绪），第 3 次成功 → 应取到 label 而非回退 serial
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        var getpropCalls = 0
+        runner.runSideEffect = { args ->
+            if (args.any { it.contains("getprop") }) {
+                getpropCalls++
+                if (getpropCalls >= 3) {
+                    runner.whenArgsContains(listOf("getprop"), AdbProcessResult(0, getpropOut("TCL", "618D", "6.0"), ""))
+                }
+            }
+        }
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val m = manager(runner, this, dir, tracker)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        m.startManual("abc")
+        advanceUntilIdle()
+        val rec = m.manualState.value
+        assertTrue(rec is ManualRecordState.Recording)
+        assertTrue(rec.file.fileName.toString().startsWith("TCL_618D_Android6.0_"),
+            "got: ${rec.file.fileName}")   // 重试后 getprop 成功 → 正常 label，不落 IP/serial 命名
+        m.stopManual("user")
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun manual_filename_falls_back_to_history_alias_when_getprop_fails() = runTest {
+        // 设备垂死/离线：getprop 恒败，但历史里已有 auto-name 写入的别名 → 用别名，不落 IP
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val history = noHistory(dir)
+        history.setAlias("192.168.1.5:5555", "hisense VIDAA_TV")
+        val m = manager(runner, this, dir, tracker, history)
+        tracker.devices.value = listOf(DeviceSnapshot("192.168.1.5:5555", DeviceStatus.ONLINE))
+        m.startManual("192.168.1.5:5555")
+        advanceUntilIdle()
+        val rec = m.manualState.value
+        assertTrue(rec is ManualRecordState.Recording)
+        assertTrue(rec.file.fileName.toString().startsWith("hisense_VIDAA_TV_"),
+            "got: ${rec.file.fileName}")   // 别名兜底（空格→下划线），而非 192.168.1.5_5555_
+        m.stopManual("user")
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun manual_filename_falls_back_to_alias_when_props_unknown() = runTest {
+        // getprop 成功但全是 unknown → 别名兜底，不落 serial
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        runner.whenArgsContains(listOf("getprop"), AdbProcessResult(0, "", ""))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val history = noHistory(dir)
+        history.setAlias("abc", "hisense VIDAA_TV")
+        val m = manager(runner, this, dir, tracker, history)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        m.startManual("abc")
+        advanceUntilIdle()
+        val rec = m.manualState.value
+        assertTrue(rec is ManualRecordState.Recording)
+        assertTrue(rec.file.fileName.toString().startsWith("hisense_VIDAA_TV_"),
+            "got: ${rec.file.fileName}")
         m.stopManual("user")
         m.stop()
         advanceUntilIdle()
@@ -180,7 +253,7 @@ class LogcatRecordingManagerTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
         val settings = SettingsStore(dir, io = Dispatchers.Unconfined)
         settings.update { it.copy(logcatAutoRecord = false) }
-        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir, io = Dispatchers.Unconfined)
+        val m = LogcatRecordingManager(cmd, tracker, settings, noHistory(dir), NoopLogger, this, dir, io = Dispatchers.Unconfined)
         tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
         advanceUntilIdle()
         assertEquals(0, dir.resolve("auto").toFile().listFiles { f -> f.name.startsWith("abc_") }?.size ?: 0)
@@ -219,7 +292,7 @@ class LogcatRecordingManagerTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
         val settings = SettingsStore(dir, io = Dispatchers.Unconfined)
         // line1 ≈ 40 chars：阈值取 1 行字节数 → 写完第 1 行即轮转
-        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir,
+        val m = LogcatRecordingManager(cmd, tracker, settings, noHistory(dir), NoopLogger, this, dir,
             io = Dispatchers.Unconfined, rotationBytes = line1.length + 1L)
         tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
         advanceUntilIdle()
@@ -318,7 +391,7 @@ class LogcatRecordingManagerTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
         val settings = SettingsStore(dir, io = Dispatchers.Unconfined)
         settings.update { it.copy(logcatAutoRecord = false) }   // 别让 auto 录制添新文件
-        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir,
+        val m = LogcatRecordingManager(cmd, tracker, settings, noHistory(dir), NoopLogger, this, dir,
             io = Dispatchers.Unconfined, clock = { now })
         advanceUntilIdle()
         assertTrue(!Files.exists(oldAuto))     // 8 天前 auto → 删
@@ -356,7 +429,7 @@ class LogcatRecordingManagerTest {
         val tracker = FakeTracker()
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
         val settings = SettingsStore(dir, io = Dispatchers.Unconfined)
-        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir,
+        val m = LogcatRecordingManager(cmd, tracker, settings, noHistory(dir), NoopLogger, this, dir,
             io = Dispatchers.Unconfined, rotationBytes = line1.length + 1L)
         tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
         advanceUntilIdle()
@@ -392,7 +465,7 @@ class LogcatRecordingManagerTest {
         val tracker = FakeTracker()
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
         val settings = SettingsStore(dir1, io = Dispatchers.Unconfined)
-        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir1, io = Dispatchers.Unconfined)
+        val m = LogcatRecordingManager(cmd, tracker, settings, noHistory(dir1), NoopLogger, this, dir1, io = Dispatchers.Unconfined)
         tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
         advanceUntilIdle()
         assertTrue(m.autoStates.value.containsKey("abc"))
@@ -416,7 +489,7 @@ class LogcatRecordingManagerTest {
         val tracker = FakeTracker()
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
         val settings = SettingsStore(dir1, io = Dispatchers.Unconfined)   // 默认目录 = dir1
-        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir1, io = Dispatchers.Unconfined)
+        val m = LogcatRecordingManager(cmd, tracker, settings, noHistory(dir1), NoopLogger, this, dir1, io = Dispatchers.Unconfined)
         tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
         m.startManual("abc")
         advanceUntilIdle()
@@ -439,7 +512,7 @@ class LogcatRecordingManagerTest {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter {})
         val settings = SettingsStore(dir1, io = Dispatchers.Unconfined)
         settings.update { it.copy(logcatAutoRecord = false) }
-        val m = LogcatRecordingManager(cmd, tracker, settings, NoopLogger, this, dir1, io = Dispatchers.Unconfined)
+        val m = LogcatRecordingManager(cmd, tracker, settings, noHistory(dir1), NoopLogger, this, dir1, io = Dispatchers.Unconfined)
         advanceUntilIdle()
         // dir1/auto 放两个文件；dir2/auto 预置同名冲突文件 → 该文件 move 失败跳过，另一个照常迁移
         Files.createDirectories(dir1.resolve("auto")); Files.createDirectories(dir2.resolve("auto"))

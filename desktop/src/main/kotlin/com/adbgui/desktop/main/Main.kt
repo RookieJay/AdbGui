@@ -56,7 +56,7 @@ fun main() = application {
     }
     val logcatRecording = remember {
         com.adbgui.core.device.LogcatRecordingManager(
-            root.commands, root.tracker, root.settings, root.logger, root.scope,
+            root.commands, root.tracker, root.settings, root.history, root.logger, root.scope,
             root.configDir.resolve("logcat-recordings"),
         )
     }
