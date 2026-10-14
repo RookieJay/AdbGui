@@ -82,7 +82,7 @@ data class LogcatFilters(
 - `setFilters(f)`：`f.packageName != current.packageName` 时——非空：kick 重解析循环（首拍立即）；空：停循环并清 `pids`。其余情况照旧（O(N) 重算 + 立即 publish）。
 - 重解析循环：controller scope 常驻 job，`packageName` 非空期间 `while { delay(interval); pidOf(); 并集; 若变化 → 更新 _filters.value.pids + recomputeFiltered + publish }`。串行化与 `mutex` 的关系：pidOf 是挂起网络调用，不得持锁调用；结果并集与重算在 `mutex.withLock` 内。
 - `start(serial)`：进入时若 `packageName` 非空 → 重解析一次（D2）。
-- 新增 `snapshotTags(): List<Pair<String, Int>>`：`mutex.withLock` 下从 ring 现算 distinct tag→count，频次降序，cap 200。打开 Tag 下拉时调，不做 StateFlow。
+- 新增 `snapshotTags(): List<Pair<String, Int>>`：从已发布的 `lines` 快照（immutable List，无锁、非挂起）现算 distinct tag→count，频次降序，cap 200。tag 列表天然跟随当前过滤视图（如已选包过滤则只列该 app 的 tag）。打开 Tag 下拉时调，不做 StateFlow。
 - `dumpLogcat`：签名不变（filters 已含 pids，谓词自动生效）。
 
 ### 3.4 `Settings` / `SettingsStore`
