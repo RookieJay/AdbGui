@@ -10,6 +10,7 @@ import com.adbgui.core.domain.DeviceStatus
 import com.adbgui.core.log.NoopLogger
 import com.adbgui.core.settings.SettingsStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -177,6 +178,35 @@ class LogcatRecordingManagerTest {
         assertTrue(rec is ManualRecordState.Recording)
         assertTrue(rec.file.fileName.toString().startsWith("hisense_VIDAA_TV_"),
             "got: ${rec.file.fileName}")
+        m.stopManual("user")
+        m.stop()
+        advanceUntilIdle()
+    }
+
+    @Test fun second_start_does_not_publish_bogus_stopped_transient() = runTest {
+        // 回归：起录新会话时，新 recorder 的初始 STOPPED(0行0字节) 曾被发布成
+        // ManualRecordState.Stopped——UI 的"停止后自动弹定位"在起录瞬间误触发，
+        // 再次弹出资源管理器定位到录制文件。
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val tracker = FakeTracker()
+        val m = manager(runner, this, dir, tracker)
+        tracker.devices.value = listOf(DeviceSnapshot("abc", DeviceStatus.ONLINE))
+        m.startManual("abc")
+        advanceUntilIdle()
+        m.stopManual("user")
+        advanceUntilIdle()
+        assertTrue(m.manualState.value is ManualRecordState.Stopped)
+        val emissions = mutableListOf<ManualRecordState>()
+        val job = launch { m.manualState.collect { emissions.add(it) } }
+        advanceUntilIdle()
+        emissions.clear()   // 从 Stopped(第一次) 之后开始观察
+        m.startManual("abc")   // 第二次起录
+        advanceUntilIdle()
+        assertTrue(emissions.none { it is ManualRecordState.Stopped },
+            "起录不得发布假 Stopped（UI 会在起录时误弹定位），got: $emissions")
+        assertTrue(emissions.any { it is ManualRecordState.Recording })
+        job.cancel()
         m.stopManual("user")
         m.stop()
         advanceUntilIdle()

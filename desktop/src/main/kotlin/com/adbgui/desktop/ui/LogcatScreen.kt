@@ -77,12 +77,12 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
     val matchHighlight = MaterialTheme.colors.primary.copy(alpha = 0.28f)
     val revealScope = rememberCoroutineScope()
 
-    // 手动录制结束（用户停止/断连/写失败）→ 立即在资源管理器中定位并选中该文件；
-    // 文件不存在（从未写入）则跳过。
-    LaunchedEffect(manualRecord) {
-        val st = manualRecord
-        if (st is ManualRecordState.Stopped && java.nio.file.Files.exists(st.file)) {
-            revealFile(st.file.toFile())
+    // 手动录制结束（用户停止/断连/写失败）→ 立即在资源管理器中定位并选中该文件。
+    // 只认 Recording→Stopped 边沿事件（vm.manualStoppedFile）：起录新会话、页面重进
+    // 携带的残留 Stopped 态都不会重弹。文件不存在（从未写入）则跳过。
+    LaunchedEffect(Unit) {
+        vm.manualStoppedFile.collect { file ->
+            if (java.nio.file.Files.exists(file)) revealFile(file.toFile())
         }
     }
 

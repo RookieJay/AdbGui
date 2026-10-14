@@ -242,6 +242,40 @@ class LogcatViewModelTest {
         advanceUntilIdle()
     }
 
+    @Test fun manualStoppedFile_fires_once_per_real_stop_only() = runTest {
+        // UI"停止后自动弹定位"只认 Recording→Stopped 边沿：起录（含紧接上次结束的
+        // 第二次起录）不发，页面重进（新 collector 收到残留 Stopped 态）也不发。
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I T: m"))
+        val rec = recordingManager(runner, this)   // manager 须挂在 test scope：backgroundScope 下 recorder 协程不随 advanceUntilIdle 推进
+        val serial = MutableStateFlow("abc")
+        val vm = LogcatViewModel(controller(runner, this),
+            rec, serial, MutableStateFlow(true), this)
+        val events = mutableListOf<java.nio.file.Path>()
+        val job = launch { vm.manualStoppedFile.collect { events.add(it) } }
+        advanceUntilIdle()
+        assertEquals(0, events.size, "挂上 collector（页面进入）不得发事件")
+        vm.startRecording()
+        advanceUntilIdle()
+        assertEquals(0, events.size, "起录不得发事件")
+        vm.stopRecording()
+        advanceUntilIdle()
+        assertEquals(1, events.size, "真实结束发一次")
+        vm.startRecording()   // 紧接上次结束的第二次起录
+        advanceUntilIdle()
+        assertEquals(1, events.size, "第二次起录不得再发（不再重弹上次文件位置）")
+        vm.stopRecording()
+        advanceUntilIdle()
+        assertEquals(2, events.size, "第二次真实结束再发一次")
+        job.cancel()
+        val events2 = mutableListOf<java.nio.file.Path>()
+        val job2 = launch { vm.manualStoppedFile.collect { events2.add(it) } }   // 模拟页面重进
+        advanceUntilIdle()
+        assertEquals(0, events2.size, "页面重进（残留 Stopped 态）不得发事件")
+        job2.cancel()
+        vm.stop(); rec.stop()
+        advanceUntilIdle()
+    }
+
     @Test fun latestRecordingFile_returns_newest_log_and_null_when_empty() = runTest {
         // 常驻定位按钮数据源（点击时实时取，不缓存）：目录有文件 → 最新 .log；空 → null（UI 转而打开目录）
         val runner = FakeAdbProcessRunner()

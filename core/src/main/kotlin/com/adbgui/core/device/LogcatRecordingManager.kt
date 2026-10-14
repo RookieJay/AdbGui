@@ -123,11 +123,20 @@ class LogcatRecordingManager(
         manualFile = file
         manualJob = scope.launch {
             rec.state.collect { st ->
-                _manualState.value = when (st.status) {
-                    RecordStatus.RECORDING ->
-                        ManualRecordState.Recording(serial, file, st.lineCount, st.bytesWritten)
-                    RecordStatus.STOPPED ->
-                        ManualRecordState.Stopped(file, st.lineCount, st.bytesWritten, st.stopReason)
+                // 新 recorder 的初始状态是 STOPPED(0行0字节)——那是"尚未起录"，不是
+                // "录制结束"。发布它会让 UI 在起录瞬间看到假 Stopped，"停止后自动弹
+                // 定位"被误触发（第二次起录时又弹一次上次的录制位置）。真实的结束
+                // 状态（用户停/断连/write_failed）带 stopReason 或进度，不受此过滤影响。
+                val bogusInitial = st.status == RecordStatus.STOPPED &&
+                    st.stopReason == null && st.error == null &&
+                    st.lineCount == 0L && st.bytesWritten == 0L
+                if (!bogusInitial) {
+                    _manualState.value = when (st.status) {
+                        RecordStatus.RECORDING ->
+                            ManualRecordState.Recording(serial, file, st.lineCount, st.bytesWritten)
+                        RecordStatus.STOPPED ->
+                            ManualRecordState.Stopped(file, st.lineCount, st.bytesWritten, st.stopReason)
+                    }
                 }
             }
         }

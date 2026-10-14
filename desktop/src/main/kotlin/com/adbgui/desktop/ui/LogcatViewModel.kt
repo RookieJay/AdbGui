@@ -50,6 +50,20 @@ class LogcatViewModel(
     val autoRecordStates: StateFlow<Map<String, com.adbgui.core.device.RecordState>> = recording.autoStates
     val recordingsDir: java.nio.file.Path get() = recording.recordingsDir
 
+    /** Recording→Stopped 的边沿事件：一次手动录制**真正结束**时发一次（该录制的文件）。
+     *  UI 的"停止后自动弹定位"只认这个沿——起录新会话、页面重进（残留的 Stopped 态）
+     *  都不会重弹。冷 Flow：每个 collector 各自从当前值开始（prev=null → 首值不发）。 */
+    val manualStoppedFile: kotlinx.coroutines.flow.Flow<java.nio.file.Path> =
+        kotlinx.coroutines.flow.flow {
+            var prev: com.adbgui.core.device.ManualRecordState? = null
+            recording.manualState.collect { st ->
+                if (prev is com.adbgui.core.device.ManualRecordState.Recording &&
+                    st is com.adbgui.core.device.ManualRecordState.Stopped
+                ) emit(st.file)
+                prev = st
+            }
+        }
+
     private val _recordError = MutableStateFlow<String?>(null)
     val recordError: StateFlow<String?> = _recordError.asStateFlow()
 
