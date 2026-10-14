@@ -116,7 +116,7 @@ class LogcatControllerTest {
             levelSet = com.adbgui.core.domain.LogcatLevel.entries.toSet(),
             tagInclude = "Alpha",
             text = "keep",
-            pid = 100,
+            pids = setOf(100),
         ))
         advanceUntilIdle()
         assertEquals(1, c.lines.value.size)
@@ -162,6 +162,37 @@ class LogcatControllerTest {
         advanceUntilIdle()
         assertEquals(1, c.lines.value.size)
         assertEquals("logcat said [unclosed bracket", c.lines.value[0].message)
+        c.stop()
+    }
+
+    @Test fun setFilters_pids_filters_lines() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I Tag: keep",
+            "08-17 10:23:45.200  999  201 I Tag: drop",
+        ))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(pids = setOf(100)))
+        advanceUntilIdle()
+        assertEquals(1, c.lines.value.size)
+        assertEquals("keep", c.lines.value[0].message)
+        c.stop()
+    }
+
+    @Test fun setFilters_tagExcludes_filters_multiple_case_insensitive_blank_ignored() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I Noise: drop",
+            "08-17 10:23:45.200  100  201 I NoiseBox: drop case-insensitive",
+            "08-17 10:23:45.300  100  202 I Signal: keep",
+        ))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(tagExcludes = listOf("noise", "  ")))
+        advanceUntilIdle()
+        assertEquals(1, c.lines.value.size)
+        assertEquals("keep", c.lines.value[0].message)
         c.stop()
     }
 

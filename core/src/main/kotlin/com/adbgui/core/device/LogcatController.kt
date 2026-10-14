@@ -23,13 +23,17 @@ enum class LogcatStatus { IDLE, RUNNING, PAUSED, RECONNECTING, FAILED }
 
 data class LogcatFilters(
     val levelSet: Set<LogcatLevel> = LogcatLevel.entries.toSet(),
+    /** 用户在下拉里选的应用；null = 无包过滤。非空时由 controller 的重解析循环维护 [pids]（Task 3）。 */
+    val packageName: String? = null,
+    /** 生效 pid 过滤（包的 pid 集合，或右键「只看此 PID」的单元素集合）。会话态，不持久化。 */
+    val pids: Set<Int> = emptySet(),
     val tagInclude: String? = null,
-    val tagExclude: String? = null,
+    /** 多重排除：tag 命中任一（忽略大小写）即被滤掉。 */
+    val tagExcludes: List<String> = emptyList(),
     val text: String? = null,
     /** When true, [text] is a regex (case-sensitive — embed `(?i)` for case-insensitive).
      * An invalid pattern falls back to plain-contains matching so the stream never dies. */
     val textIsRegex: Boolean = false,
-    val pid: Int? = null,
 )
 
 class LogcatController(
@@ -198,8 +202,11 @@ class LogcatController(
 
     private fun matches(line: LogcatLine, f: LogcatFilters): Boolean {
         if (line.level !in f.levelSet) return false
+        f.tagExcludes.forEach { ex ->
+            if (ex.isNotBlank() && line.tag.contains(ex, ignoreCase = true)) return false
+        }
+        if (f.pids.isNotEmpty() && line.pid !in f.pids) return false
         f.tagInclude?.takeIf { it.isNotBlank() }?.let { if (!line.tag.contains(it, ignoreCase = true)) return false }
-        f.tagExclude?.takeIf { it.isNotBlank() }?.let { if (line.tag.contains(it, ignoreCase = true)) return false }
         f.text?.takeIf { it.isNotBlank() }?.let { t ->
             val textOk = if (f.textIsRegex) {
                 val re = compiledRegexFor(t)
@@ -209,7 +216,6 @@ class LogcatController(
             }
             if (!textOk) return false
         }
-        f.pid?.let { if (line.pid != it) return false }
         return true
     }
 
