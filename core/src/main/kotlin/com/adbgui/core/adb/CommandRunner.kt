@@ -139,6 +139,18 @@ class CommandRunner(
         return PackageListParser.parse(full, sys)
     }
 
+    /** `adb shell pidof <pkg>` -> the set of pids of the application's currently running processes.
+     *  **Empty output = not running, returns an empty list** — this is not an error: toolbox/toybox
+     *  pidof prints an empty string and exits 1 when no process matches, so we append `|| true` to
+     *  force the device shell to always exit 0 (transport-layer failures still throw
+     *  [AdbCommandException]). Output is split on any whitespace (`\s+`), which handles the pty's
+     *  `\r\n` line endings. [pkg] is validated by [pkgRegex] to prevent shell injection. */
+    suspend fun pidOf(serial: String, pkg: String): List<Int> {
+        require(pkgRegex.matches(pkg)) { "invalid package name: $pkg" }
+        val out = runShellCmd(serial, "pidof $pkg || true")
+        return out.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.mapNotNull { it.toIntOrNull() }
+    }
+
     /** `adb shell dumpsys package <pkg>` → parsed [DumpsysPackage]. Throws [AdbCommandException]
      *  if the output has no parseable `Package [` / `Packages:` section (e.g. package not installed
      *  on the device). `runShellCmd` sanitizes the pty's `\r`/ANSI artifacts before parsing. */

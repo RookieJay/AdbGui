@@ -27,7 +27,11 @@ class FakeAdbProcessRunner : AdbProcessRunner {
     private data class Rule(val keywords: List<String>, val result: AdbProcessResult)
 
     fun whenArgsContains(keywords: List<String>, result: AdbProcessResult) {
-        scripts.add(Rule(keywords, result))
+        // Replace an existing rule with IDENTICAL keywords so a test can vary one command's
+        // scripted output over time (e.g. logcat package pid re-resolution after app restart).
+        // Distinct keyword sets append as before; first-match-wins order unchanged.
+        val i = scripts.indexOfFirst { it.keywords == keywords }
+        if (i >= 0) scripts[i] = Rule(keywords, result) else scripts.add(Rule(keywords, result))
     }
 
     fun setDefault(result: AdbProcessResult) { default = result }

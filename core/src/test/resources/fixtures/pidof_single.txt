@@ -1,0 +1,4 @@
+# source: VIDAA_TV / hisense / Android 9 (SDK 28) / build PPR2.180905.006.A1
+# recorded: 2026-10-14 (git bash redirect, adb -s 10.0.6.100:5555 shell pidof com.android.systemui)
+# note: pty appends \r\n -- parser splits on any whitespace
+3395
