@@ -146,7 +146,7 @@ private fun AppFilterDropdown(
             Text(Strings.t("no_tag_matches"), style = MaterialTheme.typography.caption,
                 modifier = Modifier.padding(8.dp))
         }
-        LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+        LazyColumn(modifier = Modifier.width(320.dp).heightIn(max = 360.dp)) {
             items(pkgs) { p ->
                 DropdownMenuItem(onClick = { onSelect(p.name) }) {
                     Text((if (p.name == packageName) "✓ " else "") + p.name, maxLines = 1)
@@ -188,7 +188,7 @@ private fun TagFilterDropdown(
             Text(Strings.t("no_tag_matches"), style = MaterialTheme.typography.caption,
                 modifier = Modifier.padding(8.dp))
         }
-        LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+        LazyColumn(modifier = Modifier.width(280.dp).heightIn(max = 360.dp)) {
             items(shown) { (tag, count) ->
                 Row(verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().clickable { onSelect(tag) }) {
