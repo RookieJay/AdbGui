@@ -371,6 +371,34 @@ class LogcatControllerTest {
         c.setFilters(LogcatFilters()); runCurrent(); c.stop()
     }
 
+    @Test fun device_switch_clears_old_pids_for_package_filter() = runTest {
+        // 重要规约修正（review round 1 / spec D2）：换设备必须清旧 pids，
+        // 否则旧 pid 与新设备行的 pid 碰撞会让不相关的行漏过包过滤。
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I T: old device line"))
+        runner.whenArgsContains(listOf("pidof", "com.foo"), com.adbgui.core.adb.AdbProcessResult(0, "100\n", ""))
+        val c = controller(runner, this, reResolveIntervalMs = 1000)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(packageName = "com.foo")); runCurrent()
+        assertEquals(setOf(100), c.filters.value.pids)
+        assertEquals(1, c.lines.value.size)
+
+        // 换设备：新 serial 的 pidof 返回 pid=300；新流里有旧 pid=100 的碰撞行 + 新 pid=300 的正常行。
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I T: colliding old pid",
+            "08-17 10:23:45.200  300  201 I T: real new pid",
+        ))
+        runner.whenArgsContains(listOf("pidof", "com.foo"), com.adbgui.core.adb.AdbProcessResult(0, "300\n", ""))
+        c.start("def")
+        advanceTimeBy(200); runCurrent()   // 让 resolveLoop 首拍 + publishLoop 节流都走完
+
+        assertEquals(setOf(300), c.filters.value.pids, "old pids must be cleared on device switch")
+        assertEquals(1, c.lines.value.size, "old-pid line must be filtered out")
+        assertEquals("real new pid", c.lines.value[0].message)
+
+        c.setFilters(LogcatFilters()); runCurrent(); c.stop()
+    }
+
     @Test fun setFilters_with_same_package_keeps_resolved_pids() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I T: m"))

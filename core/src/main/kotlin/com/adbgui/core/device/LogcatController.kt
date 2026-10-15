@@ -79,8 +79,6 @@ class LogcatController(
     fun start(serial: String) {
         stop()
         currentSerial = serial
-        // 设备切换 → pid 空间不同，重启解析循环（若包过滤激活）
-        if (resolveLoopPkg != null) restartResolveLoop(resolveLoopPkg)
         job = scope.launch {
             // The publisher is a CHILD of the stream job so stop() cancels it with the stream,
             // and so runTest can reach idle. It must never be launched from an init block.
@@ -89,7 +87,14 @@ class LogcatController(
                 ring.clear(); filtered.clear()
                 linesDirty = true
                 _error.value = null
+                // 设备切换 → pid 空间不同；包过滤激活时清空已解析 pids（与 ring 清除原子），
+                // 重启循环的首拍会为新 serial 重新解析。放在 mutex 内保证与 mergePids 互斥。
+                if (resolveLoopPkg != null) {
+                    _filters.value = _filters.value.copy(pids = emptySet())
+                }
             }
+            // 必须在 mutex 块之后重启——确保 pids 清空对循环可见（先清后解析）。
+            if (resolveLoopPkg != null) restartResolveLoop(resolveLoopPkg)
             flushSignal.trySend(Unit)
             runLoop(serial)
         }
