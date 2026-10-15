@@ -140,4 +140,25 @@ class SettingsStoreTest {
         assertEquals("custom", reloaded.update.sourceId)
         assertEquals("http://127.0.0.1:8000/latest.json", reloaded.update.customManifestUrl)
     }
+
+    @Test
+    fun logcat_filters_roundtrip() = runTest {
+        val dir = tmpDir()
+        val store = SettingsStore(dir)
+        val saved = com.adbgui.core.settings.SavedLogcatFilters(
+            levelSet = listOf("I", "W"), tagInclude = "Tag", tagExcludes = listOf("noise", "chatty"),
+            text = "hello", textIsRegex = true, packageName = "com.foo",
+        )
+        store.save(Settings(logcatFilters = saved))
+        assertEquals(saved, SettingsStore(dir).load().logcatFilters)
+    }
+
+    @Test
+    fun settings_json_without_logcat_filters_loads_default() = runTest {
+        val dir = tmpDir()
+        // 旧版本 settings.json 没有该字段 → 默认值（向后兼容）
+        Files.writeString(dir.resolve("settings.json"), """{"adbPathOverride":"/opt/adb"}""")
+        assertEquals(com.adbgui.core.settings.SavedLogcatFilters(),
+            SettingsStore(dir).load().logcatFilters)
+    }
 }
