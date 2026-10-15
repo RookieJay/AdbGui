@@ -23,9 +23,15 @@ class LogcatControllerTest {
         scope: kotlinx.coroutines.CoroutineScope,
         ringCap: Int = 5,
         publishIntervalMs: Long = 100,
+        reResolveIntervalMs: Long = 10_000,
     ): LogcatController {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter{})
-        return LogcatController(cmd, NoopLogger, scope, ringCap = ringCap, publishIntervalMs = publishIntervalMs)
+        return LogcatController(
+            cmd, NoopLogger, scope,
+            ringCap = ringCap,
+            publishIntervalMs = publishIntervalMs,
+            reResolveIntervalMs = reResolveIntervalMs,
+        )
     }
 
     private val line1 = "08-17 10:23:45.100  100  200 I Tag1: hello"
@@ -284,5 +290,122 @@ class LogcatControllerTest {
         assertEquals(listOf("Tag3", "Tag4", "Tag5", "Tag6", "Tag7"), c.lines.value.map { it.tag })
         assertEquals(5, last.size, "last published snapshot must match the ring")
         c.stop(); collectJob.cancel()
+    }
+
+    @Test fun package_filter_resolves_pids_and_filters_lines() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I TagA: from app",
+            "08-17 10:23:45.200  999  201 I TagB: other app",
+        ))
+        runner.whenArgsContains(listOf("pidof", "com.foo"), com.adbgui.core.adb.AdbProcessResult(0, "100\n", ""))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(packageName = "com.foo"))
+        runCurrent()   // setFilters 协程 + 解析循环首拍（立即解析一次）
+        assertEquals(1, c.lines.value.size)
+        assertEquals("from app", c.lines.value[0].message)
+        c.setFilters(LogcatFilters()); runCurrent()   // 停循环，否则下面的收尾会挂
+        c.stop()
+    }
+
+    @Test fun reResolve_merges_new_pids_keeping_old() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I T: old pid",
+            "08-17 10:23:45.200  300  201 I T: new pid",
+            "08-17 10:23:45.300  999  202 I T: other",
+        ))
+        runner.whenArgsContains(listOf("pidof", "com.foo"), com.adbgui.core.adb.AdbProcessResult(0, "100\n", ""))
+        val c = controller(runner, this, reResolveIntervalMs = 1000)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(packageName = "com.foo"))
+        runCurrent()                       // 首拍：pids={100}
+        // 模拟 app 重启：pidof 现在返回新 pid（Task 2 的同关键词替换规则）
+        runner.whenArgsContains(listOf("pidof", "com.foo"), com.adbgui.core.adb.AdbProcessResult(0, "300\n", ""))
+        advanceTimeBy(1001); runCurrent()  // 第二拍
+        assertEquals(2, c.lines.value.size)  // 旧 pid 100 保留 + 新 pid 300
+        c.setFilters(LogcatFilters()); runCurrent(); c.stop()
+    }
+
+    @Test fun pidof_failure_keeps_old_pids_and_stream_alive() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(
+            "08-17 10:23:45.100  100  200 I T: from app",
+            "08-17 10:23:45.200  999  201 I T: other",
+        ))
+        runner.whenArgsContains(listOf("pidof", "com.foo"), com.adbgui.core.adb.AdbProcessResult(0, "100\n", ""))
+        val c = controller(runner, this, reResolveIntervalMs = 1000)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(packageName = "com.foo")); runCurrent()
+        // 设备闪断：pidof 抛 AdbCommandException（runCmd 非零退码）
+        runner.whenArgsContains(listOf("pidof", "com.foo"), com.adbgui.core.adb.AdbProcessResult(1, "", "error: device offline"))
+        advanceTimeBy(1001); runCurrent()
+        assertEquals(1, c.lines.value.size)          // 旧 pids 保留
+        assertEquals(LogcatStatus.RUNNING, c.status.value)  // 流不死
+        c.setFilters(LogcatFilters()); runCurrent(); c.stop()
+    }
+
+    @Test fun clearing_package_stops_resolve_loop() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I T: m"))
+        runner.whenArgsContains(listOf("pidof", "com.foo"), com.adbgui.core.adb.AdbProcessResult(0, "100\n", ""))
+        val c = controller(runner, this, reResolveIntervalMs = 1000)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(packageName = "com.foo")); runCurrent()
+        val pidofCallsBefore = runner.runs.count { args -> args.any { it.contains("pidof") } }
+        c.setFilters(LogcatFilters(packageName = null)); runCurrent()   // 清包 → 停循环
+        advanceTimeBy(10_001)  // 若循环还活着这里会 tick 10 次
+        assertEquals(pidofCallsBefore, runner.runs.count { args -> args.any { it.contains("pidof") } })
+        c.stop()
+    }
+
+    @Test fun device_switch_restarts_resolve_for_new_serial() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I T: m"))
+        runner.whenArgsContains(listOf("pidof", "com.foo"), com.adbgui.core.adb.AdbProcessResult(0, "100\n", ""))
+        val c = controller(runner, this)
+        c.setFilters(LogcatFilters(packageName = "com.foo")); runCurrent()
+        c.start("def"); runCurrent()   // 换设备 → stop() + 循环重启，用新 serial 解析
+        assertTrue(runner.runs.any { args -> args.joinToString(" ").contains("-s def shell pidof com.foo") })
+        c.setFilters(LogcatFilters()); runCurrent(); c.stop()
+    }
+
+    @Test fun setFilters_with_same_package_keeps_resolved_pids() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf("08-17 10:23:45.100  100  200 I T: m"))
+        runner.whenArgsContains(listOf("pidof", "com.foo"), com.adbgui.core.adb.AdbProcessResult(0, "100\n", ""))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        c.setFilters(LogcatFilters(packageName = "com.foo")); runCurrent()
+        // 用户改了级别，但传了空 pids —— controller 必须保住已解析的 {100}
+        c.setFilters(LogcatFilters(packageName = "com.foo", levelSet = setOf(com.adbgui.core.domain.LogcatLevel.I)))
+        runCurrent()
+        assertEquals(setOf(100), c.filters.value.pids)
+        c.setFilters(LogcatFilters()); runCurrent(); c.stop()
+    }
+
+    @Test fun snapshotTags_counts_from_published_lines_desc_capped() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines((1..3).map { "08-17 10:23:45.10$it  100  200 I Tag1: m$it" } +
+            listOf("08-17 10:23:45.400  100  201 I Tag2: m"))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        assertEquals(listOf("Tag1" to 3, "Tag2" to 1), c.snapshotTags())
+        c.stop()
+    }
+
+    @Test fun dumpLogcat_applies_pids_filter() = runTest {
+        // spec 测试计划 #3：全量导出与实时视图共用 matches() 谓词——pids 过滤必须同样生效。
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLinesOnce(listOf(
+            "08-17 10:23:45.100  100  200 I Tag: from app",
+            "08-17 10:23:45.200  999  201 I Tag: other",
+        ))
+        val c = controller(runner, this)
+        val got = mutableListOf<String>()
+        c.dumpLogcat("abc", LogcatFilters(pids = setOf(100))) { got += it }
+        assertEquals(1, got.size)
+        assertTrue(got[0].contains("from app"))
     }
 }
