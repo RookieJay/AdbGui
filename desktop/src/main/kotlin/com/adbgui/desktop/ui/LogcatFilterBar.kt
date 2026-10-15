@@ -2,8 +2,8 @@ package com.adbgui.desktop.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -146,8 +146,8 @@ private fun AppFilterDropdown(
             Text(Strings.t("no_tag_matches"), style = MaterialTheme.typography.caption,
                 modifier = Modifier.padding(8.dp))
         }
-        LazyColumn(modifier = Modifier.width(320.dp).heightIn(max = 360.dp)) {
-            items(pkgs) { p ->
+        Column(modifier = Modifier.width(320.dp).heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+            pkgs.forEach { p ->
                 DropdownMenuItem(onClick = { onSelect(p.name) }) {
                     Text((if (p.name == packageName) "✓ " else "") + p.name, maxLines = 1)
                 }
@@ -188,8 +188,8 @@ private fun TagFilterDropdown(
             Text(Strings.t("no_tag_matches"), style = MaterialTheme.typography.caption,
                 modifier = Modifier.padding(8.dp))
         }
-        LazyColumn(modifier = Modifier.width(280.dp).heightIn(max = 360.dp)) {
-            items(shown) { (tag, count) ->
+        Column(modifier = Modifier.width(280.dp).heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+            shown.forEach { (tag, count) ->
                 Row(verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().clickable { onSelect(tag) }) {
                     Text(
