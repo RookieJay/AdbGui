@@ -3,6 +3,17 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-15 Logcat 高级过滤（AS 式）
+
+分支：feat/logcat-advanced-filters。
+
+### Logcat 过滤增强（AS 式）
+- **包名/应用过滤**：下拉搜索选择（三方/系统可切），`pidof` 解析进程并每 5s 重解析（app 重启后旧进程日志保留）
+- **Tag 下拉**：从当前缓冲按频次列出，单选过滤 + 逐项排除（可多排除）
+- **日志行右键**：只看/排除此 tag、只看此 PID、清除 PID/应用过滤
+- **过滤条件持久化**：重启恢复上次条件（pids 不存，恢复时重新解析）
+- **全量导出同样过滤**：`logcat -d` 导出同样应用包名/tag/pid 过滤
+
 ## v2 — 2026-10-13 修复剪贴板被占用时复制闪退（SafeClipboard + CrashGuard）
 
 真机反馈（2026-10-13）：系统信息页点「当前焦点窗口」后，选中右侧输出文字复制，弹框报 `cannot open system clipboard`，点确定后应用闪退。根因两层：① Windows 剪贴板被其他进程短暂持锁（剪贴板管理器/截图工具/输入法等）时 AWT 抛 `IllegalStateException("cannot open system clipboard")`，属环境竞争无法杜绝；② 该异常从 UI 事件逃逸后无任何兜底——app 没装全局未捕获异常 handler，JVM 直接退出，日志里连崩溃记录都没有。
