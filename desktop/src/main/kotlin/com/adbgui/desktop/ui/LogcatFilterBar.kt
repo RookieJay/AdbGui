@@ -32,6 +32,7 @@ fun LogcatFilterBar(
     pidOnly: Int?,
     onFilters: (LogcatFilters) -> Unit,
     searchFocus: FocusRequester,
+    modifier: Modifier = Modifier,
 ) {
     fun update(
         pkg: String? = packageName, tag: String? = tagInclude, excl: List<String> = tagExcludes,
@@ -41,7 +42,7 @@ fun LogcatFilterBar(
         tagInclude = tag, tagExcludes = excl, text = txt.ifBlank { null }, textIsRegex = regex,
     ))
 
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         // ---- 级别（多选，逻辑与旧 LogcatScreen 相同，迁入） ----
         var levelMenuOpen by remember { mutableStateOf(false) }
         Box {

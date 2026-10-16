@@ -126,6 +126,9 @@ fun LogcatScreen(vm: LogcatViewModel, modifier: Modifier = Modifier) {
                     packageName = packageName, tagInclude = tagInclude, tagExcludes = tagExcludes, pidOnly = pidOnly,
                     onFilters = { f -> applyLineFilters { f } },
                     searchFocus = searchFocus,
+                    // weighted share so the fixed-width control buttons below are measured first
+                    // and the bar (its inner weighted SearchField) takes only the remaining width.
+                    modifier = Modifier.weight(1f),
                 )
                 val paused = status == LogcatStatus.PAUSED
                 TooltipIconButton(
