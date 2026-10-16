@@ -117,8 +117,21 @@ class LogcatController(
     // the same non-reentrant mutex, so calling it inside would deadlock).
     fun clear() {
         scope.launch {
+            val serial = currentSerial
             mutex.withLock { ring.clear(); filtered.clear(); linesDirty = true }
             publishOnce()
+            // Also clear the on-device logd ring — the in-memory clear alone hid the backlog from
+            // view while `logcat` (live stream AND record) replays it on next start. Best-effort:
+            // on failure the view stays cleared and the error surfaces inline (not swallowed).
+            if (serial != null) {
+                try {
+                    commands.clearLogcat(serial)
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    logger.warn("logcat clear failed for $serial: ${t.message}")
+                    _error.value = t.message
+                }
+            }
         }
     }
 

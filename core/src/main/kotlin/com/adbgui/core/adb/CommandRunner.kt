@@ -287,6 +287,13 @@ class CommandRunner(
         return runner.startStream(adb(), listOf("-s", serial, "logcat", "-d", "-v", "threadtime"), scope)
     }
 
+    /** `adb -s <serial> logcat -c` — clears the device's logd ring buffer. The UI "clear" button
+     *  needs this: clearing only the in-memory ring leaves the on-device buffer intact, so the
+     *  next plain `logcat` stream/record replays the entire backlog first. */
+    suspend fun clearLogcat(serial: String) {
+        runCmd(serial, listOf("logcat", "-c"))
+    }
+
     suspend fun reboot(serial: String, mode: RebootMode): String {
         val args = buildList { add("reboot"); if (mode.arg != null) add(mode.arg) }
         return runCmd(serial, args).stdout   // throws AdbCommandException on nonzero (e.g. device offline)

@@ -3,6 +3,17 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-16 清除按钮真正清设备 logd 缓冲区（logcat -c）
+
+用户反馈：日志页点「清除」多次后开始手动录制，行数仍瞬间飞涨到 1M+。根因：`LogcatController.clear()` 只清了 App 内存里的 ring/filtered 视图，从未执行 `adb logcat -c`——设备 logd 环形缓冲区纹丝不动；而手动录制（`LogcatRecorder`）与实时流走的是裸 `logcat`（不带 `-d` 会先把设备缓冲区全部积压行吐出再跟流），于是 1M+ 积压一口气灌进录制文件。确认弹框文案「将清空当前缓冲区」也名不副实。
+
+- **`CommandRunner.clearLogcat(serial)`**：`adb -s <serial> logcat -c`，非零退出抛 `AdbCommandException`。
+- **`LogcatController.clear()`**：清内存视图之外，对当前 serial 尽力执行设备端 `logcat -c`（无设备时不发命令）；失败不回滚已清的视图，走既有 `error` StateFlow 内联展示 + WARN 日志，不打断用户。
+- **弹框文案修正**：中英文均改为明确说明「清空设备日志缓冲区及当前视图」。
+- 录制侧不自动 `-c`：录制定位是"行车记录仪"，积压历史正是价值；想要从零录，先点一次「清除」（现在真清设备）再开始录制。
+
+**测试**（TDD）：`CommandRunnerTest` +2（argv 含 `-s serial logcat -c`；失败抛 AdbCommandException）；`LogcatControllerTest` +3（clear 同时清设备缓冲、设备失败时视图仍清空且 error 非空、无设备不发命令）。
+
 ## v2 — 2026-10-15 Logcat 高级过滤（AS 式）
 
 分支：feat/logcat-advanced-filters。

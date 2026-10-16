@@ -63,6 +63,23 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun clearLogcat_runs_adb_logcat_c() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("logcat", "-c"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.clearLogcat("abc")
+        assertTrue(runner.runs.last().containsAll(listOf("-s", "abc", "logcat", "-c")))
+    }
+
+    @Test
+    fun clearLogcat_failure_throws_adb_command_exception() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("logcat", "-c"), AdbProcessResult(1, "", "device offline"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.clearLogcat("abc") }
+    }
+
+    @Test
     fun connect_success_returns_parsed_result() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 192.168.1.50:5555", ""))

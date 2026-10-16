@@ -1,5 +1,6 @@
 package com.adbgui.core.device
 
+import com.adbgui.core.adb.AdbProcessResult
 import com.adbgui.core.adb.CommandRunner
 import com.adbgui.core.adb.FakeAdbProcessRunner
 import com.adbgui.core.domain.AdbBinary
@@ -13,6 +14,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class LogcatControllerTest {
@@ -83,6 +85,40 @@ class LogcatControllerTest {
         advanceUntilIdle()  // clear() routes through serialDispatcher (eventual) — let it complete
         assertEquals(0, c.lines.value.size)
         c.stop()
+    }
+
+    @Test fun clear_also_clears_device_logd_ring() = runTest {
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        runner.whenArgsContains(listOf("logcat", "-c"), AdbProcessResult(0, "", ""))
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        c.clear()
+        advanceUntilIdle()
+        // The clear button must clear the on-device logd ring too — otherwise a fresh
+        // logcat stream/record replays the entire hidden backlog (1M+ lines).
+        assertTrue(runner.runs.any { it.containsAll(listOf("-s", "abc", "logcat", "-c")) })
+        c.stop()
+    }
+
+    @Test fun clear_device_failure_still_clears_view_and_surfaces_error() = runTest {
+        val runner = FakeAdbProcessRunner(); runner.setStreamLines(listOf(line1))
+        // no script matches `logcat -c` → default exit 1 (device offline / clear failed)
+        val c = controller(runner, this)
+        c.start("abc"); advanceUntilIdle()
+        assertEquals(1, c.lines.value.size)
+        c.clear()
+        advanceUntilIdle()
+        assertEquals(0, c.lines.value.size)   // in-memory view still cleared (best-effort device clear)
+        assertNotNull(c.error.value)          // failure surfaced inline, not swallowed
+        c.stop()
+    }
+
+    @Test fun clear_without_device_skips_device_clear() = runTest {
+        val runner = FakeAdbProcessRunner()
+        val c = controller(runner, this)
+        c.clear()
+        advanceUntilIdle()
+        assertTrue(runner.runs.isEmpty())     // no serial tracked → no adb command issued
     }
 
     @Test fun stop_resets_status_to_idle() = runTest {
