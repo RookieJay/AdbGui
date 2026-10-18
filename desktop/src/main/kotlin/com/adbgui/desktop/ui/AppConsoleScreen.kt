@@ -6,7 +6,10 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -71,7 +75,11 @@ import java.io.File
  * Start/Stop/Restart/Clear/Uninstall and a collapsible "Advanced" section hosting
  * `am start`, broadcast, and provider query. Errors/results shown via [SelectableText].
  */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
+@OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+    androidx.compose.ui.ExperimentalComposeUiApi::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 @Composable
 fun AppConsoleScreen(
     vm: AppConsoleViewModel,
@@ -160,51 +168,94 @@ fun AppConsoleScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // --- Toolbar: title + search left; refresh/install right (install is the only
-            // filled CTA — refresh is secondary so it stays outlined) ---
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(Strings.t("app_console"), style = MaterialTheme.typography.h6)
-                Spacer(Modifier.width(12.dp))
-                SearchField(
-                    value = search,
-                    onValueChange = { search = it },
-                    placeholder = Strings.t("text_search"),
-                    modifier = Modifier.width(220.dp),
-                )
-                Spacer(Modifier.width(12.dp))
-                Checkbox(checked = showSystemApps, onCheckedChange = { showSystemApps = it })
-                Text(Strings.t("show_system_apps"), style = MaterialTheme.typography.body2)
-                Spacer(Modifier.weight(1f))
-                if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(enabled = !busy, onClick = { vm.load() }) { Text(Strings.t("refresh")) }
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    enabled = !busy,
-                    onClick = {
-                        val chosen = com.adbgui.desktop.platform.FileDialogs.pickFiles(
-                            title = Strings.t("select_apk"),
-                            filePattern = "*.apk",
+            // filled CTA — refresh is secondary so it stays outlined). One Row only fits
+            // ~700dp of fixed content (search alone is 220dp); below 800dp it overflows and
+            // Compose clips the trailing buttons off-window — stack two rows instead
+            // (same BoxWithConstraints idiom as DeviceOverviewScreen). ---
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val refreshButton = @Composable {
+                    OutlinedButton(enabled = !busy, onClick = { vm.load() }) { Text(Strings.t("refresh")) }
+                }
+                val installButton = @Composable {
+                    Button(
+                        enabled = !busy,
+                        onClick = {
+                            val chosen = com.adbgui.desktop.platform.FileDialogs.pickFiles(
+                                title = Strings.t("select_apk"),
+                                filePattern = "*.apk",
+                            )
+                            if (chosen != null && chosen.isNotEmpty()) {
+                                vm.install(chosen, InstallFlags(reinstall, allowTest, downgrade, grantPerms))
+                            }
+                        },
+                    ) { Text(Strings.t("install_apk")) }
+                }
+                if (maxWidth >= 800.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(Strings.t("app_console"), style = MaterialTheme.typography.h6)
+                        Spacer(Modifier.width(12.dp))
+                        SearchField(
+                            value = search,
+                            onValueChange = { search = it },
+                            placeholder = Strings.t("text_search"),
+                            modifier = Modifier.width(220.dp),
                         )
-                        if (chosen != null && chosen.isNotEmpty()) {
-                            vm.install(chosen, InstallFlags(reinstall, allowTest, downgrade, grantPerms))
+                        Spacer(Modifier.width(12.dp))
+                        Checkbox(checked = showSystemApps, onCheckedChange = { showSystemApps = it })
+                        Text(Strings.t("show_system_apps"), style = MaterialTheme.typography.body2)
+                        Spacer(Modifier.weight(1f))
+                        if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        refreshButton()
+                        Spacer(Modifier.width(8.dp))
+                        installButton()
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(Strings.t("app_console"), style = MaterialTheme.typography.h6)
+                            Spacer(Modifier.width(12.dp))
+                            SearchField(
+                                value = search,
+                                onValueChange = { search = it },
+                                placeholder = Strings.t("text_search"),
+                                modifier = Modifier.weight(1f).widthIn(min = 140.dp),
+                            )
                         }
-                    },
-                ) { Text(Strings.t("install_apk")) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = showSystemApps, onCheckedChange = { showSystemApps = it })
+                            Text(Strings.t("show_system_apps"), style = MaterialTheme.typography.body2)
+                            Spacer(Modifier.weight(1f))
+                            if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            refreshButton()
+                            Spacer(Modifier.width(8.dp))
+                            installButton()
+                        }
+                    }
+                }
             }
 
             // Install flags row — mirrors adb install switches; passed to both picker and drop installs.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = reinstall, onCheckedChange = { reinstall = it })
-                Text(Strings.t("flag_reinstall"))
-                Spacer(Modifier.width(8.dp))
-                Checkbox(checked = allowTest, onCheckedChange = { allowTest = it })
-                Text(Strings.t("flag_allow_test"))
-                Spacer(Modifier.width(8.dp))
-                Checkbox(checked = downgrade, onCheckedChange = { downgrade = it })
-                Text(Strings.t("flag_downgrade"))
-                Spacer(Modifier.width(8.dp))
-                Checkbox(checked = grantPerms, onCheckedChange = { grantPerms = it })
-                Text(Strings.t("flag_grant_perms"))
+            // FlowRow so the flags wrap instead of clipping when the window is narrow (RemoteScreen
+            // idiom); each checkbox+label pair is a Row so a wrap can never split them.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = reinstall, onCheckedChange = { reinstall = it })
+                    Text(Strings.t("flag_reinstall"))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = allowTest, onCheckedChange = { allowTest = it })
+                    Text(Strings.t("flag_allow_test"))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = downgrade, onCheckedChange = { downgrade = it })
+                    Text(Strings.t("flag_downgrade"))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = grantPerms, onCheckedChange = { grantPerms = it })
+                    Text(Strings.t("flag_grant_perms"))
+                }
             }
 
             // Drop zone: visible affordance that the whole screen accepts APK drops.

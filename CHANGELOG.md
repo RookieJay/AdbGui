@@ -3,6 +3,15 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-18 应用页两处布局修复（busy 圆圈错位 / 小窗按钮被裁）
+
+用户反馈两件事：① busy 小圆圈位置"奇怪"；② 小窗模式下右侧刷新/安装按钮完全看不到。
+
+- **busy 圆圈错位**：Material `CircularProgressIndicator` 内部链是 `modifier.progressSemantics().size(40.dp)`（内部默认 40dp 挂在用户 modifier 内层）。原代码 `heightIn(max = 18.dp)` 只压了高度 → 实际占位 **40×18**，可见的 14dp 圆圈画在 40dp 盒子正中、左右各 ~11dp 隐形空白，视觉上向左漂且离刷新按钮间距异常；busy 切换时整行还额外多/少 40dp 宽度造成按钮跳动。改为 `size(18.dp)`（与本文件下方及 FileExplorerScreen 的兄弟写法一致）。依据为 material-desktop 1.7.3 jar 反汇编确认的 `CircularIndicatorDiameter = 40.dp`，非猜测。
+- **小窗按钮被裁**：根因有两层——主窗口无最小尺寸约束（`Main.kt` 裸 `Window`）；应用页工具栏是单个 `Row`，标题 + 固定 220dp 搜索框 + 系统应用开关 + 两个按钮 ≈ 700dp 固定最小宽度，而可用宽度 = 窗口 − 280dp 固定侧栏 − 32dp 内边距，Compose Row 不换行不滚动，溢出子元素直接被裁。修复沿用项目已有 idiom：工具栏套 `BoxWithConstraints`（同 `DeviceOverviewScreen`）——≥800dp 维持原单行布局不变，窄窗拆两行（上行标题 + `weight` 可伸缩搜索框，下行系统应用开关 + 右对齐刷新/安装，按钮恒可见）；刷新/安装按钮体提取为局部 `@Composable` 复用，两个分支共享一份实现。安装 flags 行改 `FlowRow`（同 `RemoteScreen`，需 `@OptIn(ExperimentalLayoutApi)`）：宽窗仍一行，窄窗自动换行，每个 checkbox+文字用内嵌 Row 绑定防拆对。
+- 纯布局修复，无 VM/`:core` 变化，无新增单测（项目约定 Compose 快照测试按需）；`:desktop:compileKotlin` 通过 + 真机窗口拖窄人工验证。
+- 已知边界：280dp 侧栏固定宽，窗口 < ~680px 时内容区仍然很挤（侧栏收窄/可折叠属另一话题，未在本次处理）。
+
 ## v2 — 2026-10-16 清除按钮真正清设备 logd 缓冲区（logcat -c）
 
 用户反馈：日志页点「清除」多次后开始手动录制，行数仍瞬间飞涨到 1M+。根因：`LogcatController.clear()` 只清了 App 内存里的 ring/filtered 视图，从未执行 `adb logcat -c`——设备 logd 环形缓冲区纹丝不动；而手动录制（`LogcatRecorder`）与实时流走的是裸 `logcat`（不带 `-d` 会先把设备缓冲区全部积压行吐出再跟流），于是 1M+ 积压一口气灌进录制文件。确认弹框文案「将清空当前缓冲区」也名不副实。
