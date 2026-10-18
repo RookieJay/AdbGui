@@ -174,7 +174,7 @@ fun AppConsoleScreen(
                 Checkbox(checked = showSystemApps, onCheckedChange = { showSystemApps = it })
                 Text(Strings.t("show_system_apps"), style = MaterialTheme.typography.body2)
                 Spacer(Modifier.weight(1f))
-                if (busy) CircularProgressIndicator(modifier = Modifier.heightIn(max = 18.dp))
+                if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 OutlinedButton(enabled = !busy, onClick = { vm.load() }) { Text(Strings.t("refresh")) }
                 Spacer(Modifier.width(8.dp))
