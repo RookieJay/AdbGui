@@ -21,6 +21,8 @@ data class DeviceHistoryEntry(
     val lastConnectedAt: Long? = null,
     val lastUsedAt: Long? = null,
     val tag: String? = null,
+    /** 设备真实 serial（getprop ro.serialno），跨端口/USB/无线的稳定身份。spec 2026-10-23 §4.4。 */
+    val deviceId: String? = null,
 )
 
 class DeviceHistoryStore(
@@ -94,6 +96,50 @@ class DeviceHistoryStore(
     }
 
     suspend fun remove(serial: String) = mutate { entries -> entries.filterNot { it.serial == serial } }
+
+    /** spec §4.4 合并规则：deviceId 相同 / serial==deviceId / 同 IP 无 deviceId 残留 → 并为一条。
+     *  返回被移除的旧条目（调用方 INFO 记账）。带非空且不同 alias 的同 IP 条目保留不动。 */
+    suspend fun mergeOnConnect(
+        deviceId: String,
+        serial: String,
+        type: DeviceType,
+        wirelessIp: String?,
+        wirelessPort: Int?,
+    ): List<DeviceHistoryEntry> {
+        var removed: List<DeviceHistoryEntry> = emptyList()
+        mutate { entries ->
+            val group = entries.filter { it.deviceId == deviceId || it.serial == serial || it.serial == deviceId }
+            // 同 IP 残留：无 deviceId、形如 "ip:port"、alias 为空的旧无线条目
+            val staleSameIp = wirelessIp?.let { ip ->
+                entries.filter { it !in group && it.deviceId == null && it.serial != serial && it.serial.startsWith("$ip:") && it.alias == null }
+            } ?: emptyList()
+            removed = group.filter { it.serial != serial } + staleSameIp
+            val kept = entries.filterNot { it in group || it in staleSameIp }
+            if (group.isEmpty() && staleSameIp.isEmpty()) {
+                kept + DeviceHistoryEntry(
+                    serial = serial, type = type, wirelessIp = wirelessIp, wirelessPort = wirelessPort,
+                    deviceId = deviceId, lastConnectedAt = clock(), lastUsedAt = clock(),
+                )
+            } else {
+                val current = group.firstOrNull { it.serial == serial } ?: staleSameIp.firstOrNull()
+                val alias = current?.alias ?: group.firstNotNullOfOrNull { it.alias } ?: staleSameIp.firstNotNullOfOrNull { it.alias }
+                val tag = current?.tag ?: group.firstNotNullOfOrNull { it.tag } ?: staleSameIp.firstNotNullOfOrNull { it.tag }
+                val anyWireless = (group + staleSameIp).any { it.type == DeviceType.WIRELESS } || type == DeviceType.WIRELESS
+                kept + DeviceHistoryEntry(
+                    serial = serial,
+                    alias = alias,
+                    type = if (anyWireless) DeviceType.WIRELESS else type,
+                    wirelessIp = wirelessIp,
+                    wirelessPort = wirelessPort,
+                    lastConnectedAt = clock(),
+                    lastUsedAt = clock(),
+                    tag = tag,
+                    deviceId = deviceId,
+                )
+            }
+        }
+        return removed
+    }
 
     private suspend fun mutate(transform: (List<DeviceHistoryEntry>) -> List<DeviceHistoryEntry>) =
         withContext(io) {

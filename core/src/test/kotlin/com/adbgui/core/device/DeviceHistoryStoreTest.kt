@@ -183,4 +183,60 @@ class DeviceHistoryStoreTest {
         store.renameTag("lab", "   ")
         assertEquals("lab", store.load().first().tag)
     }
+
+    @Test
+    fun mergeOnConnect_merges_entries_with_same_deviceId_and_keeps_alias() = runTest {
+        val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        // 旧端口条目：曾经的连接已学到 deviceId（规则 1 的前置状态）
+        store.mergeOnConnect("af199bb4", "10.0.5.221:38897", DeviceType.WIRELESS, "10.0.5.221", 38897)
+        store.setAlias("10.0.5.221:38897", "我的手机")
+        // 端口漂移后 adb server 自动连上产生的新条目（无 deviceId）
+        store.upsert("10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        val removed = store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        val entries = store.load()
+        assertEquals(1, entries.size)
+        assertEquals("10.0.5.221:37751", entries[0].serial)
+        assertEquals("af199bb4", entries[0].deviceId)
+        assertEquals("我的手机", entries[0].alias)
+        assertEquals(37751, entries[0].wirelessPort)
+        assertEquals(listOf("10.0.5.221:38897"), removed.map { it.serial })
+    }
+
+    @Test
+    fun mergeOnConnect_merges_usb_entry_with_same_serial_as_deviceId() = runTest {
+        val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        store.upsert("af199bb4", DeviceType.USB, null, null)
+        store.upsert("10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        val entries = store.load()
+        assertEquals(1, entries.size)
+        assertEquals("10.0.5.221:37751", entries[0].serial)
+        assertEquals(DeviceType.WIRELESS, entries[0].type)
+        assertEquals("af199bb4", entries[0].deviceId)
+    }
+
+    @Test
+    fun mergeOnConnect_keeps_stale_same_ip_entry_with_different_alias() = runTest {
+        val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        store.upsert("10.0.5.221:38897", DeviceType.WIRELESS, "10.0.5.221", 38897)
+        store.setAlias("10.0.5.221:38897", "另一个设备的别名")
+        store.upsert("10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        assertEquals(2, store.load().size)
+    }
+
+    @Test
+    fun mergeOnConnect_creates_entry_when_group_empty() = runTest {
+        val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+        val e = store.load().single()
+        assertEquals("af199bb4", e.deviceId)
+        assertEquals(1000L, e.lastConnectedAt)
+    }
 }
