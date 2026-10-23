@@ -1,0 +1,7 @@
+来源：Android 13 phone (adbd wireless debugging, IP 10.0.5.221, model PJD110, api=36)
+      注：原计划录制 TCL TV (192.168.88.240) 的 adb-unidentified._adb._tcp 报文，但 TV 关机。
+      退而求其次捕获当前在线 phone 的 _adb-tls-connect._tcp 响应报文，仍为真实 mDNS 报文。
+采集：2026-10-23，PowerShell UDP 单播查询 10.0.5.221:5353 触发响应后抓取（组播监听 3 分钟无响应包）
+方法：向 phone 的 5353 端口发送 _adb-tls-connect._tcp.local PTR 查询（带 QU bit），收到 279 字节应答
+内容：2 条 PTR 应答（adb-af199bb4-rY5hPZ 与 adb-af199bb4-rY5hPZ (2)），
+      对应 SRV (port 40709 / 44731) + TXT (api=36, name=PJD110, v=1) + A (10.0.5.221) + AAAA 记录
