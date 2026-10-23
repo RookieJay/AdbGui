@@ -74,22 +74,8 @@ class DeviceRepository(
     }
 
     private suspend fun recompute(live: List<DeviceSnapshot>) {
-        val hist = history.load().associateBy { it.serial }
-        val merged = (live.map { it.serial } + hist.keys).distinct().map { serial ->
-            val snap = live.firstOrNull { it.serial == serial }
-            val h = hist[serial]
-            DeviceView(
-                serial = serial,
-                status = snap?.status ?: DeviceStatus.OFFLINE,
-                alias = h?.alias,
-                type = h?.type,
-                wirelessIp = h?.wirelessIp,
-                wirelessPort = h?.wirelessPort,
-                lastConnectedAt = h?.lastConnectedAt,
-                lastUsedAt = h?.lastUsedAt,
-                tag = h?.tag,
-            )
-        }
+        val hist = history.load()
+        val merged = DeviceMerge.merge(live, hist)
         _devices.value = merged
         val onlineSerials = merged.filter { it.isLive }.map { it.serial }.toSet()
         val launchNaming = namingMutex.withLock {
