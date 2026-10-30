@@ -196,7 +196,13 @@ class DeviceRepository(
                             val entry = history.load().firstOrNull { it.serial == serial }
                             if (entry != null && entry.deviceId == null) {
                                 learnDeviceId(serial)?.let { did ->
-                                    val removed = history.mergeOnConnect(did, serial, DeviceType.WIRELESS, entry.wirelessIp, entry.wirelessPort)
+                                    // The entry may be a bare one born from setAlias (no
+                                    // wirelessIp/port). Fall back to the ip:port serial so the
+                                    // merged entry keeps an address (WirelessReconnector filters
+                                    // on ip != null) and the same-IP stale merge can fire.
+                                    val ip = entry.wirelessIp ?: serial.substringBefore(':')
+                                    val port = entry.wirelessPort ?: serial.substringAfter(':').toIntOrNull()
+                                    val removed = history.mergeOnConnect(did, serial, DeviceType.WIRELESS, ip, port)
                                     removed.forEach { logger.info("history: merged duplicate entry ${it.serial} into deviceId=$did (lazy learn)") }
                                     recompute(tracker.devices.value)
                                 }

@@ -496,4 +496,36 @@ class DeviceRepositoryTest {
         assertEquals("af199bb4", entry.deviceId)
         repo.stop()
     }
+
+    @Test
+    fun lazy_learn_merges_bare_setAlias_entry_with_ip_port_from_serial() = runTest {
+        // Real-world sequence (observed live 2026-10-30): adb server auto-connects a NEW
+        // ip:port serial with NO history entry. recompute → autoName → setAlias creates a
+        // BARE entry (no wirelessIp/port). The lazy deviceId learn then called mergeOnConnect
+        // with entry.wirelessIp (null) — leaving the entry without an address (skipped by
+        // WirelessReconnector's ip!=null filter) and disabling the same-IP stale merge.
+        // Fix: derive ip/port from the ip:port serial when the entry lacks them.
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(DeviceSnapshot("10.0.5.221:37751", DeviceStatus.ONLINE)))
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("mdns-bare"), clock = { 0L }, io = Dispatchers.Unconfined)
+        // Stale same-IP pile from earlier ports (what the merge should clean up).
+        history.upsert("10.0.5.221:38897", DeviceType.WIRELESS, "10.0.5.221", 38897)
+        history.setAlias("10.0.5.221:38897", "OnePlus PJD110")
+
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("getprop", "ro.serialno"), AdbProcessResult(0, "af199bb4\r\n", ""))
+        runner.whenArgsContains(listOf("getprop"), getpropResult("OnePlus", "PJD110"))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+
+        waitUntil { history.load().firstOrNull { it.deviceId == "af199bb4" } != null }
+        val entries = history.load()
+        val merged = entries.first { it.deviceId == "af199bb4" }
+        assertEquals("10.0.5.221:37751", merged.serial)
+        assertEquals("10.0.5.221", merged.wirelessIp, "ip must be derived from the ip:port serial")
+        assertEquals(37751, merged.wirelessPort, "port must be derived from the ip:port serial")
+        assertEquals(1, entries.size, "stale same-IP entry must be merged away in the same pass")
+        repo.stop()
+    }
 }
