@@ -303,6 +303,52 @@ class DeviceRepositoryTest {
     }
 
     @Test
+    fun connectWireless_learns_deviceId_and_merges_stale_same_ip_entries() = runTest {
+        // After a successful wireless connect, the repo must query `getprop ro.serialno`
+        // to learn the stable deviceId, then call history.mergeOnConnect so stale same-IP
+        // entries (no deviceId, different port) collapse into one.
+        val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
+        val history = DeviceHistoryStore(Files.createTempDirectory("rep-learn"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        // Pre-seed stale same-IP entry (no deviceId, older port)
+        history.upsert("10.0.5.221:38897", DeviceType.WIRELESS, "10.0.5.221", 38897)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 10.0.5.221:37751", ""))
+        // pty adds \r; sanitize strips it, then implementation must .trim() the trailing \n.
+        runner.whenArgsContains(listOf("getprop", "ro.serialno"), AdbProcessResult(0, "af199bb4\r\n", ""))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        val r = repo.connectWireless("10.0.5.221", 37751)
+        assertTrue(r.success)
+        val entries = history.load()
+        assertEquals(1, entries.size, "stale same-IP entry must be merged away")
+        val h = entries.first()
+        assertEquals("10.0.5.221:37751", h.serial)
+        assertEquals("af199bb4", h.deviceId)
+        repo.stop()
+    }
+
+    @Test
+    fun connectWireless_serialno_failure_degrades_to_plain_upsert() = runTest {
+        // If `getprop ro.serialno` fails (unauthorized / offline race), the connect must
+        // still succeed — history is written via plain upsert (no merge), deviceId stays null.
+        val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
+        val history = DeviceHistoryStore(Files.createTempDirectory("rep-degrade"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 10.0.5.221:37751", ""))
+        runner.whenArgsContains(listOf("getprop", "ro.serialno"), AdbProcessResult(1, "", "error"))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        val r = repo.connectWireless("10.0.5.221", 37751)
+        assertTrue(r.success)
+        val entries = history.load()
+        assertEquals(1, entries.size)
+        val h = entries.first()
+        assertEquals("10.0.5.221:37751", h.serial)
+        assertEquals(null, h.deviceId, "getprop failure must not block the connect — deviceId stays null")
+        repo.stop()
+    }
+
+    @Test
     fun renameTag_renames_tag_on_all_devices_and_merges_into_existing() = runTest {
         // "a" and "b" wear "lab"; "c" already wears "desk". Renaming lab→desk must move both
         // into "desk" in one write — the per-device setTag race clearTag guards against applies

@@ -164,7 +164,13 @@ class DeviceRepository(
         val r = commands.connect(ip, port)
         if (r.success) {
             val serial = "$ip:$port"
-            history.upsert(serial = serial, type = DeviceType.WIRELESS, wirelessIp = ip, wirelessPort = port)
+            val deviceId = learnDeviceId(serial)
+            if (deviceId != null) {
+                val removed = history.mergeOnConnect(deviceId, serial, DeviceType.WIRELESS, ip, port)
+                removed.forEach { logger.info("history: merged duplicate entry ${it.serial} into deviceId=$deviceId") }
+            } else {
+                history.upsert(serial = serial, type = DeviceType.WIRELESS, wirelessIp = ip, wirelessPort = port)
+            }
             // A successful connect counts as "use" for MRU sort.
             history.touchLastUsed(serial)
             recompute(tracker.devices.value)
@@ -173,6 +179,20 @@ class DeviceRepository(
             namingScope.launch { autoName(serial) }
         }
         return r
+    }
+
+    /** `getprop ro.serialno` → stable cross-port deviceId. Returns null on any failure
+     *  (unauthorized / offline race / empty / suspicious value) — never blocks the connect
+     *  success path. Sanity-checks: non-empty, no whitespace (would break serial parsing),
+     *  length ≤ 32 (real serials are 8–16 chars; anything longer is garbage). */
+    private suspend fun learnDeviceId(serial: String): String? = try {
+        val v = commands.runShellCmd(serial, "getprop ro.serialno").trim()
+        if (v.isNotEmpty() && !v.contains(' ') && v.length <= 32) v else null
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        logger.debug("deviceId learn failed for $serial: ${e.message}")
+        null
     }
 
     suspend fun pair(ip: String, port: Int, code: String): com.adbgui.core.domain.PairResult {
