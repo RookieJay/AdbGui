@@ -7,6 +7,7 @@ import com.adbgui.core.domain.ConnectFailureReason
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceGroupBy
 import com.adbgui.core.domain.DeviceView
+import com.adbgui.core.domain.MdnsService
 import com.adbgui.core.domain.PairResult
 import com.adbgui.core.settings.Settings
 import com.adbgui.desktop.ui.i18n.Strings
@@ -63,6 +64,13 @@ class DeviceListViewModel(
 
     /** The raw device list (still useful for callers that need devices without group headers). */
     val devices: StateFlow<List<DeviceView>> = repo.devices
+
+    /**
+     * mDNS-discovered adb services, transparently forwarded from the repo for the ConnectDialog
+     * to render. Kept as a direct reference (no stateIn) so the VM stays trivially testable
+     * under `runTest` — no sharing coroutine, no UncompletedCoroutinesError.
+     */
+    val discovered: StateFlow<List<MdnsService>> = repo.discovered
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     private val _busy = MutableStateFlow(false)

@@ -298,6 +298,24 @@ class DeviceListViewModelTest {
     }
 
     @Test
+    fun discovered_forwards_repo_state_flow() = runTest {
+        // VM.discovered must transparently expose repo.discovered (no stateIn wrapping,
+        // no separate sharing coroutine). Asserting identity — the VM just assigns the
+        // repo's StateFlow reference, so both sides always emit the same list.
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(emptyList<DeviceSnapshot>())
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("disc"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        val vm = DeviceListViewModel(repo, this, MutableStateFlow(com.adbgui.core.settings.Settings()))
+        kotlin.test.assertSame(repo.discovered, vm.discovered, "vm.discovered must be the same StateFlow as repo.discovered")
+        assertEquals(emptyList(), vm.discovered.value)
+        repo.stop()
+    }
+
+    @Test
     fun renameTag_updates_tag_groups_in_items_flow() = runTest {
         val tracker = object : IDeviceTracker {
             override val devices = MutableStateFlow(listOf(

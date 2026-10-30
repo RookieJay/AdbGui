@@ -92,6 +92,8 @@ object Strings {
         "delete" to "删除",
         // Connect dialog
         "connect_title" to "连接设备",
+        "connect_discovered_title" to "发现的设备",
+        "connect_discovered_connect" to "连接",
         "ip_address" to "IP 地址",
         "port" to "端口",
         "connect" to "连接",
@@ -578,6 +580,8 @@ object Strings {
         "delete" to "Delete",
         // Connect dialog
         "connect_title" to "Connect to device",
+        "connect_discovered_title" to "Discovered devices",
+        "connect_discovered_connect" to "Connect",
         "ip_address" to "IP address",
         "port" to "Port",
         "connect" to "Connect",
