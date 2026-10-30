@@ -347,4 +347,137 @@ class DeviceListViewModelTest {
         )
         job.cancel(); repo.stop()
     }
+
+    // --------------------------------------------------------------------------------------------
+    // Port-stale inline port-update (Task 12)
+    // --------------------------------------------------------------------------------------------
+
+    /**
+     * Helper: build a VM wired to a [FakeAdbProcessRunner] scripted to return a PORT_STALE
+     * connect failure (matches the existing `connect_failure_port_stale_shows_actionable_hint`
+     * fixture — "Connection refused" → PORT_STALE via [com.adbgui.core.adb.ConnectResultParser]).
+     */
+    private class PortStaleFixture(val runner: FakeAdbProcessRunner, val vm: DeviceListViewModel, val repo: DeviceRepository)
+
+    private fun runTestWithPortStaleFixture(
+        block: suspend kotlinx.coroutines.test.TestScope.(PortStaleFixture) -> Unit,
+    ) = runTest {
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(emptyList<DeviceSnapshot>())
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("portstale"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(
+            listOf("connect"),
+            AdbProcessResult(1, "failed to connect to 10.0.5.221:38897", "cannot connect to 10.0.5.221:38897: Connection refused"),
+        )
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        val vm = DeviceListViewModel(repo, this, MutableStateFlow(com.adbgui.core.settings.Settings()))
+        block(PortStaleFixture(runner, vm, repo))
+    }
+
+    @Test
+    fun reconnect_port_stale_sets_portUpdate() = runTestWithPortStaleFixture { fx ->
+        // TDD RED: before implementation, portUpdate stays null after a PORT_STALE reconnect.
+        fx.vm.reconnect("10.0.5.221", 38897)
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline && fx.vm.portUpdate.value == null) {
+            advanceUntilIdle()
+            if (fx.vm.portUpdate.value != null) break
+            Thread.sleep(50)
+        }
+        val upd = fx.vm.portUpdate.value
+        assertNotNull(upd, "PORT_STALE reconnect should surface a PortUpdate prompt")
+        assertEquals("10.0.5.221", upd.ip)
+        assertEquals(38897, upd.stalePort)
+        assertEquals("10.0.5.221:38897", upd.deviceSerial)
+        fx.repo.stop()
+    }
+
+    @Test
+    fun submitPortUpdate_clears_and_retries_connect() = runTestWithPortStaleFixture { fx ->
+        // First trigger PORT_STALE so the prompt appears.
+        fx.vm.reconnect("10.0.5.221", 38897)
+        val deadline1 = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline1 && fx.vm.portUpdate.value == null) {
+            advanceUntilIdle()
+            if (fx.vm.portUpdate.value != null) break
+            Thread.sleep(50)
+        }
+        assertNotNull(fx.vm.portUpdate.value, "precondition: PORT_STALE prompt should be up")
+        val connectsBefore = fx.runner.runs.count { args -> args.any { it.contains("connect") } }
+        // User enters the new port shown on the phone's Wireless debugging screen.
+        fx.vm.submitPortUpdate(37751)
+        // Wait for BOTH: the prompt to clear AND the new connect to land in the runner.
+        // submitPortUpdate clears the prompt synchronously, then fires an async connect — so
+        // waiting for portUpdate==null alone races the second connect.
+        val deadline2 = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline2) {
+            advanceUntilIdle()
+            val connectsNow = fx.runner.runs.count { args -> args.any { it.contains("connect") } }
+            if (fx.vm.portUpdate.value == null && connectsNow > connectsBefore) break
+            Thread.sleep(50)
+        }
+        assertEquals(null, fx.vm.portUpdate.value, "submitPortUpdate should clear the prompt")
+        // And the VM should have kicked off a fresh connect to the new port. The scripted
+        // response is still PORT_STALE, so this second attempt will also fail — but that's
+        // fine for this test; we only assert a new connect was attempted.
+        val connectsAfter = fx.runner.runs.count { args -> args.any { it.contains("connect") } }
+        assertTrue(connectsAfter > connectsBefore, "submitPortUpdate should trigger a new connect attempt")
+        // The new connect must target the new port (37751), not the stale one.
+        val lastConnectArgs = fx.runner.runs.last { it.any { a -> a.contains("connect") } }
+        assertTrue(lastConnectArgs.any { it.contains("37751") }, "new connect should target the new port, got: $lastConnectArgs")
+        fx.repo.stop()
+    }
+
+    @Test
+    fun reconnect_unreachable_does_not_set_portUpdate() = runTest {
+        // UNREACHABLE (device off / wrong IP) should NOT trigger the port-update prompt —
+        // typing a new port won't help if the device isn't on the network.
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(emptyList<DeviceSnapshot>())
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("unreach"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(
+            listOf("connect"),
+            AdbProcessResult(1, "failed to connect to 10.0.5.221:5555", "cannot connect to 10.0.5.221:5555: Connection timed out"),
+        )
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        val vm = DeviceListViewModel(repo, this, MutableStateFlow(com.adbgui.core.settings.Settings()))
+        var errorSeen: String? = null
+        val errJob = launch { vm.error.collect { errorSeen = it } }
+        vm.reconnect("10.0.5.221", 5555)
+        // Wait for the error to appear (confirms reconnect ran to completion).
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline && errorSeen == null) {
+            advanceUntilIdle()
+            if (errorSeen != null) break
+            Thread.sleep(50)
+        }
+        assertNotNull(errorSeen, "UNREACHABLE reconnect should still surface an error")
+        // The error text preserves the raw adb failure (reasonText from the parser → "Connection timed out"),
+        // confirming this was classified as UNREACHABLE (vs PORT_STALE which would say "Connection refused").
+        assertTrue(errorSeen!!.contains("timed out"), "error should carry the timed-out adb text, got: $errorSeen")
+        // Key invariant: portUpdate stays null for UNREACHABLE (only PORT_STALE triggers it).
+        assertEquals(null, vm.portUpdate.value, "UNREACHABLE must NOT set portUpdate")
+        errJob.cancel(); repo.stop()
+    }
+
+    @Test
+    fun cancelPortUpdate_clears_prompt() = runTestWithPortStaleFixture { fx ->
+        fx.vm.reconnect("10.0.5.221", 38897)
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline && fx.vm.portUpdate.value == null) {
+            advanceUntilIdle()
+            if (fx.vm.portUpdate.value != null) break
+            Thread.sleep(50)
+        }
+        assertNotNull(fx.vm.portUpdate.value, "precondition: PORT_STALE prompt should be up")
+        fx.vm.cancelPortUpdate()
+        assertEquals(null, fx.vm.portUpdate.value, "cancelPortUpdate should dismiss the prompt")
+        fx.repo.stop()
+    }
 }

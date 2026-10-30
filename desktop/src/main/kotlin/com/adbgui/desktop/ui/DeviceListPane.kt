@@ -24,9 +24,11 @@ import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.AlertDialog
+import androidx.compose.material.Button
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
@@ -82,6 +84,7 @@ fun DeviceListPane(
     val allDevices by vm.devices.collectAsState()
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
+    val portUpdate by vm.portUpdate.collectAsState()
     val settings = settingsVm?.settings?.collectAsState()?.value ?: com.adbgui.core.settings.Settings()
     var groupMenuOpen by remember { mutableStateOf(false) }
     // Tag pending deletion (null = no dialog). Set by a tag-group header's context menu or the
@@ -247,6 +250,9 @@ fun DeviceListPane(
                                     device = item.view,
                                     selected = selected,
                                     existingTags = existingTags,
+                                    portUpdate = portUpdate,
+                                    onSubmitPortUpdate = { newPort -> vm.submitPortUpdate(newPort) },
+                                    onCancelPortUpdate = { vm.cancelPortUpdate() },
                                     onRename = { newAlias -> vm.setAlias(item.view.serial, newAlias) },
                                     onSetTag = { newTag -> vm.setTag(item.view.serial, newTag) },
                                     onForget = { vm.forget(item.view.serial) },
@@ -549,6 +555,9 @@ private fun DeviceRow(
     device: DeviceView,
     selected: String? = null,
     existingTags: List<String> = emptyList(),
+    portUpdate: PortUpdate? = null,
+    onSubmitPortUpdate: (Int) -> Unit = {},
+    onCancelPortUpdate: () -> Unit = {},
     onRename: (String?) -> Unit,
     onSetTag: (String?) -> Unit,
     onForget: () -> Unit,
@@ -671,6 +680,42 @@ private fun DeviceRow(
                         menuOpen = false
                         showForgetConfirm = true
                     }) { Text(Strings.t("forget")) }
+                }
+            }
+        }
+        // Inline port-update prompt — shown under the matching device row when `reconnect`
+        // failed with PORT_STALE. Lets the user type the new connect port (randomized on
+        // device reboot / wireless-debugging re-enable) and retry without opening the
+        // full connect dialog. Dismissable via the X button; auto-cleared on successful
+        // retry (the VM clears it from _portUpdate on submit).
+        if (portUpdate?.deviceSerial == device.serial) {
+            val upd = portUpdate
+            var newPort by remember(upd) { mutableStateOf("") }
+            Column(modifier = Modifier.padding(start = 32.dp, end = 12.dp, bottom = 4.dp)) {
+                Text(
+                    Strings.t("port_stale_hint"),
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.error,
+                )
+                Spacer(Modifier.size(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = newPort,
+                        onValueChange = { newPort = it.filter { c -> c.isDigit() }.take(5) },
+                        label = { Text(Strings.t("port_stale_new_port")) },
+                        singleLine = true,
+                        modifier = Modifier.width(120.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = { newPort.toIntOrNull()?.let(onSubmitPortUpdate) },
+                        enabled = newPort.length == 5,
+                    ) { Text(Strings.t("port_stale_reconnect")) }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = {
+                        newPort = ""
+                        onCancelPortUpdate()
+                    }) { Text(Strings.t("cancel")) }
                 }
             }
         }
