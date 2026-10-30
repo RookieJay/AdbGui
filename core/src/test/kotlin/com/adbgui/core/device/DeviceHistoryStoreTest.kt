@@ -235,6 +235,28 @@ class DeviceHistoryStoreTest {
     }
 
     @Test
+    fun mergeOnConnect_merges_stale_same_ip_entries_sharing_anchor_alias() = runTest {
+        val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        // 端口漂移历史堆积（真实数据形态）：多个同 IP 旧无线条目，autoName 给它们打了相同 alias
+        listOf(38897, 36487, 42191).forEach { port ->
+            store.upsert("10.0.5.221:$port", DeviceType.WIRELESS, "10.0.5.221", port)
+            store.setAlias("10.0.5.221:$port", "OnePlus PJD110")
+        }
+        // 新端口条目：上一次连接已学到 deviceId，autoName 已命名
+        store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+        store.setAlias("10.0.5.221:37751", "OnePlus PJD110")
+        // 再次连接（重连循环 / mDNS 自动连 / 重启后自动连）触发合并
+        val removed = store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        val entries = store.load()
+        assertEquals(1, entries.size)
+        assertEquals("10.0.5.221:37751", entries[0].serial)
+        assertEquals("af199bb4", entries[0].deviceId)
+        assertEquals("OnePlus PJD110", entries[0].alias)
+        assertEquals(3, removed.size)
+    }
+
+    @Test
     fun mergeOnConnect_creates_entry_when_group_empty() = runTest {
         val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
         store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)

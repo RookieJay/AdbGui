@@ -114,9 +114,12 @@ class DeviceHistoryStore(
         var removed: List<DeviceHistoryEntry> = emptyList()
         mutate { entries ->
             val group = entries.filter { it.deviceId == deviceId || it.serial == serial || it.serial == deviceId }
-            // 同 IP 残留：无 deviceId、形如 "ip:port"、alias 为空的旧无线条目
+            // 该设备已知的 alias（spec §4.4 规则 3 的"不同"比对基准）：以 serial 匹配条目优先，组内任一次之
+            val anchorAlias = group.firstOrNull { it.serial == serial }?.alias ?: group.firstNotNullOfOrNull { it.alias }
+            // 同 IP 残留：无 deviceId、形如 "ip:port"、alias 为空或与该设备已知 alias 相同（autoName 打的同名）
+            // 的旧无线条目。带"不同"非空 alias 的保留不动，交给用户手动删（宁可多显示也不静默错并）。
             val staleSameIp = wirelessIp?.let { ip ->
-                entries.filter { it !in group && it.deviceId == null && it.serial != serial && it.serial.startsWith("$ip:") && it.alias == null }
+                entries.filter { it !in group && it.deviceId == null && it.serial != serial && it.serial.startsWith("$ip:") && (it.alias == null || it.alias == anchorAlias) }
             } ?: emptyList()
             removed = group.filter { it.serial != serial } + staleSameIp
             val kept = entries.filterNot { it in group || it in staleSameIp }
