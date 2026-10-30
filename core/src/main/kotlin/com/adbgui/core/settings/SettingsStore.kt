@@ -69,6 +69,8 @@ data class Settings(
     val logcatRecordingsDir: String? = null,
     /** auto 录制总占用上限（MB）。超出删最旧 auto 文件；manual 永不自动删（spec 2026-10-10 D4）。 */
     val logcatRecordingMaxTotalMb: Int = 500,
+    /** 无线设备自动重连（应用启动时对保存的无线端点做指数退避重连）。 */
+    val autoReconnect: Boolean = true,
     /** Logcat 过滤条件（上一次会话的），spec 2026-10-14 D4。 */
     val logcatFilters: SavedLogcatFilters = SavedLogcatFilters(),
     val remoteButtons: List<RemoteButton> = listOf(

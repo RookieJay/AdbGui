@@ -105,6 +105,19 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun setAutoReconnect_persists() = runTest {
+        val dir = Files.createTempDirectory("auto-reconnect-vm")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val vm = SettingsViewModel(store, this)
+        vm.setAutoReconnect(false)
+        advanceUntilIdle()
+        assertEquals(false, store.state.value.autoReconnect)
+        vm.setAutoReconnect(true)
+        advanceUntilIdle()
+        assertEquals(true, store.state.value.autoReconnect)
+    }
+
+    @Test
     fun setCheckOnStartup_persists() = runTest {
         val dir = Files.createTempDirectory("check-on-startup")
         val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)

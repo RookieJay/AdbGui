@@ -254,6 +254,8 @@ object Strings {
         "logcat_rec_cap_set" to "上限已设为 %d MB",
         "logcat_rec_usage" to "已用 %s / 上限 %d MB",
         "record_stopped_dir_changed" to "录制目录已更改，录制已停止，文件已迁移",
+        // Wireless
+        "settings_auto_reconnect" to "无线设备自动重连",
         // System Ops
         "system_ops" to "系统操作",
         "nav_system_ops" to "系统操作",
@@ -738,6 +740,8 @@ object Strings {
         "logcat_rec_cap_set" to "Cap set to %d MB",
         "logcat_rec_usage" to "Used %s / cap %d MB",
         "record_stopped_dir_changed" to "Recordings folder changed — recording stopped, file migrated",
+        // Wireless
+        "settings_auto_reconnect" to "Auto-reconnect wireless devices",
         // System Ops
         "system_ops" to "System Ops",
         "nav_system_ops" to "System Ops",

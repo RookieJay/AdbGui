@@ -142,6 +142,21 @@ class SettingsStoreTest {
     }
 
     @Test
+    fun auto_reconnect_default_and_round_trip() = runTest {
+        val dir = Files.createTempDirectory("auto-reconnect")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        // Old-format JSON without autoReconnect key → default true
+        val oldJson = """{"logcatRingCap": 50000}"""
+        Files.writeString(dir.resolve("settings.json"), oldJson)
+        val loaded = store.load()
+        assertEquals(true, loaded.autoReconnect)
+        // Save with explicit false + reload → round-trips as false
+        store.save(loaded.copy(autoReconnect = false))
+        val reloaded = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined).load()
+        assertEquals(false, reloaded.autoReconnect)
+    }
+
+    @Test
     fun logcat_filters_roundtrip() = runTest {
         val dir = tmpDir()
         val store = SettingsStore(dir)

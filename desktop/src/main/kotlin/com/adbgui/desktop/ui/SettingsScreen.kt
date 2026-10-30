@@ -357,6 +357,16 @@ fun SettingsScreen(
                 SelectableText(it, style = MaterialTheme.typography.caption)
             }
 
+            // --- Wireless ---
+            Divider()
+            Text(Strings.t("settings_auto_reconnect"), style = MaterialTheme.typography.subtitle2)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = settings.autoReconnect,
+                    onCheckedChange = { vm.setAutoReconnect(it) },
+                )
+            }
+
             // --- ADB version (read-only, fetched on first composition) ---
             Divider()
             var adbVersion by remember { mutableStateOf<String?>(null) }

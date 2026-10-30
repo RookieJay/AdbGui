@@ -35,6 +35,7 @@ class SettingsViewModel(
     fun setDeviceGroupBy(mode: DeviceGroupBy) = scope.launch { store.update { it.copy(deviceGroupBy = mode) } }
     fun setLogcatRingCap(cap: Int) = scope.launch { store.update { it.copy(logcatRingCap = cap) } }
     fun setLogcatAutoRecord(b: Boolean) = scope.launch { store.update { it.copy(logcatAutoRecord = b) } }
+    fun setAutoReconnect(b: Boolean) = scope.launch { store.update { it.copy(autoReconnect = b) } }
     fun setLogcatRecordingsDir(path: String?) = scope.launch { store.update { it.copy(logcatRecordingsDir = path) } }
     fun setLogcatRecordingMaxTotalMb(mb: Int) = scope.launch { store.update { it.copy(logcatRecordingMaxTotalMb = mb) } }
 
