@@ -3,6 +3,7 @@ package com.adbgui.desktop.main
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,6 +57,10 @@ fun main() = application {
     remember { Strings.set(Locale.fromCode(settings.locale)) }
     // Start the adb tracker exactly once — start() spawns a track-devices stream each call.
     LaunchedEffect(Unit) { root.start() }
+    // Mirror start(): close the tracker/mdns socket/reconnector when the application exits
+    // so the multicast 5353 binding is released (otherwise the next launch may fail to bind
+    // until the OS reclaims the port).
+    DisposableEffect(Unit) { onDispose { root.stop() } }
     // Background update check on startup — silent: failures only persist to lastCheckError
     // (visible in settings); banner appears only if Available + not dismissed.
     LaunchedEffect(Unit) {
