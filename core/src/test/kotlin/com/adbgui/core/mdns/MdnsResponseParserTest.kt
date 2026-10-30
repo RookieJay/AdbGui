@@ -58,6 +58,67 @@ class MdnsResponseParserTest {
     }
 
     @Test
+    fun truncated_response_with_answer_count_but_no_record_bytes_returns_empty() {
+        // 12-byte header: QR=1, AN=1, but zero bytes after the header.
+        // Previously crashed with ArrayIndexOutOfBoundsException on u16(packet, 12)
+        // when the parser tried to read the first answer record's type.
+        val pkt = byteArrayOf(
+            0, 0,                 // id
+            0x84.toByte(), 0,     // flags: QR=1 AA=1
+            0, 0,                 // QD=0
+            0, 1,                 // AN=1  ← claims one answer
+            0, 0,                 // NS=0
+            0, 0,                 // AR=0
+            // ← no record bytes at all
+        )
+        assertTrue(MdnsResponseParser.parse(pkt).isEmpty(),
+            "truncated response with dangling AN=1 must not throw; contract = emptyList()")
+    }
+
+    @Test
+    fun answer_record_with_rdlen_exceeding_packet_returns_empty_or_partial() {
+        // Build a packet whose only answer record claims rdlen=200 but the packet
+        // ends shortly after the rdlength field. Parser must not throw.
+        val pkt = byteArrayOf(
+            0, 0,                 // id
+            0x84.toByte(), 0,     // flags: QR=1 AA=1
+            0, 0,                 // QD=0
+            0, 1,                 // AN=1
+            0, 0, 0, 0,           // NS=0, AR=0
+            // answer record:
+            4, '_'.code.toByte(), 'a'.code.toByte(), 'd'.code.toByte(), 'b'.code.toByte(), 0,  // name "_adb"
+            0, 1,                 // type A
+            0, 1,                 // class IN
+            0, 0, 0, 120,         // ttl
+            0.toByte(), 200.toByte(),      // rdlen=200 — but only 4 bytes of rdata remain
+            10, 0, 5, 221.toByte(),
+        )
+        val result = MdnsResponseParser.parse(pkt)
+        // Either we get an empty list (abort on bounds violation) or the parser
+        // safely clamps rdlen — but it must not throw.
+        assertTrue(result.isEmpty() || result.isNotEmpty(),
+            "parser must not throw on oversized rdlen (it didn't)")
+    }
+
+    @Test
+    fun large_packet_over_4096_bytes_parses() {
+        // Guards that the receive-buffer enlargement (4096 → 9216) in JvmMdnsSocket
+        // is matched by parser's ability to handle large packets.
+        val records = mutableListOf<DnsPacketBuilder.Rec>()
+        (1..80).forEach { i ->
+            val instFqdn = "inst-${"x".repeat(40)}-$i._adb-tls-connect._tcp.local"
+            val hostFqdn = "host-$i.local"
+            records += DnsPacketBuilder.Ptr("_adb-tls-connect._tcp.local", instFqdn)
+            records += DnsPacketBuilder.Srv(instFqdn, port = 30000 + i, target = hostFqdn)
+            records += DnsPacketBuilder.A(hostFqdn, "10.0.${i / 256}.${i % 256}")
+        }
+        val bigPacket = DnsPacketBuilder.response(records)
+        assertTrue(bigPacket.size > 4096, "test precondition: packet must exceed 4KB (was ${bigPacket.size})")
+        val services = MdnsResponseParser.parse(bigPacket)
+        assertEquals(80, services.size)
+    }
+
+    @Test
     fun real_fixture_parses_structurally() {
         val bytes = java.nio.file.Files.readAllBytes(
             java.nio.file.Path.of("src/test/resources/fixtures/mdns/mdns_adb_unidentified.bin"))

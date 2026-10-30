@@ -34,8 +34,7 @@ object DeviceMerge {
                 live.any { it.serial == e.serial && it.status == DeviceStatus.ONLINE }
             }
             val rep = onlineEntry
-                ?: entries.maxByOrNull { it.lastUsedAt ?: it.lastConnectedAt ?: 0L }
-                ?: entries.first()
+                ?: entries.maxByOrNull { it.lastUsedAt ?: it.lastConnectedAt ?: 0L }!!
             entries.forEach { liveCovered += it.serial }
             DeviceView(
                 serial = rep.serial,

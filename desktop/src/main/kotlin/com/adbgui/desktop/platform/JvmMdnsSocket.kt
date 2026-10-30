@@ -49,7 +49,8 @@ class JvmMdnsSocket : MdnsSocket {
     override suspend fun receive(timeoutMs: Int): ByteArray? = withContext(Dispatchers.IO) {
         runInterruptible {
             socket.soTimeout = timeoutMs
-            val buf = ByteArray(4096)
+            // mDNS with EDNS0 can reach ~9000 bytes; 9216 covers it with headroom.
+            val buf = ByteArray(9216)
             val p = DatagramPacket(buf, buf.size)
             try {
                 socket.receive(p)

@@ -3,6 +3,8 @@ package com.adbgui.core.device
 import com.adbgui.core.domain.DeviceType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -32,6 +34,9 @@ class DeviceHistoryStore(
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true; encodeDefaults = true }
     private val file get() = configDir.resolve("devices.json")
+    // Serializes all read-modify-writes on devices.json. WirelessReconnector / mDNS auto-connect /
+    // manual connect / autoName can all race; without the mutex a lost update drops an alias.
+    private val writeMutex = Mutex()
 
     suspend fun load(): List<DeviceHistoryEntry> = withContext(io) {
         if (!Files.exists(file)) emptyList()
@@ -142,12 +147,14 @@ class DeviceHistoryStore(
     }
 
     private suspend fun mutate(transform: (List<DeviceHistoryEntry>) -> List<DeviceHistoryEntry>) =
-        withContext(io) {
-            Files.createDirectories(configDir)
-            val current = if (Files.exists(file)) runCatching { json.decodeFromString(ListSerializer(DeviceHistoryEntry.serializer()), Files.readString(file)) }.getOrDefault(emptyList()) else emptyList()
-            val next = transform(current)
-            val tmp = file.resolveSibling("devices.json.tmp")
-            Files.writeString(tmp, json.encodeToString(ListSerializer(DeviceHistoryEntry.serializer()), next))
-            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        writeMutex.withLock {
+            withContext(io) {
+                Files.createDirectories(configDir)
+                val current = if (Files.exists(file)) runCatching { json.decodeFromString(ListSerializer(DeviceHistoryEntry.serializer()), Files.readString(file)) }.getOrDefault(emptyList()) else emptyList()
+                val next = transform(current)
+                val tmp = file.resolveSibling("devices.json.tmp")
+                Files.writeString(tmp, json.encodeToString(ListSerializer(DeviceHistoryEntry.serializer()), next))
+                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            }
         }
 }

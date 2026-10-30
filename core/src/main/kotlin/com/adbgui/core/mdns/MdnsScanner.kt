@@ -63,7 +63,16 @@ class MdnsScanner(
             }
             val pkt = socket.receive(RECEIVE_TIMEOUT_MS)
             if (pkt != null) {
-                val parsed = withContext(io) { MdnsResponseParser.parse(pkt) }
+                val parsed = try {
+                    withContext(io) { MdnsResponseParser.parse(pkt) }
+                } catch (ce: kotlinx.coroutines.CancellationException) {
+                    throw ce                                                 // 协程取消必须传播
+                } catch (t: Throwable) {
+                    // Belt-and-braces: parser 已做 bounds 检查，但任何未预见的报文缺陷
+                    // 不应让 scanner 协程挂掉（否则整个 mDNS 发现永久停摆）。
+                    logger.debug("mdns: parser threw on ${pkt.size}-byte packet (${t::class.simpleName}: ${t.message})")
+                    emptyList()
+                }
                 if (parsed.isEmpty() && pkt.size >= 12) {
                     logger.debug(
                         "mdns: unparseable packet (${pkt.size} bytes, head=${

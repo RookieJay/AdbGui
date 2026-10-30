@@ -19,7 +19,12 @@ object MdnsResponseParser {
         val ar = u16(packet, 10)
         val r = Reader(packet)
         r.pos = 12
-        repeat(qd) { r.readName(); r.skip(4) }                            // type + class
+        repeat(qd) {
+            if (r.pos >= packet.size) return emptyList()                   // 截断在 question 区
+            r.readName()
+            if (r.pos + 4 > packet.size) return emptyList()
+            r.skip(4)                                                      // type + class
+        }
 
         val instances = mutableListOf<String>()        // PTR rdata: "<instance>.<type>.local"
         val srvs = mutableMapOf<String, Pair<Int, String>>()   // instanceFqdn -> (port, target)
@@ -29,17 +34,26 @@ object MdnsResponseParser {
         // 处理 AN + NS + AR 所有资源记录（同 wire format）；mDNS 把 SRV/TXT/A 多放在 AR
         val total = an + ns + ar
         repeat(total) {
+            // 每个记录至少需要：1 字节名字（空 label）+ 2 type + 2 class + 4 ttl + 2 rdlen = 11 字节。
+            // 名字通常更大，但 10 字节是理论下限（留点余量取 12）。不足 = 报文被截断，停止。
+            if (r.pos + 12 > packet.size) return@repeat
             val name = r.readName()
+            // readName 之后还要读 type(2)+class(2)+ttl(4)+rdlen(2) = 10 字节
+            if (r.pos + 10 > packet.size) return@repeat
             val type = u16(packet, r.pos); r.skip(2)
             r.skip(2); r.skip(4)                                          // class, ttl
-            val rdlen = u16(packet, r.pos); r.pos += 2
+            val rdlenRaw = u16(packet, r.pos); r.pos += 2
             val rdataStart = r.pos
+            // 夹紧 rdlen 到报文剩余长度；越界 = 截断报文，只解析能安全解析的部分
+            val rdlen = minOf(rdlenRaw, packet.size - rdataStart)
             when (type) {
-                TYPE_PTR -> instances += r.readName()
+                TYPE_PTR -> if (rdataStart + rdlen <= packet.size) instances += r.readName()
                 TYPE_SRV -> {
-                    r.skip(4)                                             // priority + weight
-                    val port = u16(packet, r.pos); r.skip(2)
-                    srvs[name] = port to r.readName()
+                    if (rdataStart + 6 <= packet.size) {
+                        r.skip(4)                                             // priority + weight
+                        val port = u16(packet, r.pos); r.skip(2)
+                        srvs[name] = port to r.readName()
+                    }
                 }
                 TYPE_TXT -> {
                     val pairs = mutableMapOf<String, String>()
@@ -56,7 +70,7 @@ object MdnsResponseParser {
                     }
                     txts[name] = pairs
                 }
-                TYPE_A -> if (rdlen == 4) {
+                TYPE_A -> if (rdlen == 4 && rdataStart + 4 <= packet.size) {
                     addrs[name] = "${u8(packet, rdataStart)}.${u8(packet, rdataStart + 1)}.${u8(packet, rdataStart + 2)}.${u8(packet, rdataStart + 3)}"
                 }
             }

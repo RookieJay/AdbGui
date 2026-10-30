@@ -1,12 +1,15 @@
 package com.adbgui.core.device
 
 import com.adbgui.core.domain.DeviceType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-
 class DeviceHistoryStoreTest {
     private fun dir() = Files.createTempDirectory("hist")
 
@@ -238,5 +241,29 @@ class DeviceHistoryStoreTest {
         val e = store.load().single()
         assertEquals("af199bb4", e.deviceId)
         assertEquals(1000L, e.lastConnectedAt)
+    }
+
+    @Test
+    fun concurrent_mutations_do_not_lose_writes() = kotlinx.coroutines.runBlocking {
+        // Two parallel upserts on different serials must both persist. Before the Mutex
+        // in mutate(), concurrent read-modify-writes each started from the same on-disk
+        // baseline; the last writer won, silently dropping the other entry's alias.
+        val dir = Files.createTempDirectory("concurrent")
+        val store = DeviceHistoryStore(dir, clock = { 1L })   // default Dispatchers.IO
+        // Pre-seed both serials with an alias each
+        store.upsert("serial-a", DeviceType.USB, null, null, alias = "A-alias")
+        store.upsert("serial-b", DeviceType.USB, null, null, alias = "B-alias")
+
+        // Concurrent renames from a parallel dispatcher — the mutex serializes the two
+        // read-modify-writes so both survive. Without it, each writer reads the same
+        // baseline and the last write clobbers the first's change.
+        val scope = CoroutineScope(Dispatchers.Default)
+        val job1 = scope.async { store.setAlias("serial-a", "A-new") }
+        val job2 = scope.async { store.setAlias("serial-b", "B-new") }
+        listOf(job1, job2).awaitAll()
+
+        val loaded = store.load().associateBy { it.serial }
+        assertEquals("A-new", loaded["serial-a"]?.alias, "serial-a alias must survive concurrent mutation")
+        assertEquals("B-new", loaded["serial-b"]?.alias, "serial-b alias must survive concurrent mutation")
     }
 }
