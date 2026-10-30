@@ -3,6 +3,30 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-10-30 无线设备自动回连 + mDNS 发现 + 设备去重
+
+分支：feat/wireless-reconnect-mdns。spec：docs/superpowers/specs/2026-10-23-wireless-reconnect-mdns-design.md。
+
+**背景动因**：Android 11+ 无线调试端口在「重开开关 / 手机重启 / 换 WiFi」时随机变化。历史 `devices.json` 只存了 `ip:port`，端口一换就重连失败，用户误以为要重新配对；同时同一 IP 在历史里越积越多条。spec §2 现场实证（OnePlus PJD110 / ColorOS + TCL TV）：(1) 端口变了**不需要重新配对**（配对密钥长期有效），`adb connect ip:新端口` 直连成功；(2) adb server 自带 `adb mdns services` 在本机收不到任何服务（TV 在广播但 adb 收不到），必须自建 mDNS 监听；(3) 手机 mDNS 广播是间歇性的，不能唯一依赖。设计含义：必须有多层兜底。
+
+**四层机制（spec §3）**：每层独立有效，层层兜底。
+
+- **Layer 1 — 保存端点自动重试（`WirelessReconnector`，core）**：对历史无线设备周期重试 `adb connect ip:port`。指数退避 5s→60s 封顶，成功即重置退避；只重试近 7 天用过（`lastUsedAt`）的条目、上限 10 条，避免历史堆积导致进程风暴。注入 scope 可取消。端口没变（最常见：手机唤醒/回网）时自动回连。
+- **Layer 2 — 自建 mDNS 探测（`MdnsScanner`，core）**：纯 JVM UDP 组播，不依赖 adb 的 mdns 后端。每 10s 向 `224.0.0.251:5353` 发 PTR 查询 `_adb-tls-connect._tcp.local`（Android 11+ 无线调试）与 `_adb._tcp.local`（老式 TCP adb，TCL TV 即此类）。`MdnsSocket` 接口抽象（`send`/`receive`），JVM `MulticastSocket` 实现 bind `0.0.0.0:5353`（SO_REUSEADDR，实测可与 adb server 共存）；bind 失败退化为临时端口 + 单播 legacy 查询。枚举 up + multicast 的 IPv4 `NetworkInterface` 逐个 join 组播组（多网卡必须）。`MdnsResponseParser` 纯函数解析 DNS-SD 报文（header / 压缩域名指针 / PTR/SRV/A/TXT 记录），malformed 报文跳过并保留原文到日志。输出 `StateFlow<List<MdnsService>>`（`serviceName` 形如 `adb-<serial>-XXXX` 时含真实 serial，可用于 Layer 4 身份匹配；`adb-unidentified` 按 IP 匹配）。已知设备（历史里 deviceId 匹配）→ 自动更新端口重连；未知设备 → 只进"发现的设备"列表不自动连（spec §4.5 后半为准）。
+- **Layer 3 — 端口失效内联更新（desktop）**：无线设备重连失败且 adb 报 `PORT_STALE` → 行内提示「端口已变，请查看手机无线调试页」，IP 预填只读 + 5 位端口输入框 + 重连按钮。无模态弹窗（遵循「错误本地化，不弹模态打断」约定）。
+- **Layer 4 — 真实 serial 去重（贯穿其余三层的设备身份）**：`connectWireless` 成功后 `runShellCmd(serial, "getprop ro.serialno")` 拿真实 serial（如 `af199bb4`）写入历史并触发合并；查询失败（unauthorized 等）不阻塞连接成功路径，deviceId 留空下次再学。对 adb server 自行连上的未知 `ip:port` 设备（tracker 观察到 online 且不在历史）：复用既有 autoName 的 getprop 懒加载路径顺带学习 deviceId（不额外加命令调用）。
+
+**数据模型与合并规则（`DeviceHistoryStore`）**：schema 加 `deviceId: String?` 字段（`ignoreUnknownKeys` + 默认值天然向后兼容，零迁移成本——旧 `devices.json` 直接加载，deviceId 懒学习逐步填充）。原子 `mergeOnConnect(learnedDeviceId, serial, ip, port)` 一次完成：同 `deviceId` 多条 → 保留一条（吸收 alias/tag、更新 serial/ip/port/时间戳，其余删除）；serial == deviceId 的 USB 条目与无线条目 → 同一设备合并（插线与无线不再占两条）；同 IP 无 deviceId 的旧无线条目 → 视为残留删除（旧条目带不同非空 alias 则保留不动交用户手动删）。`DeviceRepository` 视图合并：`recompute` 分组键从 serial 改为 `deviceId ?: serial`，同组多条历史（迁移期过渡态）折叠为一条显示（取最新），存储层合并完成后自然消解。端口漂移的旧条目因此自动被合并，列表不再出现同 IP 多条。
+
+**desktop UI**：(1) `ConnectDialog` 输入框支持整串粘贴 `10.0.5.221:37751` 自动拆分 ip:port；新增「发现的设备」区渲染 mDNS StateFlow：显示 `ip:port`（+ 已知设备的别名），一键连接/配对跳转。(2) 设置页 `autoReconnect: Boolean`（默认开）控制 Layer 1 重试循环，`SettingsStore` 照常持久化。(3) CompositionRoot 把 `MdnsScanner` + `WirelessReconnector` 接入应用生命周期（autoReconnect 关时不启动 L1；mDNS 长生命周期 scope 同 DeviceTracker）。
+
+**测试（TDD）**：`:core` 新增 `MdnsResponseParserTest`（fixture 注释标明来源：手机 `_adb-tls-connect` 真实报文录制；TCL TV `_adb._tcp` 老式报文 fixture 待真实录制——现有 TV fixture 为手机 `_adb-tls-connect` 报文 shape，覆盖压缩域名指针与 TXT 解析，但 TV 默认 `ls` 同类的布局变体尚未真机录制，作遗留待办）、`MdnsScannerTest`（periodic 发射/expiry）、`DeviceHistoryStoreTest`（deviceId 字段、mergeOnConnect 合并/去重）、`DeviceMergeTest`（视图折叠）、`WirelessReconnectorTest`（退避/上限/scope 取消）、`DeviceRepositoryTest`（connectWireless 后学 deviceId + 合并；autoReconnect 关闭不启动 reconnector）；`:desktop` 新增 `MdnsViewModel`/`WirelessReconnector` 在 composition root 的接入测试、`ConnectDialog` ViewModel 测试（粘贴整串拆分/发现的设备列表）、端口失效行内更新的 ViewModel 状态机测试。
+
+**实证结论引用**：spec §2 的现场实验数据（配对密钥长期有效 / adb mdns services 收不到 TV 广播 / 自建 mDNS 原始 socket 能收到 TV 广播 / 端口变化规律 / AS 自动回连间歇成功原因分析）全部落在本实现的四层兜底设计里——不依赖 adb mdns、不依赖手机 mDNS 持续广播、不依赖 IP/机型作设备身份。
+
+### 待办（需真机录制）
+- **TCL TV `_adb._tcp` 老式报文 fixture 真实化**（CLAUDE.md §4 要求 fixture 必须真实录制，不许手写）：当前 TV-shape fixture 实为手机 `_adb-tls-connect` 报文结构，需在 TCL 电视（Android 6.0.1，`_adb._tcp` 老式广播，无 serial）上录制真实 UDP 组播原始字节存 `core/src/test/resources/fixtures/mdns_tv_*.bin`（首行注释标设备+版本+日期+抓包命令），测试改读 fixture。若真实报文暴露 parser 漏匹配的变体（TXT 字段为空、serviceName 格式差异等），按 TDD 红→绿补修。
+
 ## v2 — 2026-10-18 应用页两处布局修复（busy 圆圈错位 / 小窗按钮被裁）
 
 用户反馈两件事：① busy 小圆圈位置"奇怪"；② 小窗模式下右侧刷新/安装按钮完全看不到。
