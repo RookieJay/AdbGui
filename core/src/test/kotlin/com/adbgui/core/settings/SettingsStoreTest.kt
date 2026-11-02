@@ -115,6 +115,21 @@ class SettingsStoreTest {
     }
 
     @Test
+    fun logcat_recording_config_default_and_round_trip() = runTest {
+        val dir = Files.createTempDirectory("logcat-rec-cfg")
+        // 旧格式 JSON（无新字段）→ 默认值
+        Files.writeString(dir.resolve("settings.json"), """{"logcatRingCap": 50000}""")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val loaded = store.load()
+        assertNull(loaded.logcatRecordingsDir)
+        assertEquals(500, loaded.logcatRecordingMaxTotalMb)
+        store.save(loaded.copy(logcatRecordingsDir = "D:/logs", logcatRecordingMaxTotalMb = 2000))
+        val reloaded = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined).load()
+        assertEquals("D:/logs", reloaded.logcatRecordingsDir)
+        assertEquals(2000, reloaded.logcatRecordingMaxTotalMb)
+    }
+
+    @Test
     fun update_settings_custom_manifest_url_round_trips() = runTest {
         val dir = Files.createTempDirectory("upd-custom")
         val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
@@ -124,5 +139,41 @@ class SettingsStoreTest {
         val reloaded = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined).load()
         assertEquals("custom", reloaded.update.sourceId)
         assertEquals("http://127.0.0.1:8000/latest.json", reloaded.update.customManifestUrl)
+    }
+
+    @Test
+    fun auto_reconnect_default_and_round_trip() = runTest {
+        val dir = Files.createTempDirectory("auto-reconnect")
+        val store = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        // Old-format JSON without autoReconnect key → default true
+        val oldJson = """{"logcatRingCap": 50000}"""
+        Files.writeString(dir.resolve("settings.json"), oldJson)
+        val loaded = store.load()
+        assertEquals(true, loaded.autoReconnect)
+        // Save with explicit false + reload → round-trips as false
+        store.save(loaded.copy(autoReconnect = false))
+        val reloaded = SettingsStore(dir, io = kotlinx.coroutines.Dispatchers.Unconfined).load()
+        assertEquals(false, reloaded.autoReconnect)
+    }
+
+    @Test
+    fun logcat_filters_roundtrip() = runTest {
+        val dir = tmpDir()
+        val store = SettingsStore(dir)
+        val saved = com.adbgui.core.settings.SavedLogcatFilters(
+            levelSet = listOf("I", "W"), tagInclude = "Tag", tagExcludes = listOf("noise", "chatty"),
+            text = "hello", textIsRegex = true, packageName = "com.foo",
+        )
+        store.save(Settings(logcatFilters = saved))
+        assertEquals(saved, SettingsStore(dir).load().logcatFilters)
+    }
+
+    @Test
+    fun settings_json_without_logcat_filters_loads_default() = runTest {
+        val dir = tmpDir()
+        // 旧版本 settings.json 没有该字段 → 默认值（向后兼容）
+        Files.writeString(dir.resolve("settings.json"), """{"adbPathOverride":"/opt/adb"}""")
+        assertEquals(com.adbgui.core.settings.SavedLogcatFilters(),
+            SettingsStore(dir).load().logcatFilters)
     }
 }

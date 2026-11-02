@@ -2,12 +2,15 @@ package com.adbgui.desktop.main
 
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.adbgui.desktop.ui.AppShell
@@ -27,7 +30,9 @@ import com.adbgui.desktop.ui.SystemInfoViewModel
 import com.adbgui.desktop.ui.i18n.Locale
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AdbGuiTheme
+import com.adbgui.desktop.platform.CrashGuard
 import com.adbgui.desktop.platform.KtorCdpTransport
+import com.adbgui.desktop.platform.SafeClipboard
 import com.adbgui.core.device.CdpController
 import com.adbgui.core.domain.DeviceStatus
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,18 +48,31 @@ fun main() = application {
     // DeviceTracker (new track-devices stream) + AdbServerController per recomposition,
     // and recreating ViewModels would lose instance-local state (the screenshot bug).
     val root = remember { CompositionRoot() }
+    // Route uncaught exceptions (any thread, incl. AWT event dispatch) to the app log —
+    // before this, the 2026-10-13 clipboard crash left zero log output.
+    remember { CrashGuard.install(root.logger) }
     // Load settings once on the UI thread; Strings Compose state must be created here
     // (avoids cross-thread snapshot read errors). Set the locale before Window reads it.
     val settings = remember { runBlocking { root.settings.load() } }
     remember { Strings.set(Locale.fromCode(settings.locale)) }
     // Start the adb tracker exactly once — start() spawns a track-devices stream each call.
     LaunchedEffect(Unit) { root.start() }
+    // Mirror start(): close the tracker/mdns socket/reconnector when the application exits
+    // so the multicast 5353 binding is released (otherwise the next launch may fail to bind
+    // until the OS reclaims the port).
+    DisposableEffect(Unit) { onDispose { root.stop() } }
     // Background update check on startup — silent: failures only persist to lastCheckError
     // (visible in settings); banner appears only if Available + not dismissed.
     LaunchedEffect(Unit) {
         if (settings.update.checkOnStartup) root.updateViewModel.checkForUpdates(userInitiated = false)
     }
-    val settingsVm = remember { SettingsViewModel(root.settings, root.scope) }
+    val logcatRecording = remember {
+        com.adbgui.core.device.LogcatRecordingManager(
+            root.commands, root.tracker, root.settings, root.history, root.logger, root.scope,
+            root.configDir.resolve("logcat-recordings"),
+        )
+    }
+    val settingsVm = remember { SettingsViewModel(root.settings, root.scope, logcatRecording) }
     val vm = remember { DeviceListViewModel(root.repository, root.scope, settingsVm.settings) }
     val selectedSerial = remember { MutableStateFlow<String?>(null) }
     var showScreenshot by remember { mutableStateOf(false) }
@@ -81,13 +99,7 @@ fun main() = application {
             serial != null && list.any { it.serial == serial && it.status == DeviceStatus.ONLINE }
         }.stateIn(root.scope, SharingStarted.WhileSubscribed(5000), false)
     }
-    val logcatRecording = remember {
-        com.adbgui.core.device.LogcatRecordingManager(
-            root.commands, root.tracker, root.settings, root.logger, root.scope,
-            root.configDir.resolve("logcat-recordings"),
-        )
-    }
-    val logcatVm = remember { LogcatViewModel(logcatController, logcatRecording, selectedSerial, deviceOnline, root.scope) }
+    val logcatVm = remember { LogcatViewModel(logcatController, logcatRecording, root.repository, root.settings, selectedSerial, deviceOnline, root.scope, root.logger) }
     val systemOpsVm = remember { SystemOpsViewModel(root.repository, selectedSerial, root.scope) }
     val systemInfoVm = remember { SystemInfoViewModel(root.repository, selectedSerial, root.scope) }
     val remoteVm = remember { RemoteViewModel(root.repository, selectedSerial, root.settings, root.scope) }
@@ -110,6 +122,12 @@ fun main() = application {
         }
     }
     Window(onCloseRequest = ::exitApplication, title = Strings.t("app_title")) {
+        // Guard Compose's own copy path (SelectableText/SelectionContainer Ctrl+C): while another
+        // process holds the Windows clipboard, the AWT write throws "cannot open system clipboard"
+        // — unguarded it escaped the key event and killed the app (2026-10-13).
+        val platformClipboard = LocalClipboardManager.current
+        val safeClipboardManager = remember { SafeClipboard.wrapManager(platformClipboard) }
+        CompositionLocalProvider(LocalClipboardManager provides safeClipboardManager) {
         val settings by settingsVm.settings.collectAsState()
         AdbGuiTheme(settings.theme) {
             // Themed root surface so the window background follows light/dark mode — without
@@ -154,6 +172,7 @@ fun main() = application {
                     adbLocator = root.locator,
                 )
             }
+        }
         }
     }
     // Independent screenshot window — opened on demand from Device Overview so the

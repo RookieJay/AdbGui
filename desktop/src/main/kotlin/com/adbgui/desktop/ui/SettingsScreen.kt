@@ -52,7 +52,8 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 /**
- * Settings screen: adb path override, log level, open/export logs.
+ * Settings screen: adb/scrcpy paths, app logs (level, open, export), device logcat
+ * (view buffer, auto-record, recording storage), adb version, updates.
  *
  * @param vm the settings view model.
  * @param configDir the app config dir; logs live at `configDir/logs`.
@@ -204,8 +205,10 @@ fun SettingsScreen(
 
             Divider()
 
-            // --- Log level ---
-            Text(Strings.t("log_level"), style = MaterialTheme.typography.subtitle1)
+            // --- App logs: level + open/export of the app's own diagnostic logs ---
+            Text(Strings.t("logs_app_section"), style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("logs_app_hint"), style = MaterialTheme.typography.caption)
+            Text(Strings.t("log_level"), style = MaterialTheme.typography.subtitle2)
             SegmentedSelector(
                 options = LogLevel.entries,
                 selected = settings.logLevel,
@@ -215,51 +218,6 @@ fun SettingsScreen(
                 },
                 optionLabel = { lvl -> lvl.name },
             )
-
-            Divider()
-
-            // --- Logcat ring buffer cap ---
-            Text(Strings.t("logcat_ring_cap"), style = MaterialTheme.typography.subtitle1)
-            var ringCapDraft by remember(settings.logcatRingCap) {
-                mutableStateOf(settings.logcatRingCap.toString())
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = ringCapDraft,
-                    onValueChange = { ringCapDraft = it.filter { c -> c.isDigit() } },
-                    label = { Text(Strings.t("logcat_ring_cap")) },
-                    singleLine = true,
-                    modifier = Modifier.width(200.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = {
-                    val n = ringCapDraft.trim().toIntOrNull()
-                    if (n != null && n in 1000..1_000_000) {
-                        vm.setLogcatRingCap(n)
-                        status = Strings.t("status_log_level_set").format(n.toString()) // reuse generic "set" status
-                    } else {
-                        status = Strings.t("logcat_ring_cap_err")
-                    }
-                }) { Text(Strings.t("apply")) }
-            }
-            Text(Strings.t("logcat_ring_cap_hint"), style = MaterialTheme.typography.caption)
-
-            Divider()
-
-            // --- Auto logcat recording ---
-            Text(Strings.t("logcat_auto_record"), style = MaterialTheme.typography.subtitle1)
-            Text(Strings.t("logcat_auto_record_desc"), style = MaterialTheme.typography.caption)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Switch(
-                    checked = settings.logcatAutoRecord,
-                    onCheckedChange = { vm.setLogcatAutoRecord(it) },
-                )
-            }
-
-            Divider()
-
-            // --- Logs ---
-            Text(Strings.t("logs"), style = MaterialTheme.typography.subtitle1)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = {
                     val logDir = configDir.resolve("logs").toFile()
@@ -289,9 +247,124 @@ fun SettingsScreen(
                 }) { Text(Strings.t("export_logs")) }
             }
 
+            Divider()
+
+            // --- Device logs (logcat): view + recording settings ---
+            Text(Strings.t("logcat_section"), style = MaterialTheme.typography.subtitle1)
+            Text(Strings.t("logcat_section_hint"), style = MaterialTheme.typography.caption)
+
+            // --- Logcat ring buffer cap ---
+            Text(Strings.t("logcat_ring_cap"), style = MaterialTheme.typography.subtitle2)
+            var ringCapDraft by remember(settings.logcatRingCap) {
+                mutableStateOf(settings.logcatRingCap.toString())
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = ringCapDraft,
+                    onValueChange = { ringCapDraft = it.filter { c -> c.isDigit() } },
+                    label = { Text(Strings.t("logcat_ring_cap")) },
+                    singleLine = true,
+                    modifier = Modifier.width(200.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val n = ringCapDraft.trim().toIntOrNull()
+                    if (n != null && n in 1000..1_000_000) {
+                        vm.setLogcatRingCap(n)
+                        status = Strings.t("status_log_level_set").format(n.toString()) // reuse generic "set" status
+                    } else {
+                        status = Strings.t("logcat_ring_cap_err")
+                    }
+                }) { Text(Strings.t("apply")) }
+            }
+            Text(Strings.t("logcat_ring_cap_hint"), style = MaterialTheme.typography.caption)
+
+            // --- Auto logcat recording ---
+            Text(Strings.t("logcat_auto_record"), style = MaterialTheme.typography.subtitle2)
+            Text(Strings.t("logcat_auto_record_desc"), style = MaterialTheme.typography.caption)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = settings.logcatAutoRecord,
+                    onCheckedChange = { vm.setLogcatAutoRecord(it) },
+                )
+            }
+
+            // --- Recording storage (dir + cap + usage) ---
+            Text(Strings.t("logcat_rec_storage"), style = MaterialTheme.typography.subtitle2)
+            val effectiveDir = vm.recordingsDir?.toAbsolutePath().toString()
+                ?: (settings.logcatRecordingsDir ?: configDir.resolve("logcat-recordings").toAbsolutePath().toString())
+            val usage by vm.recordingsUsage.collectAsState()
+            LaunchedEffect(settings.logcatRecordingsDir, settings.logcatRecordingMaxTotalMb) {
+                vm.refreshRecordingsUsage()
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SelectableText(
+                    effectiveDir,
+                    style = MaterialTheme.typography.body2,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val picked = com.adbgui.desktop.platform.FileDialogs.pickDirectory(
+                        Strings.t("logcat_rec_pick_dir"), effectiveDir)
+                    if (picked != null) vm.setLogcatRecordingsDir(picked)
+                }) { Text(Strings.t("logcat_rec_dir_change")) }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val d = File(effectiveDir)
+                    runCatching { if (!d.exists()) d.mkdirs(); Desktop.getDesktop().open(d) }
+                        .onFailure { status = Strings.t("status_open_failed").format(it.message) }
+                }) { Text(Strings.t("logcat_rec_dir_open")) }
+                if (settings.logcatRecordingsDir != null) {
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { vm.setLogcatRecordingsDir(null) }) {
+                        Text(Strings.t("logcat_rec_dir_reset"))
+                    }
+                }
+            }
+            usage?.let {
+                Text(
+                    Strings.t("logcat_rec_usage").format(fmtBytes(it), settings.logcatRecordingMaxTotalMb),
+                    style = MaterialTheme.typography.caption,
+                )
+            }
+            var capDraft by remember(settings.logcatRecordingMaxTotalMb) {
+                mutableStateOf(settings.logcatRecordingMaxTotalMb.toString())
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = capDraft,
+                    onValueChange = { capDraft = it.filter { c -> c.isDigit() } },
+                    label = { Text(Strings.t("logcat_rec_cap")) },
+                    singleLine = true,
+                    modifier = Modifier.width(200.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    val n = capDraft.trim().toIntOrNull()
+                    if (n != null && n in 50..100_000) {
+                        vm.setLogcatRecordingMaxTotalMb(n)
+                        status = Strings.t("logcat_rec_cap_set").format(n)
+                    } else {
+                        status = Strings.t("logcat_rec_cap_err")
+                    }
+                }) { Text(Strings.t("apply")) }
+            }
+            Text(Strings.t("logcat_rec_cap_hint"), style = MaterialTheme.typography.caption)
+
             status?.let {
                 Spacer(Modifier.height(8.dp))
                 SelectableText(it, style = MaterialTheme.typography.caption)
+            }
+
+            // --- Wireless ---
+            Divider()
+            Text(Strings.t("settings_auto_reconnect"), style = MaterialTheme.typography.subtitle2)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(
+                    checked = settings.autoReconnect,
+                    onCheckedChange = { vm.setAutoReconnect(it) },
+                )
             }
 
             // --- ADB version (read-only, fetched on first composition) ---
@@ -459,3 +532,7 @@ private fun zipDirectory(sourceDir: File, zipFile: File) {
         }
     }
 }
+
+private fun fmtBytes(bytes: Long): String =
+    if (bytes < 1024L * 1024) "%d KB".format(bytes / 1024)
+    else "%d MB".format(bytes / (1024 * 1024))

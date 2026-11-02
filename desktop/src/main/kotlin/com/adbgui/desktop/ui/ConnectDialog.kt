@@ -13,6 +13,7 @@ import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
+import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,6 +41,7 @@ fun ConnectDialog(
     var port by remember { mutableStateOf("5555") }
     val error by vm.error.collectAsState()
     val busy by vm.busy.collectAsState()
+    val discovered by vm.discovered.collectAsState()
 
     val ipFocus = remember { FocusRequester() }
     val portFocus = remember { FocusRequester() }
@@ -64,7 +66,17 @@ fun ConnectDialog(
             Column {
                 OutlinedTextField(
                     value = ip,
-                    onValueChange = { ip = it },
+                    onValueChange = { raw ->
+                        val t = raw.trim()
+                        // Whole-string paste: "10.0.5.221:37751" — single colon with all-digit tail
+                        // after the colon → split into ip + port fields (port capped at 5 chars).
+                        if (t.count { it == ':' } == 1 && t.substringAfter(':').all { it.isDigit() } && t.substringAfter(':').isNotEmpty()) {
+                            ip = t.substringBefore(':')
+                            port = t.substringAfter(':').take(5)
+                        } else {
+                            ip = raw
+                        }
+                    },
                     label = { Text(Strings.t("ip_address")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().focusRequester(ipFocus),
@@ -84,6 +96,23 @@ fun ConnectDialog(
                 if (error != null) {
                     Spacer(Modifier.padding(top = 8.dp))
                     InlineMessageBanner(error ?: "", MessageKind.Error)
+                }
+                if (discovered.isNotEmpty()) {
+                    Spacer(Modifier.padding(8.dp))
+                    Text(Strings.t("connect_discovered_title"), style = MaterialTheme.typography.subtitle2)
+                    discovered.forEach { svc ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("${svc.host}:${svc.port}", style = MaterialTheme.typography.body2)
+                            TextButton(
+                                onClick = { if (!busy) vm.connect(svc.host, svc.port) },
+                                enabled = !busy,
+                            ) { Text(Strings.t("connect_discovered_connect")) }
+                        }
+                    }
                 }
             }
         },

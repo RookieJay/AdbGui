@@ -19,6 +19,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -33,13 +34,23 @@ class LogcatRecordingManager(
     private val commands: CommandRunner,
     private val tracker: IDeviceTracker,
     private val settings: SettingsStore,
+    private val history: DeviceHistoryStore,
     private val logger: Logger,
     private val scope: CoroutineScope,
-    val recordingsDir: Path,
+    private val defaultDir: Path,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val rotationBytes: Long = LogcatRecorder.ROTATION_BYTES,
 ) {
+    private val _recordingsDir = MutableStateFlow(effectiveDir(settings.state.value))
+    val recordingsDir: Path get() = _recordingsDir.value   // 公开 API 形状不变（LogcatViewModel 取值即最新）
+
+    private fun effectiveDir(s: com.adbgui.core.settings.Settings): Path =
+        s.logcatRecordingsDir?.let { raw ->
+            runCatching { Path.of(raw) }
+                .onFailure { logger.warn("invalid recordings dir '$raw'; using default") }
+                .getOrNull()
+        } ?: defaultDir
     private val _manualState = MutableStateFlow<ManualRecordState>(ManualRecordState.Idle)
     val manualState: StateFlow<ManualRecordState> = _manualState.asStateFlow()
 
@@ -55,11 +66,20 @@ class LogcatRecordingManager(
     private val autoFiles = mutableMapOf<String, Path>()                 // mutex 保护（watchdog 检查文件存活用）
     private var observerJob: Job? = null
     private var watchdogJob: Job? = null
+    private val maintenance = LogcatRecordingMaintenance(logger, clock)
+
+    private fun capBytes(): Long = settings.state.value.logcatRecordingMaxTotalMb * 1024L * 1024L
+    private suspend fun activeFilesSnapshot(): Set<Path> =
+        mutex.withLock { autoFiles.values.toSet() + listOfNotNull(manualFile) }
 
     init {
-        // 启动清理（spec §3.2）：删 7 天前 auto 文件；失败仅 WARN，不阻塞
+        // 确保子目录存在（auto/manual）
+        runCatching { Files.createDirectories(autoDir()) }
+        runCatching { Files.createDirectories(manualDir()) }
+        // 启动清理（spec §3.2 + D4/D5）：归位 → 7 天 → 0 字节 → 总量上限；失败仅 WARN，不阻塞
         scope.launch {
-            withContext(io) { runCatching { cleanupOldAutoFiles() } }
+            val active = activeFilesSnapshot()
+            withContext(io) { runCatching { maintenance.cleanupOnStartup(_recordingsDir.value, capBytes(), active) } }
                 .onFailure { logger.warn("recording cleanup failed: ${it.message}") }
         }
         observerJob = scope.launch { observeDevices() }
@@ -96,18 +116,27 @@ class LogcatRecordingManager(
     /** mutex 持有中调用。watchdog 重启手动会话也走这里。 */
     private suspend fun startManualLocked(serial: String) {
         val label = deviceLabel(serial)
-        val file = uniqueFile(recordingsDir.resolve("${label}_${stamp()}.log"))
+        val file = uniqueFile(manualDir().resolve("${label}_${stamp()}.log"))
         val rec = LogcatRecorder(commands, logger, scope, io, file, rotationBytes)
         manualJob?.cancel()
         manualRecorder = rec
         manualFile = file
         manualJob = scope.launch {
             rec.state.collect { st ->
-                _manualState.value = when (st.status) {
-                    RecordStatus.RECORDING ->
-                        ManualRecordState.Recording(serial, file, st.lineCount, st.bytesWritten)
-                    RecordStatus.STOPPED ->
-                        ManualRecordState.Stopped(file, st.lineCount, st.bytesWritten, st.stopReason)
+                // 新 recorder 的初始状态是 STOPPED(0行0字节)——那是"尚未起录"，不是
+                // "录制结束"。发布它会让 UI 在起录瞬间看到假 Stopped，"停止后自动弹
+                // 定位"被误触发（第二次起录时又弹一次上次的录制位置）。真实的结束
+                // 状态（用户停/断连/write_failed）带 stopReason 或进度，不受此过滤影响。
+                val bogusInitial = st.status == RecordStatus.STOPPED &&
+                    st.stopReason == null && st.error == null &&
+                    st.lineCount == 0L && st.bytesWritten == 0L
+                if (!bogusInitial) {
+                    _manualState.value = when (st.status) {
+                        RecordStatus.RECORDING ->
+                            ManualRecordState.Recording(serial, file, st.lineCount, st.bytesWritten)
+                        RecordStatus.STOPPED ->
+                            ManualRecordState.Stopped(file, st.lineCount, st.bytesWritten, st.stopReason)
+                    }
                 }
             }
         }
@@ -140,10 +169,12 @@ class LogcatRecordingManager(
     }
 
     companion object {
-        const val RETENTION_MS: Long = 7L * 24 * 60 * 60 * 1000
-
         /** 文件存活检测周期（真实时间，跑在 io 上）。 */
         private const val FILE_WATCH_INTERVAL_MS = 5000L
+
+        /** [deviceLabel] 的 getprop 重试：总尝试次数与间隔（虚拟时间下测试可快进）。 */
+        private const val LABEL_GETPROP_ATTEMPTS = 3
+        private const val LABEL_RETRY_MS = 1000L
 
         /** serial → 文件名安全段：':'（无线 serial）与 Windows 非法字符统一 '_'（spec §3.2）。 */
         fun sanitizeSerial(serial: String): String =
@@ -154,6 +185,9 @@ class LogcatRecordingManager(
 
         private fun stamp(): String =
             LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS"))
+
+        private fun today(): String =
+            LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
 
         private fun uniqueFile(path: Path): Path {
             if (!Files.exists(path)) return path
@@ -168,22 +202,51 @@ class LogcatRecordingManager(
         }
     }
 
-    // --- Task 4: observeDevices / startAutoLocked / stopAutoLocked / cleanupOldAutoFiles ---
+    // --- observeDevices / startAutoLocked / stopAutoLocked ---
 
-    /** 设备上下线 + 设置开关 → 增删 auto recorder；同时守护手动会话（设备断开即停）。 */
+    private fun autoDir(): Path = _recordingsDir.value.resolve("auto")
+    private fun manualDir(): Path = _recordingsDir.value.resolve("manual")
+
+    /** 轮转/watchdog 重启用：取目录里最小未用的序号开新文件（spec D3，不追加）。 */
+    private fun nextRotationFile(label: String): Path {
+        var n = 1
+        while (Files.exists(autoDir().resolve("${label}_${today()}_$n.log"))) n++
+        return autoDir().resolve("${label}_${today()}_$n.log")
+    }
+
+    /** 设备上下线 + 设置开关 → 增删 auto recorder；同时守护手动会话（设备断开即停）。
+     *  目录热切换（spec D2）：停全部 → 迁移 → 更新有效目录 → 走下方常规逻辑重启 auto。
+     *  上限变更（spec D4）：立即执行一次 enforceSizeCap。 */
     private suspend fun observeDevices() {
-        combine(settings.state, tracker.devices) { s, devs ->
-            s.logcatAutoRecord to devs
-        }.collect { (autoEnabled, devs) ->
-            val online = devs.filter { it.status == DeviceStatus.ONLINE }
-                .map { it.serial }.toSet()
+        var lastDir: String? = settings.state.value.logcatRecordingsDir
+        var lastCap: Int = settings.state.value.logcatRecordingMaxTotalMb
+        combine(settings.state, tracker.devices) { s, devs -> s to devs }.collect { (s, devs) ->
+            val online = devs.filter { it.status == DeviceStatus.ONLINE }.map { it.serial }.toSet()
+            // 目录热切换（spec D2）：停全部 → 迁移 → 更新有效目录 → 走下方常规逻辑重启 auto
+            if (s.logcatRecordingsDir != lastDir) {
+                lastDir = s.logcatRecordingsDir
+                val newDir = effectiveDir(s)
+                if (newDir != _recordingsDir.value) {
+                    if (_manualState.value is ManualRecordState.Recording) stopManual("recording_dir_changed")
+                    mutex.withLock { autoRecorders.keys.toList().forEach { stopAutoLocked(it) } }
+                    withContext(io) { runCatching { maintenance.migrateFiles(_recordingsDir.value, newDir) } }
+                    _recordingsDir.value = newDir
+                    logger.info("recordings dir changed to $newDir (migrated)")
+                }
+            }
+            // 上限变更 → 立即执行一次（spec D4）
+            if (s.logcatRecordingMaxTotalMb != lastCap) {
+                lastCap = s.logcatRecordingMaxTotalMb
+                val active = activeFilesSnapshot()
+                withContext(io) { runCatching { maintenance.enforceSizeCap(_recordingsDir.value, capBytes(), active) } }
+            }
             val manual = _manualState.value
             if (manual is ManualRecordState.Recording && manual.serial !in online) {
                 stopManual("device_disconnected")
             }
             mutex.withLock {
                 autoRecorders.keys.filter { it !in online }.forEach { stopAutoLocked(it) }
-                if (autoEnabled) online.filter { it !in autoRecorders }.forEach { startAutoLocked(it) }
+                if (s.logcatAutoRecord) online.filter { it !in autoRecorders }.forEach { startAutoLocked(it) }
                 else autoRecorders.keys.toList().forEach { stopAutoLocked(it) }
             }
         }
@@ -191,10 +254,12 @@ class LogcatRecordingManager(
 
     /** mutex 持有中调用。轮转续开：recorder 写满文件原地收尾后，这里换新文件重开（spec §3.2）。
      *  每次起录（含轮转）重新 getprop 取品牌型号——轮转按 N MB 触发，开销可忽略。 */
-    internal suspend fun startAutoLocked(serial: String) {
+    internal suspend fun startAutoLocked(serial: String, forceNewFile: Boolean = false) {
         val label = deviceLabel(serial)   // 同 startManual：持锁 getprop 的短暂阻塞可接受
-        val file = uniqueFile(recordingsDir.resolve("auto_${label}_${stamp()}.log"))
-        val rec = LogcatRecorder(commands, logger, scope, io, file, rotationBytes)
+        val file = if (forceNewFile) nextRotationFile(label)
+                   else autoDir().resolve("${label}_${today()}.log")
+        val append = !forceNewFile && Files.exists(file)
+        val rec = LogcatRecorder(commands, logger, scope, io, file, rotationBytes, append)
         autoRecorders[serial] = rec
         autoFiles[serial] = file
         autoJobs[serial] = scope.launch {
@@ -203,14 +268,22 @@ class LogcatRecordingManager(
                 if (st.rotated) {
                     mutex.withLock {
                         if (autoRecorders[serial] === rec) {
-                            autoJobs.remove(serial)?.cancel()
-                            startAutoLocked(serial)
+                            // 自取消放在续开之后：已取消的协程里跑挂起代码（deviceLabel 的重试
+                            // delay）会当场抛 CancellationException，续开半途夭折。先续开再自断，
+                            // 老 recorder 的后续状态同样进不了 UI。
+                            val oldJob = autoJobs.remove(serial)
+                            startAutoLocked(serial, forceNewFile = true)
+                            oldJob?.cancel()
                         }
                     }
                 }
             }
         }
         rec.start(serial)
+        scope.launch {
+            val active = activeFilesSnapshot()
+            withContext(io) { runCatching { maintenance.enforceSizeCap(_recordingsDir.value, capBytes(), active) } }
+        }
     }
 
     /** mutex 持有中调用（suspend：内部 join recorder 的收尾）。 */
@@ -221,32 +294,38 @@ class LogcatRecordingManager(
         _autoStates.value = _autoStates.value - serial
     }
 
-    /** 删除超过 [RETENTION_MS] 的 auto_*.log；非 auto_ 文件（手动录制）永不动（spec §3.2）。io 上执行。 */
-    internal fun cleanupOldAutoFiles() {
-        val dir = recordingsDir.toFile()
-        if (!dir.isDirectory) return
-        val cutoff = clock() - RETENTION_MS
-        dir.listFiles { f -> f.isFile && f.name.startsWith("auto_") && f.name.endsWith(".log") }
-            ?.filter { it.lastModified() < cutoff }
-            ?.forEach { runCatching { it.delete() } }
-    }
-
     /** 录制目录里 lastModified 最新的 .log 文件（录制页常驻"定位最近录制"按钮用）；
      *  无录制文件返回 null。目录扫描在 [io] 上执行。 */
     suspend fun latestRecordingFile(): Path? = withContext(io) {
-        recordingsDir.toFile()
-            .listFiles { f -> f.isFile && f.name.endsWith(".log") }
-            ?.maxByOrNull { it.lastModified() }
-            ?.toPath()
+        val files = listOf(autoDir(), manualDir()).flatMap { d ->
+            d.toFile().listFiles { f -> f.isFile && f.name.endsWith(".log") }?.toList() ?: emptyList()
+        }
+        files.maxByOrNull { it.lastModified() }?.toPath()
     }
 
-    /** serial → 录制文件名前缀段：`品牌_型号_Android版本`（getprop）；失败或 brand/model
-     *  为 unknown 时回退 [sanitizeSerial]，保证起录永不因取属性失败而失败。 */
+    /** auto/ + manual/ 总占用（设置页展示）。目录扫描在 [io] 上执行。 */
+    suspend fun totalRecordingBytes(): Long = withContext(io) { maintenance.totalBytes(_recordingsDir.value) }
+
+    /** serial → 录制文件名前缀段：`品牌_型号_Android版本`（getprop）。起录瞬间设备常未就绪
+     * （adb connect 冷启动、断流重连），故失败/unknown 时重试；重试耗尽后回退历史设备别名
+     * （auto-name 已持久化到 devices.json），仍无才回退 [sanitizeSerial]——保证起录永不因
+     * 取属性失败而失败，且同一设备不会仅因起录竞态就换成 IP 命名（spec §3.2）。 */
     private suspend fun deviceLabel(serial: String): String {
-        val props = runCatching { commands.deviceProps(serial) }.getOrNull()
-        if (props != null && props.brand != "unknown" && props.model != "unknown") {
-            val label = fileSafe("${props.brand} ${props.model} Android${props.androidVersion}")
-            if (label.isNotBlank()) return label
+        repeat(LABEL_GETPROP_ATTEMPTS) { attempt ->
+            val props = runCatching { commands.deviceProps(serial) }.getOrNull()
+            if (props != null && props.brand != "unknown" && props.model != "unknown") {
+                val label = fileSafe("${props.brand} ${props.model} Android${props.androidVersion}")
+                if (label.isNotBlank()) return label
+            }
+            if (attempt < LABEL_GETPROP_ATTEMPTS - 1) delay(LABEL_RETRY_MS)
+        }
+        val alias = runCatching { history.load().firstOrNull { it.serial == serial }?.alias }.getOrNull()
+        if (!alias.isNullOrBlank()) {
+            val label = fileSafe(alias)
+            if (label.isNotBlank()) {
+                logger.info("recording label for $serial: getprop unavailable after retries, using history alias \"$alias\"")
+                return label
+            }
         }
         return sanitizeSerial(serial)
     }
@@ -279,7 +358,7 @@ class LogcatRecordingManager(
             autoFiles.filterValues { !exists(it) }.keys.forEach { serial ->
                 logger.info("recording file deleted externally; restarting auto session for $serial")
                 stopAutoLocked(serial)
-                startAutoLocked(serial)
+                startAutoLocked(serial, forceNewFile = true)
             }
         }
     }

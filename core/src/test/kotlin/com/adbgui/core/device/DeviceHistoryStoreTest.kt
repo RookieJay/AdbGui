@@ -1,12 +1,15 @@
 package com.adbgui.core.device
 
 import com.adbgui.core.domain.DeviceType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-
 class DeviceHistoryStoreTest {
     private fun dir() = Files.createTempDirectory("hist")
 
@@ -182,5 +185,107 @@ class DeviceHistoryStoreTest {
         store.renameTag("lab", "")
         store.renameTag("lab", "   ")
         assertEquals("lab", store.load().first().tag)
+    }
+
+    @Test
+    fun mergeOnConnect_merges_entries_with_same_deviceId_and_keeps_alias() = runTest {
+        val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        // 旧端口条目：曾经的连接已学到 deviceId（规则 1 的前置状态）
+        store.mergeOnConnect("af199bb4", "10.0.5.221:38897", DeviceType.WIRELESS, "10.0.5.221", 38897)
+        store.setAlias("10.0.5.221:38897", "我的手机")
+        // 端口漂移后 adb server 自动连上产生的新条目（无 deviceId）
+        store.upsert("10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        val removed = store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        val entries = store.load()
+        assertEquals(1, entries.size)
+        assertEquals("10.0.5.221:37751", entries[0].serial)
+        assertEquals("af199bb4", entries[0].deviceId)
+        assertEquals("我的手机", entries[0].alias)
+        assertEquals(37751, entries[0].wirelessPort)
+        assertEquals(listOf("10.0.5.221:38897"), removed.map { it.serial })
+    }
+
+    @Test
+    fun mergeOnConnect_merges_usb_entry_with_same_serial_as_deviceId() = runTest {
+        val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        store.upsert("af199bb4", DeviceType.USB, null, null)
+        store.upsert("10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        val entries = store.load()
+        assertEquals(1, entries.size)
+        assertEquals("10.0.5.221:37751", entries[0].serial)
+        assertEquals(DeviceType.WIRELESS, entries[0].type)
+        assertEquals("af199bb4", entries[0].deviceId)
+    }
+
+    @Test
+    fun mergeOnConnect_keeps_stale_same_ip_entry_with_different_alias() = runTest {
+        val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        store.upsert("10.0.5.221:38897", DeviceType.WIRELESS, "10.0.5.221", 38897)
+        store.setAlias("10.0.5.221:38897", "另一个设备的别名")
+        store.upsert("10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        assertEquals(2, store.load().size)
+    }
+
+    @Test
+    fun mergeOnConnect_merges_stale_same_ip_entries_sharing_anchor_alias() = runTest {
+        val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        // 端口漂移历史堆积（真实数据形态）：多个同 IP 旧无线条目，autoName 给它们打了相同 alias
+        listOf(38897, 36487, 42191).forEach { port ->
+            store.upsert("10.0.5.221:$port", DeviceType.WIRELESS, "10.0.5.221", port)
+            store.setAlias("10.0.5.221:$port", "OnePlus PJD110")
+        }
+        // 新端口条目：上一次连接已学到 deviceId，autoName 已命名
+        store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+        store.setAlias("10.0.5.221:37751", "OnePlus PJD110")
+        // 再次连接（重连循环 / mDNS 自动连 / 重启后自动连）触发合并
+        val removed = store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        val entries = store.load()
+        assertEquals(1, entries.size)
+        assertEquals("10.0.5.221:37751", entries[0].serial)
+        assertEquals("af199bb4", entries[0].deviceId)
+        assertEquals("OnePlus PJD110", entries[0].alias)
+        assertEquals(3, removed.size)
+    }
+
+    @Test
+    fun mergeOnConnect_creates_entry_when_group_empty() = runTest {
+        val store = DeviceHistoryStore(dir(), clock = { 1000L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        store.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+        val e = store.load().single()
+        assertEquals("af199bb4", e.deviceId)
+        assertEquals(1000L, e.lastConnectedAt)
+    }
+
+    @Test
+    fun concurrent_mutations_do_not_lose_writes() = kotlinx.coroutines.runBlocking {
+        // Two parallel upserts on different serials must both persist. Before the Mutex
+        // in mutate(), concurrent read-modify-writes each started from the same on-disk
+        // baseline; the last writer won, silently dropping the other entry's alias.
+        val dir = Files.createTempDirectory("concurrent")
+        val store = DeviceHistoryStore(dir, clock = { 1L })   // default Dispatchers.IO
+        // Pre-seed both serials with an alias each
+        store.upsert("serial-a", DeviceType.USB, null, null, alias = "A-alias")
+        store.upsert("serial-b", DeviceType.USB, null, null, alias = "B-alias")
+
+        // Concurrent renames from a parallel dispatcher — the mutex serializes the two
+        // read-modify-writes so both survive. Without it, each writer reads the same
+        // baseline and the last write clobbers the first's change.
+        val scope = CoroutineScope(Dispatchers.Default)
+        val job1 = scope.async { store.setAlias("serial-a", "A-new") }
+        val job2 = scope.async { store.setAlias("serial-b", "B-new") }
+        listOf(job1, job2).awaitAll()
+
+        val loaded = store.load().associateBy { it.serial }
+        assertEquals("A-new", loaded["serial-a"]?.alias, "serial-a alias must survive concurrent mutation")
+        assertEquals("B-new", loaded["serial-b"]?.alias, "serial-b alias must survive concurrent mutation")
     }
 }

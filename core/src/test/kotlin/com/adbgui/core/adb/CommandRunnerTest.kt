@@ -63,6 +63,23 @@ class CommandRunnerTest {
     }
 
     @Test
+    fun clearLogcat_runs_adb_logcat_c() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("logcat", "-c"), AdbProcessResult(0, "", ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        cr.clearLogcat("abc")
+        assertTrue(runner.runs.last().containsAll(listOf("-s", "abc", "logcat", "-c")))
+    }
+
+    @Test
+    fun clearLogcat_failure_throws_adb_command_exception() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("logcat", "-c"), AdbProcessResult(1, "", "device offline"))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<AdbCommandException> { cr.clearLogcat("abc") }
+    }
+
+    @Test
     fun connect_success_returns_parsed_result() = runTest {
         val runner = FakeAdbProcessRunner()
         runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 192.168.1.50:5555", ""))
@@ -661,5 +678,34 @@ class CommandRunnerTest {
         runner.whenArgsContains(listOf("bugreport"), AdbProcessResult(1, "", "device offline"))
         val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
         assertFailsWith<AdbCommandException> { cr.bugreport("abc", "/tmp") }
+    }
+
+    // --- pidOf (Task 2: logcat advanced filters) -----------------------------------------------
+
+    private fun pidNums(name: String): List<Int> =
+        javaClass.classLoader!!.getResource("fixtures/$name")!!
+            .readText().lineSequence().dropWhile { it.startsWith("#") }.joinToString("\n")
+            .trim().split(Regex("\\s+")).filter { it.isNotBlank() }.mapNotNull { it.toIntOrNull() }
+
+    @Test
+    fun pidOf_parses_single_multi_and_empty() = runTest {
+        val runner = FakeAdbProcessRunner()
+        fun fixture(name: String) = javaClass.classLoader!!.getResource("fixtures/$name")!!
+            .readText().lineSequence().dropWhile { it.startsWith("#") }.joinToString("\n")
+        runner.whenArgsContains(listOf("pidof", "com.one"),   AdbProcessResult(0, fixture("pidof_single.txt"), ""))
+        runner.whenArgsContains(listOf("pidof", "com.multi"), AdbProcessResult(0, fixture("pidof_multi.txt"), ""))
+        runner.whenArgsContains(listOf("pidof", "com.nope"),  AdbProcessResult(0, fixture("pidof_empty.txt"), ""))
+        val cr = CommandRunner({ adb }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertEquals(pidNums("pidof_single.txt"), cr.pidOf("abc", "com.one"))
+        assertEquals(pidNums("pidof_multi.txt"),  cr.pidOf("abc", "com.multi"))
+        assertEquals(emptyList<Int>(),            cr.pidOf("abc", "com.nope"))
+        // argv guard: package name is issued as part of the shell command
+        assertTrue(runner.runs.last().joinToString(" ").contains("shell pidof com.nope"))
+    }
+
+    @Test
+    fun pidOf_rejects_invalid_package_name() = runTest {
+        val cr = CommandRunner({ adb }, FakeAdbProcessRunner(), NoopLogger, this, CommandRunner.AdbServerStarter{})
+        assertFailsWith<IllegalArgumentException> { cr.pidOf("abc", "com.foo; rm -rf /") }
     }
 }

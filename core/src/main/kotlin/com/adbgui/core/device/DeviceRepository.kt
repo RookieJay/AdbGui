@@ -9,8 +9,10 @@ import com.adbgui.core.domain.DeviceType
 import com.adbgui.core.domain.DeviceView
 import com.adbgui.core.domain.InstallFlags
 import com.adbgui.core.domain.InstallResult
+import com.adbgui.core.domain.MdnsService
 import com.adbgui.core.domain.PackageInfo
 import com.adbgui.core.log.Logger
+import com.adbgui.core.mdns.MdnsScanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -34,11 +36,16 @@ class DeviceRepository(
     private val commands: CommandRunner,
     private val logger: Logger,
     private val scope: CoroutineScope,
+    private val mdns: MdnsScanner? = null,
 ) {
     private val _devices = MutableStateFlow<List<DeviceView>>(emptyList())
     val devices: StateFlow<List<DeviceView>> = _devices.asStateFlow()
 
+    private val _discovered = MutableStateFlow<List<MdnsService>>(emptyList())
+    val discovered: StateFlow<List<MdnsService>> = _discovered.asStateFlow()
+
     private val collectorJob: Job
+    private val mdnsCollectorJob: Job?
 
     // Auto-name coroutines run here, NOT on [scope]: naming is background work that
     // outlives individual recomputes (self-scheduled retries), and it must be stoppable
@@ -59,6 +66,12 @@ class DeviceRepository(
     private val namingAttempts = mutableMapOf<String, Int>()
     private var namingLaunchLive: List<DeviceSnapshot>? = null
 
+    // mDNS auto-connect dedup. [mdnsInFlight] is read/written from the scanner collector
+    // coroutine AND the coroutines it launches — guarded by [mdnsMutex] (independent of
+    // [namingMutex] which guards auto-name bookkeeping above).
+    private val mdnsMutex = Mutex()
+    private val mdnsInFlight = mutableSetOf<String>()
+
     init {
         runBlocking { recompute(tracker.devices.value) }
         collectorJob = scope.launch {
@@ -66,30 +79,22 @@ class DeviceRepository(
                 recompute(it)
             }
         }
+        mdnsCollectorJob = mdns?.let { scanner ->
+            scope.launch {
+                scanner.services.collect { handleMdnsServices(it) }
+            }
+        }
     }
 
     fun stop() {
         collectorJob.cancel()
+        mdnsCollectorJob?.cancel()
         namingJob.cancel()
     }
 
     private suspend fun recompute(live: List<DeviceSnapshot>) {
-        val hist = history.load().associateBy { it.serial }
-        val merged = (live.map { it.serial } + hist.keys).distinct().map { serial ->
-            val snap = live.firstOrNull { it.serial == serial }
-            val h = hist[serial]
-            DeviceView(
-                serial = serial,
-                status = snap?.status ?: DeviceStatus.OFFLINE,
-                alias = h?.alias,
-                type = h?.type,
-                wirelessIp = h?.wirelessIp,
-                wirelessPort = h?.wirelessPort,
-                lastConnectedAt = h?.lastConnectedAt,
-                lastUsedAt = h?.lastUsedAt,
-                tag = h?.tag,
-            )
-        }
+        val hist = history.load()
+        val merged = DeviceMerge.merge(live, hist)
         _devices.value = merged
         val onlineSerials = merged.filter { it.isLive }.map { it.serial }.toSet()
         val launchNaming = namingMutex.withLock {
@@ -107,6 +112,46 @@ class DeviceRepository(
         // conflates equal values), so retries are self-scheduled — see [autoName].
         if (launchNaming) {
             merged.filter { it.isLive && it.alias == null }.forEach { namingScope.launch { autoName(it.serial) } }
+        }
+    }
+
+    /**
+     * Handle a fresh snapshot of mDNS services (spec §4.5):
+     *  - Publish all services (port > 0) to [discovered] for UI display.
+     *  - For `_adb-tls-connect._tcp` services whose [MdnsService.deviceSerial] OR host IP
+     *    hits a known history entry (deviceId or wirelessIp): auto-connect via
+     *    [connectWireless]. Dedup with [mdnsInFlight] so the scanner's 10s re-broadcasts
+     *    don't stack concurrent connects to the same endpoint.
+     *  - `_adb._tcp` (legacy) services: published to [discovered] only, never auto-connect.
+     *  - Unknown services (no history hit): published to [discovered] only.
+     */
+    private suspend fun handleMdnsServices(services: List<MdnsService>) {
+        _discovered.value = services
+        val hist = history.load()
+        val knownDeviceIds = hist.mapNotNull { it.deviceId }.toSet()
+        val knownIps = hist.mapNotNull { it.wirelessIp }.toSet()
+        for (svc in services) {
+            if (svc.serviceType != MdnsScanner.SERVICE_TLS) continue
+            val key = "${svc.host}:${svc.port}"
+            val known = (svc.deviceSerial?.let { it in knownDeviceIds } == true) || svc.host in knownIps
+            if (!known) continue
+            val inFlight = mdnsMutex.withLock {
+                if (key in mdnsInFlight) true else { mdnsInFlight += key; false }
+            }
+            if (inFlight) continue
+            scope.launch {
+                try {
+                    val r = connectWireless(svc.host, svc.port)
+                    if (r.success) logger.info("mdns auto-connect: ${svc.instanceName} -> $key")
+                    else logger.debug("mdns auto-connect failed for ${svc.instanceName} ($key): ${r.message}")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.warn("mdns auto-connect threw for ${svc.instanceName} ($key): ${e.message}")
+                } finally {
+                    mdnsMutex.withLock { mdnsInFlight -= key }
+                }
+            }
         }
     }
 
@@ -143,6 +188,26 @@ class DeviceRepository(
                     if (still.isNullOrBlank()) {
                         setAlias(serial, name)
                         logger.info("auto-name: $serial -> \"$name\"")
+                        // Lazy deviceId learning (spec §4.3): if this wireless device's
+                        // history entry still has no deviceId (e.g. earlier connect's
+                        // getprop ro.serialno failed), learn it now while we're already
+                        // talking to the device.
+                        if (serial.contains(':')) {
+                            val entry = history.load().firstOrNull { it.serial == serial }
+                            if (entry != null && entry.deviceId == null) {
+                                learnDeviceId(serial)?.let { did ->
+                                    // The entry may be a bare one born from setAlias (no
+                                    // wirelessIp/port). Fall back to the ip:port serial so the
+                                    // merged entry keeps an address (WirelessReconnector filters
+                                    // on ip != null) and the same-IP stale merge can fire.
+                                    val ip = entry.wirelessIp ?: serial.substringBefore(':')
+                                    val port = entry.wirelessPort ?: serial.substringAfter(':').toIntOrNull()
+                                    val removed = history.mergeOnConnect(did, serial, DeviceType.WIRELESS, ip, port)
+                                    removed.forEach { logger.info("history: merged duplicate entry ${it.serial} into deviceId=$did (lazy learn)") }
+                                    recompute(tracker.devices.value)
+                                }
+                            }
+                        }
                     }
                 } else {
                     logger.debug("auto-name: no usable brand/model for $serial, retrying in ${AUTO_NAME_RETRY_MS / 1000}s")
@@ -178,7 +243,13 @@ class DeviceRepository(
         val r = commands.connect(ip, port)
         if (r.success) {
             val serial = "$ip:$port"
-            history.upsert(serial = serial, type = DeviceType.WIRELESS, wirelessIp = ip, wirelessPort = port)
+            val deviceId = learnDeviceId(serial)
+            if (deviceId != null) {
+                val removed = history.mergeOnConnect(deviceId, serial, DeviceType.WIRELESS, ip, port)
+                removed.forEach { logger.info("history: merged duplicate entry ${it.serial} into deviceId=$deviceId") }
+            } else {
+                history.upsert(serial = serial, type = DeviceType.WIRELESS, wirelessIp = ip, wirelessPort = port)
+            }
             // A successful connect counts as "use" for MRU sort.
             history.touchLastUsed(serial)
             recompute(tracker.devices.value)
@@ -187,6 +258,20 @@ class DeviceRepository(
             namingScope.launch { autoName(serial) }
         }
         return r
+    }
+
+    /** `getprop ro.serialno` → stable cross-port deviceId. Returns null on any failure
+     *  (unauthorized / offline race / empty / suspicious value) — never blocks the connect
+     *  success path. Sanity-checks: non-empty, no whitespace (would break serial parsing),
+     *  length ≤ 32 (real serials are 8–16 chars; anything longer is garbage). */
+    private suspend fun learnDeviceId(serial: String): String? = try {
+        val v = commands.runShellCmd(serial, "getprop ro.serialno").trim()
+        if (v.isNotEmpty() && !v.contains(' ') && v.length <= 32) v else null
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        logger.debug("deviceId learn failed for $serial: ${e.message}")
+        null
     }
 
     suspend fun pair(ip: String, port: Int, code: String): com.adbgui.core.domain.PairResult {

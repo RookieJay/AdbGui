@@ -7,6 +7,7 @@ import com.adbgui.core.domain.ConnectFailureReason
 import com.adbgui.core.domain.ConnectResult
 import com.adbgui.core.domain.DeviceGroupBy
 import com.adbgui.core.domain.DeviceView
+import com.adbgui.core.domain.MdnsService
 import com.adbgui.core.domain.PairResult
 import com.adbgui.core.settings.Settings
 import com.adbgui.desktop.ui.i18n.Strings
@@ -33,6 +34,15 @@ sealed class DeviceListItem {
     data class Header(val key: String, val count: Int, val onlineCount: Int) : DeviceListItem()
     data class Device(val view: com.adbgui.core.domain.DeviceView, val groupKey: String) : DeviceListItem()
 }
+
+/**
+ * Stale-port port-update prompt state. When `reconnect(ip, port)` fails with
+ * [ConnectFailureReason.PORT_STALE], the VM surfaces an inline UI in the device row offering
+ * to try a new port (the wireless-debugging connect port randomizes on device reboot).
+ * [deviceSerial] matches the repo's wireless serial form (`"$ip:$port"`) so the inline UI
+ * can be anchored to the matching [DeviceView.serial] row.
+ */
+data class PortUpdate(val ip: String, val stalePort: Int, val deviceSerial: String)
 
 class DeviceListViewModel(
     private val repo: DeviceRepository,
@@ -63,6 +73,13 @@ class DeviceListViewModel(
 
     /** The raw device list (still useful for callers that need devices without group headers). */
     val devices: StateFlow<List<DeviceView>> = repo.devices
+
+    /**
+     * mDNS-discovered adb services, transparently forwarded from the repo for the ConnectDialog
+     * to render. Kept as a direct reference (no stateIn) so the VM stays trivially testable
+     * under `runTest` — no sharing coroutine, no UncompletedCoroutinesError.
+     */
+    val discovered: StateFlow<List<MdnsService>> = repo.discovered
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     private val _busy = MutableStateFlow(false)
@@ -83,6 +100,14 @@ class DeviceListViewModel(
     // reorders the list. Serial is the repo's wireless serial form: "$ip:$port".
     private val _scrollToSerial = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val scrollToSerial: SharedFlow<String> = _scrollToSerial.asSharedFlow()
+
+    /**
+     * Inline port-update prompt state. Set on `reconnect` failure with [ConnectFailureReason.PORT_STALE];
+     * cleared by [submitPortUpdate] (user typed a new port and we try it) or [cancelPortUpdate]
+     * (user dismissed). Null means no prompt is showing.
+     */
+    private val _portUpdate = MutableStateFlow<PortUpdate?>(null)
+    val portUpdate: StateFlow<PortUpdate?> = _portUpdate.asStateFlow()
 
     fun connect(ip: String, port: Int, onResult: (ConnectResult) -> Unit = {}) {
         scope.launch {
@@ -112,10 +137,33 @@ class DeviceListViewModel(
                     _scrollToSerial.tryEmit("$ip:$port")
                 } else {
                     _error.value = formatConnectError(r, ip, port)
+                    // PORT_STALE = the device is on the network but its wireless-debugging
+                    // connect port changed (randomizes on reboot/re-enable). Surface the
+                    // inline "enter new port" prompt on the matching device row so the user
+                    // can recover without opening the connect dialog.
+                    if (r.reason == ConnectFailureReason.PORT_STALE) {
+                        _portUpdate.value = PortUpdate(ip, port, "$ip:$port")
+                    }
                 }
             } finally { _busy.value = false }
         }
     }
+
+    /**
+     * User picked a new port from the inline port-update prompt. Clear the prompt + the stale
+     * error banner and retry via the regular [connect] path (which goes through the normal
+     * success/dismiss/scroll signal pipeline). No-op if no prompt is showing (defensive — the
+     * UI button that calls this should only be visible while [portUpdate] is non-null).
+     */
+    fun submitPortUpdate(newPort: Int) {
+        val u = _portUpdate.value ?: return
+        _portUpdate.value = null
+        _error.value = null
+        connect(u.ip, newPort)
+    }
+
+    /** User dismissed the inline port-update prompt without entering a new port. */
+    fun cancelPortUpdate() { _portUpdate.value = null }
 
     /**
      * Port-stale / unreachable failures get an actionable hint (the wireless-debugging port

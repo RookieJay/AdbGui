@@ -6,6 +6,7 @@ import com.adbgui.core.device.LogcatStatus
 import com.adbgui.core.domain.LogcatLine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,17 +17,53 @@ import java.io.FileWriter
 class LogcatViewModel(
     private val controller: LogcatController,
     private val recording: com.adbgui.core.device.LogcatRecordingManager,
+    private val repository: com.adbgui.core.device.DeviceRepository,
+    private val store: com.adbgui.core.settings.SettingsStore,
     private val selectedSerial: kotlinx.coroutines.flow.StateFlow<String?>,
     /** Whether the currently selected device is ONLINE. The empty-state "fix logcat" hint is
      *  gated on this — a disconnected/offline device produces an empty logcat stream too, but
      *  that's not a silenced logd; showing the fix there is misleading. */
     val deviceOnline: StateFlow<Boolean>,
     private val scope: CoroutineScope,
+    private val logger: com.adbgui.core.log.Logger = com.adbgui.core.log.NoopLogger,
 ) {
     val lines: StateFlow<List<LogcatLine>> = controller.lines
     val filters: StateFlow<LogcatFilters> = controller.filters
     val status: StateFlow<LogcatStatus> = controller.status
     val error: StateFlow<String?> = controller.error
+
+    /** 上次会话保存的过滤条件（恢复 UI 初始值用，spec D4）。pids 不持久化——由 controller 恢复时重新解析。 */
+    val initialFilters: LogcatFilters = store.state.value.logcatFilters.toFilters()
+
+    private fun com.adbgui.core.settings.SavedLogcatFilters.toFilters() = LogcatFilters(
+        levelSet = levelSet.mapNotNull { name ->
+            com.adbgui.core.domain.LogcatLevel.entries.firstOrNull { it.name == name }
+        }.toSet().ifEmpty { com.adbgui.core.domain.LogcatLevel.entries.toSet() },
+        tagInclude = tagInclude,
+        tagExcludes = tagExcludes,
+        text = text,
+        textIsRegex = textIsRegex,
+        packageName = packageName,
+    )
+
+    // --- App 下拉数据（惰性加载一次并缓存；失败内联提示，下次打开下拉重试） ---
+    private val _packages = MutableStateFlow<List<com.adbgui.core.domain.PackageInfo>?>(null)
+    val packages: StateFlow<List<com.adbgui.core.domain.PackageInfo>?> = _packages.asStateFlow()
+    private val _packagesError = MutableStateFlow<String?>(null)
+    val packagesError: StateFlow<String?> = _packagesError.asStateFlow()
+
+    fun loadPackages() {
+        if (_packages.value != null) return
+        val serial = selectedSerial.value ?: return
+        scope.launch {
+            runCatching { repository.listPackages(serial) }
+                .onSuccess { _packages.value = it; _packagesError.value = null }
+                .onFailure { _packagesError.value = it.message ?: it.javaClass.simpleName }
+        }
+    }
+
+    /** Tag 下拉数据源（打开下拉时取一次）。 */
+    fun snapshotTags(): List<Pair<String, Int>> = controller.snapshotTags()
 
     // "Fix logcat" action state — separate from the stream's own error (which is about the
     // stream; this is about the one-shot logd-revive command). Null = no error / not attempted.
@@ -50,6 +87,20 @@ class LogcatViewModel(
     val autoRecordStates: StateFlow<Map<String, com.adbgui.core.device.RecordState>> = recording.autoStates
     val recordingsDir: java.nio.file.Path get() = recording.recordingsDir
 
+    /** Recording→Stopped 的边沿事件：一次手动录制**真正结束**时发一次（该录制的文件）。
+     *  UI 的"停止后自动弹定位"只认这个沿——起录新会话、页面重进（残留的 Stopped 态）
+     *  都不会重弹。冷 Flow：每个 collector 各自从当前值开始（prev=null → 首值不发）。 */
+    val manualStoppedFile: kotlinx.coroutines.flow.Flow<java.nio.file.Path> =
+        kotlinx.coroutines.flow.flow {
+            var prev: com.adbgui.core.device.ManualRecordState? = null
+            recording.manualState.collect { st ->
+                if (prev is com.adbgui.core.device.ManualRecordState.Recording &&
+                    st is com.adbgui.core.device.ManualRecordState.Stopped
+                ) emit(st.file)
+                prev = st
+            }
+        }
+
     private val _recordError = MutableStateFlow<String?>(null)
     val recordError: StateFlow<String?> = _recordError.asStateFlow()
 
@@ -70,7 +121,27 @@ class LogcatViewModel(
 
     fun stopRecording() { scope.launch { recording.stopManual("user") } }
 
-    fun setFilters(f: LogcatFilters) = controller.setFilters(f)
+    // --- 过滤持久化（spec D4：500ms 防抖；失败静默降级 log warn） ---
+    private var persistJob: Job? = null
+
+    fun setFilters(f: LogcatFilters) {
+        controller.setFilters(f)
+        persistJob?.cancel()
+        persistJob = scope.launch {
+            delay(500)
+            runCatching { store.update { it.copy(logcatFilters = f.toSaved()) } }
+                .onFailure { logger.warn("logcat filters persist failed: ${it.message}") }
+        }
+    }
+
+    private fun LogcatFilters.toSaved() = com.adbgui.core.settings.SavedLogcatFilters(
+        levelSet = levelSet.map { it.name },
+        tagInclude = tagInclude,
+        tagExcludes = tagExcludes,
+        text = text,
+        textIsRegex = textIsRegex,
+        packageName = packageName,
+    )
     fun pause() = controller.pause()
     fun resume() = controller.resume()
     fun clear() = controller.clear()
@@ -141,5 +212,5 @@ class LogcatViewModel(
         }
     }
 
-    fun stop() { pageJob?.cancel(); pageJob = null }
+    fun stop() { pageJob?.cancel(); pageJob = null; persistJob?.cancel(); persistJob = null }
 }

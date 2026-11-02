@@ -28,8 +28,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.adbgui.core.domain.FileEntry
 import com.adbgui.desktop.ui.i18n.Strings
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
+import com.adbgui.desktop.platform.SafeClipboard
 import java.io.File
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
@@ -218,7 +217,7 @@ fun FileExplorerScreen(
                             DropdownMenuItem(onClick = {
                                 menuOpen = false
                                 val path = joinPath(currentPath, entry.name)
-                                Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(path), null)
+                                SafeClipboard.copyText(path)
                             }) { Text(Strings.t("copy_path")) }
                         }
                     }

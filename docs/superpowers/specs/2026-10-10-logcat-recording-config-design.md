@@ -1,7 +1,7 @@
 # ADB GUI — Logcat 录制优化（可配置目录 + 总量上限 + 按日合并）
 
 - **日期**：2026-10-10
-- **状态**：设计已与用户确认（对话定稿），待复核后转 writing-plans
+- **状态**：已实现
 - **范围**：修订 2026-09-30 录制子系统设计——①录制目录可配置（热切换 + 自动迁移）；②auto 总量上限清理；③auto 文件按日合并（同设备同天续写）；④auto/manual 子目录区分（文件名去掉前缀）；⑤存量文件一次性归位；⑥设置页录制管理 UI
 - **基线**：`docs/superpowers/specs/2026-09-30-logcat-recording-design.md`（本文件修订其 §3.2/§3.3/§3.4/§7；其余章节仍有效）
 - **依据**：实测 `logcat-recordings/` 两天 21 个文件共 190 MB——文件随设备重连频率碎片化、磁盘占用无总量约束、目录写死在配置目录
@@ -30,7 +30,7 @@
     └── <label>_<stamp>.log
 ```
 
-语义编码在目录而非文件名：清理只扫 `auto/`，`latestRecordingFile()` 扫两个子目录取最新。`<label>` 维持现状（品牌_型号_Android版本，getprop 失败回退 serialSafe）。
+语义编码在目录而非文件名：清理只扫 `auto/`，`latestRecordingFile()` 扫两个子目录取最新。`<label>` = 品牌_型号_Android版本（getprop）；起录瞬间设备常未就绪（adb connect 冷启动、断流重连），故 getprop 失败/unknown 时重试（3 次 × 1s），仍失败回退历史设备别名（auto-name 持久化的 `devices.json` 别名，fileSafe 化），连别名都没有才回退 serialSafe——同一设备不因起录竞态换 IP 命名。
 
 ### D2：目录可配置，热切换 + 自动迁移
 

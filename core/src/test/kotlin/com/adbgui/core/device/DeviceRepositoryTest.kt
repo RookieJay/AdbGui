@@ -11,7 +11,11 @@ import com.adbgui.core.domain.DeviceType
 import com.adbgui.core.log.InMemoryLogger
 import com.adbgui.core.log.LogLevel
 import com.adbgui.core.log.NoopLogger
+import com.adbgui.core.mdns.DnsPacketBuilder
+import com.adbgui.core.mdns.FakeMdnsSocket
+import com.adbgui.core.mdns.MdnsScanner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -21,8 +25,10 @@ import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class DeviceRepositoryTest {
     @Test
     fun merges_live_and_history() = runTest {
@@ -303,6 +309,52 @@ class DeviceRepositoryTest {
     }
 
     @Test
+    fun connectWireless_learns_deviceId_and_merges_stale_same_ip_entries() = runTest {
+        // After a successful wireless connect, the repo must query `getprop ro.serialno`
+        // to learn the stable deviceId, then call history.mergeOnConnect so stale same-IP
+        // entries (no deviceId, different port) collapse into one.
+        val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
+        val history = DeviceHistoryStore(Files.createTempDirectory("rep-learn"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        // Pre-seed stale same-IP entry (no deviceId, older port)
+        history.upsert("10.0.5.221:38897", DeviceType.WIRELESS, "10.0.5.221", 38897)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 10.0.5.221:37751", ""))
+        // pty adds \r; sanitize strips it, then implementation must .trim() the trailing \n.
+        runner.whenArgsContains(listOf("getprop", "ro.serialno"), AdbProcessResult(0, "af199bb4\r\n", ""))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        val r = repo.connectWireless("10.0.5.221", 37751)
+        assertTrue(r.success)
+        val entries = history.load()
+        assertEquals(1, entries.size, "stale same-IP entry must be merged away")
+        val h = entries.first()
+        assertEquals("10.0.5.221:37751", h.serial)
+        assertEquals("af199bb4", h.deviceId)
+        repo.stop()
+    }
+
+    @Test
+    fun connectWireless_serialno_failure_degrades_to_plain_upsert() = runTest {
+        // If `getprop ro.serialno` fails (unauthorized / offline race), the connect must
+        // still succeed — history is written via plain upsert (no merge), deviceId stays null.
+        val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
+        val history = DeviceHistoryStore(Files.createTempDirectory("rep-degrade"), clock = { 0L }, io = kotlinx.coroutines.Dispatchers.Unconfined)
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 10.0.5.221:37751", ""))
+        runner.whenArgsContains(listOf("getprop", "ro.serialno"), AdbProcessResult(1, "", "error"))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        val r = repo.connectWireless("10.0.5.221", 37751)
+        assertTrue(r.success)
+        val entries = history.load()
+        assertEquals(1, entries.size)
+        val h = entries.first()
+        assertEquals("10.0.5.221:37751", h.serial)
+        assertEquals(null, h.deviceId, "getprop failure must not block the connect — deviceId stays null")
+        repo.stop()
+    }
+
+    @Test
     fun renameTag_renames_tag_on_all_devices_and_merges_into_existing() = runTest {
         // "a" and "b" wear "lab"; "c" already wears "desk". Renaming lab→desk must move both
         // into "desk" in one write — the per-device setTag race clearTag guards against applies
@@ -332,6 +384,148 @@ class DeviceRepositoryTest {
         val hist = history.load().associateBy { it.serial }
         assertEquals("desk", hist["a"]?.tag)
         assertEquals("desk", hist["b"]?.tag)
+        repo.stop()
+    }
+
+    // Helper: build a packet advertising a single TLS service for the given serial/ip/port.
+    private fun tlsServicePacket(instanceName: String, port: Int, host: String) =
+        DnsPacketBuilder.response(
+            listOf(
+                DnsPacketBuilder.Ptr("_adb-tls-connect._tcp.local", "$instanceName._adb-tls-connect._tcp.local"),
+                DnsPacketBuilder.Srv("$instanceName._adb-tls-connect._tcp.local", port, "android.local"),
+                DnsPacketBuilder.A("android.local", host),
+            )
+        )
+
+    /** Drive a real [MdnsScanner] on a [FakeMdnsSocket] — zero new fakes (brief's decision). */
+    private fun TestScope.startScannerOn(socket: FakeMdnsSocket): MdnsScanner {
+        val scanner = MdnsScanner(socket, NoopLogger, backgroundScope, Dispatchers.Unconfined, clock = { testScheduler.currentTime })
+        scanner.start()
+        // First loop iteration: send queries + block on receive. The scanner is now live.
+        advanceTimeBy(1_000)
+        return scanner
+    }
+
+    /** Emit [packet] and pump the scanner long enough for the service to land in services. */
+    private fun TestScope.publishPacket(socket: FakeMdnsSocket, packet: ByteArray) {
+        socket.emit(packet)
+        advanceTimeBy(1_000)
+    }
+
+    @Test
+    fun mdns_service_matching_known_deviceId_triggers_connect() = runTest {
+        // History holds a device keyed by deviceId (not the current port). mDNS discovers a
+        // TLS service whose instanceName embeds the SAME deviceId — repo must auto-connect
+        // to the NEW port and merge the stale history entry.
+        val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
+        val history = DeviceHistoryStore(Files.createTempDirectory("mdns-known"), clock = { 0L }, io = Dispatchers.Unconfined)
+        // Pre-seed via mergeOnConnect so deviceId is populated (plain upsert cannot set it).
+        history.mergeOnConnect("af199bb4", "10.0.5.221:38897", DeviceType.WIRELESS, "10.0.5.221", 38897)
+
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 10.0.5.221:37751", ""))
+        runner.whenArgsContains(listOf("getprop", "ro.serialno"), AdbProcessResult(0, "af199bb4\r\n", ""))
+        runner.whenArgsContains(listOf("getprop"), getpropResult("OnePlus", "PJZ110"))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+
+        val socket = FakeMdnsSocket()
+        val scanner = startScannerOn(socket)
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, mdns = scanner)
+
+        publishPacket(socket, tlsServicePacket("adb-af199bb4-Q9dhj", 37751, "10.0.5.221"))
+        // Pump repo's collector + the launched connectWireless coroutine.
+        advanceUntilIdle()
+
+        val connectCalls = runner.runs.filter { args -> args.any { it == "connect" } }
+        assertTrue(connectCalls.isNotEmpty(), "mDNS match on known deviceId must trigger adb connect")
+        val entries = history.load()
+        assertEquals(1, entries.size, "stale same-deviceId entry must be merged")
+        assertEquals("10.0.5.221:37751", entries.first().serial)
+        assertEquals("af199bb4", entries.first().deviceId)
+        repo.stop(); scanner.stop()
+    }
+
+    @Test
+    fun mdns_service_unknown_goes_to_discovered_only() = runTest {
+        // No history — mDNS finds a service that matches nothing. It must show up in
+        // [discovered] but NOT trigger any adb connect.
+        val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
+        val history = DeviceHistoryStore(Files.createTempDirectory("mdns-unknown"), clock = { 0L }, io = Dispatchers.Unconfined)
+
+        val runner = FakeAdbProcessRunner()
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+
+        val socket = FakeMdnsSocket()
+        val scanner = startScannerOn(socket)
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, mdns = scanner)
+
+        publishPacket(socket, tlsServicePacket("adb-mysterydevice-XyZ123", 42069, "192.168.1.77"))
+        advanceUntilIdle()
+
+        assertEquals(1, repo.discovered.value.size)
+        assertEquals("192.168.1.77", repo.discovered.value[0].host)
+        assertEquals(42069, repo.discovered.value[0].port)
+        assertTrue(runner.runs.none { args -> args.any { it == "connect" } },
+            "unknown mDNS service must NOT trigger adb connect")
+        repo.stop(); scanner.stop()
+    }
+
+    @Test
+    fun unknown_wireless_serial_coming_online_gets_deviceId_learned() = runTest {
+        // A wireless device that adb server auto-connected shows up in tracker as ONLINE
+        // with its ip:port serial. History has an entry but no deviceId yet. autoName
+        // runs (sets alias) AND the new lazy-learning code path must also query getprop
+        // ro.serialno and merge the deviceId into history.
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(DeviceSnapshot("10.0.5.221:37751", DeviceStatus.ONLINE)))
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("mdns-learn"), clock = { 0L }, io = Dispatchers.Unconfined)
+        // Pre-seed wireless entry WITHOUT deviceId (e.g. learned from an earlier connect
+        // where getprop ro.serialno failed — see the degrade test).
+        history.upsert("10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+        assertNull(history.load().first().deviceId, "fixture: entry starts without deviceId")
+
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("getprop", "ro.serialno"), AdbProcessResult(0, "af199bb4\r\n", ""))
+        runner.whenArgsContains(listOf("getprop"), getpropResult("OnePlus", "PJZ110"))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+
+        waitUntil { history.load().firstOrNull { it.serial == "10.0.5.221:37751" }?.deviceId != null }
+        val entry = history.load().first { it.serial == "10.0.5.221:37751" }
+        assertEquals("af199bb4", entry.deviceId)
+        repo.stop()
+    }
+
+    @Test
+    fun lazy_learn_merges_bare_setAlias_entry_with_ip_port_from_serial() = runTest {
+        // Real-world sequence (observed live 2026-10-30): adb server auto-connects a NEW
+        // ip:port serial with NO history entry. recompute → autoName → setAlias creates a
+        // BARE entry (no wirelessIp/port). The lazy deviceId learn then called mergeOnConnect
+        // with entry.wirelessIp (null) — leaving the entry without an address (skipped by
+        // WirelessReconnector's ip!=null filter) and disabling the same-IP stale merge.
+        // Fix: derive ip/port from the ip:port serial when the entry lacks them.
+        val tracker = object : IDeviceTracker {
+            override val devices = MutableStateFlow(listOf(DeviceSnapshot("10.0.5.221:37751", DeviceStatus.ONLINE)))
+        }
+        val history = DeviceHistoryStore(Files.createTempDirectory("mdns-bare"), clock = { 0L }, io = Dispatchers.Unconfined)
+        // Stale same-IP pile from earlier ports (what the merge should clean up).
+        history.upsert("10.0.5.221:38897", DeviceType.WIRELESS, "10.0.5.221", 38897)
+        history.setAlias("10.0.5.221:38897", "OnePlus PJD110")
+
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("getprop", "ro.serialno"), AdbProcessResult(0, "af199bb4\r\n", ""))
+        runner.whenArgsContains(listOf("getprop"), getpropResult("OnePlus", "PJD110"))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+
+        waitUntil { history.load().firstOrNull { it.deviceId == "af199bb4" } != null }
+        val entries = history.load()
+        val merged = entries.first { it.deviceId == "af199bb4" }
+        assertEquals("10.0.5.221:37751", merged.serial)
+        assertEquals("10.0.5.221", merged.wirelessIp, "ip must be derived from the ip:port serial")
+        assertEquals(37751, merged.wirelessPort, "port must be derived from the ip:port serial")
+        assertEquals(1, entries.size, "stale same-IP entry must be merged away in the same pass")
         repo.stop()
     }
 }

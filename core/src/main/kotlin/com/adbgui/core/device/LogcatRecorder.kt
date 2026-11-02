@@ -45,6 +45,7 @@ class LogcatRecorder(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val file: Path,
     private val rotationBytes: Long = ROTATION_BYTES,
+    private val append: Boolean = false,
 ) {
     private val _state = MutableStateFlow(RecordState())
     val state: StateFlow<RecordState> = _state.asStateFlow()
@@ -59,13 +60,22 @@ class LogcatRecorder(
         job = scope.launch {
             val flushJob = launch { flushLoop() }   // 子协程：finally 中取消
             try {
-                withContext(io) {
+                val initialBytes = withContext(io) {
                     Files.createDirectories(file.parent)
-                    writer = Files.newBufferedWriter(
-                        file, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING
-                    )
+                    if (append) {
+                        val existing = runCatching { Files.size(file) }.getOrDefault(0L)
+                        writer = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.APPEND)
+                        val ts = java.time.LocalDateTime.now().format(
+                            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+                        )
+                        writer?.write("--------- adbgui session start $ts serial=$serial\n")
+                        existing
+                    } else {
+                        writer = Files.newBufferedWriter(file, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
+                        0L
+                    }
                 }
-                _state.value = RecordState(status = RecordStatus.RECORDING)
+                _state.value = RecordState(status = RecordStatus.RECORDING, bytesWritten = initialBytes)
                 runLoop(serial)
             } catch (t: Throwable) {
                 if (t !is CancellationException) {

@@ -23,13 +23,17 @@ enum class LogcatStatus { IDLE, RUNNING, PAUSED, RECONNECTING, FAILED }
 
 data class LogcatFilters(
     val levelSet: Set<LogcatLevel> = LogcatLevel.entries.toSet(),
+    /** 用户在下拉里选的应用；null = 无包过滤。非空时由 controller 的重解析循环维护 [pids]（Task 3）。 */
+    val packageName: String? = null,
+    /** 生效 pid 过滤（包的 pid 集合，或右键「只看此 PID」的单元素集合）。会话态，不持久化。 */
+    val pids: Set<Int> = emptySet(),
     val tagInclude: String? = null,
-    val tagExclude: String? = null,
+    /** 多重排除：tag 命中任一（忽略大小写）即被滤掉。 */
+    val tagExcludes: List<String> = emptyList(),
     val text: String? = null,
     /** When true, [text] is a regex (case-sensitive — embed `(?i)` for case-insensitive).
      * An invalid pattern falls back to plain-contains matching so the stream never dies. */
     val textIsRegex: Boolean = false,
-    val pid: Int? = null,
 )
 
 class LogcatController(
@@ -40,6 +44,8 @@ class LogcatController(
     /** `_lines` 的发布节流间隔。见 spec §4.2：必须是"固定间隔节流"而不是"取消式防抖"，
      *  否则持续洪流下 `delay` 会被不断取消、永不发布。 */
     private val publishIntervalMs: Long = 100,
+    /** 包过滤激活期间 pidof 重解析间隔（spec D2）。测试传小值。 */
+    private val reResolveIntervalMs: Long = 5000,
 ) {
     private val _lines = MutableStateFlow<List<LogcatLine>>(emptyList())
     val lines: StateFlow<List<LogcatLine>> = _lines.asStateFlow()
@@ -54,6 +60,9 @@ class LogcatController(
     private val filtered = ArrayDeque<LogcatLine>()
     @Volatile private var stream: AdbStream? = null
     private var job: Job? = null
+    @Volatile private var currentSerial: String? = null
+    private var resolveJob: Job? = null
+    @Volatile private var resolveLoopPkg: String? = null
 
     /** Conflated wake-up for [publishLoop]: a burst of N lines collapses into at most one pending
      *  signal, so the loop wakes once per [publishIntervalMs] instead of once per line. */
@@ -69,6 +78,7 @@ class LogcatController(
 
     fun start(serial: String) {
         stop()
+        currentSerial = serial
         job = scope.launch {
             // The publisher is a CHILD of the stream job so stop() cancels it with the stream,
             // and so runTest can reach idle. It must never be launched from an init block.
@@ -77,7 +87,14 @@ class LogcatController(
                 ring.clear(); filtered.clear()
                 linesDirty = true
                 _error.value = null
+                // 设备切换 → pid 空间不同；包过滤激活时清空已解析 pids（与 ring 清除原子），
+                // 重启循环的首拍会为新 serial 重新解析。放在 mutex 内保证与 mergePids 互斥。
+                if (resolveLoopPkg != null) {
+                    _filters.value = _filters.value.copy(pids = emptySet())
+                }
             }
+            // 必须在 mutex 块之后重启——确保 pids 清空对循环可见（先清后解析）。
+            if (resolveLoopPkg != null) restartResolveLoop(resolveLoopPkg)
             flushSignal.trySend(Unit)
             runLoop(serial)
         }
@@ -85,7 +102,9 @@ class LogcatController(
 
     fun stop() {
         job?.cancel(); job = null
+        resolveJob?.cancel(); resolveJob = null   // resolveLoopPkg 故意保留：下次 start() 重启
         stream?.kill(); stream = null
+        currentSerial = null
         linesDirty = false
         _status.value = LogcatStatus.IDLE
     }
@@ -98,16 +117,81 @@ class LogcatController(
     // the same non-reentrant mutex, so calling it inside would deadlock).
     fun clear() {
         scope.launch {
+            val serial = currentSerial
             mutex.withLock { ring.clear(); filtered.clear(); linesDirty = true }
             publishOnce()
+            // Also clear the on-device logd ring — the in-memory clear alone hid the backlog from
+            // view while `logcat` (live stream AND record) replays it on next start. Best-effort:
+            // on failure the view stays cleared and the error surfaces inline (not swallowed).
+            if (serial != null) {
+                try {
+                    commands.clearLogcat(serial)
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    logger.warn("logcat clear failed for $serial: ${t.message}")
+                    _error.value = t.message
+                }
+            }
         }
     }
 
     fun setFilters(f: LogcatFilters) {
         scope.launch {
-            mutex.withLock { _filters.value = f; recomputeFiltered(); linesDirty = true }
+            mutex.withLock {
+                // 包过滤激活期间，pids 由解析循环拥有——UI 改其他条件（传空 pids）不得抹掉已解析集合
+                val effective = if (f.packageName != null && f.packageName == _filters.value.packageName)
+                    f.copy(pids = _filters.value.pids) else f
+                _filters.value = effective
+                recomputeFiltered(); linesDirty = true
+            }
             publishOnce()
         }
+        if (f.packageName != resolveLoopPkg) restartResolveLoop(f.packageName)
+    }
+
+    private fun restartResolveLoop(pkg: String?) {
+        resolveJob?.cancel(); resolveJob = null
+        resolveLoopPkg = pkg
+        if (pkg != null) resolveJob = scope.launch { resolveLoop(pkg) }
+    }
+
+    /** spec D2：首拍立即解析，之后每 [reResolveIntervalMs] 重解析。pid **只增不减**（app 重启换
+     *  pid 后旧 pid 的历史行仍显示）；解析失败保旧值不打断流；换包/清包由 [setFilters] 重启循环。 */
+    private suspend fun resolveLoop(pkg: String) {
+        while (true) {
+            val serial = currentSerial
+            if (serial != null) {
+                val resolved = try {
+                    commands.pidOf(serial, pkg)
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    logger.warn("pidof failed for $pkg on $serial: ${t.message}")  // 保旧 pids
+                    null
+                }
+                if (resolved != null) mergePids(pkg, resolved)
+            }
+            delay(reResolveIntervalMs)
+        }
+    }
+
+    private suspend fun mergePids(pkg: String, newPids: List<Int>) {
+        mutex.withLock {
+            val f = _filters.value
+            if (f.packageName != pkg) return   // 解析期间用户已换包/清包，结果作废
+            val merged = f.pids + newPids      // 空列表 → 无变化（app 未运行不清旧 pids）
+            if (merged == f.pids) return
+            _filters.value = f.copy(pids = merged)
+            recomputeFiltered(); linesDirty = true
+        }
+        publishOnce()
+    }
+
+    /** 当前已发布（已过滤）视图里的 distinct tag→count，频次降序，cap 200。打开 Tag 下拉时调；
+     *  非挂起——读 immutable List 快照无需持锁，且 tag 列表天然跟随当前过滤视图。 */
+    fun snapshotTags(): List<Pair<String, Int>> {
+        val counts = mutableMapOf<String, Int>()
+        for (l in _lines.value) counts[l.tag] = (counts[l.tag] ?: 0) + 1
+        return counts.entries.sortedByDescending { it.value }.take(200).map { it.key to it.value }
     }
 
     private fun recomputeFiltered() {
@@ -198,8 +282,11 @@ class LogcatController(
 
     private fun matches(line: LogcatLine, f: LogcatFilters): Boolean {
         if (line.level !in f.levelSet) return false
+        f.tagExcludes.forEach { ex ->
+            if (ex.isNotBlank() && line.tag.contains(ex, ignoreCase = true)) return false
+        }
+        if (f.pids.isNotEmpty() && line.pid !in f.pids) return false
         f.tagInclude?.takeIf { it.isNotBlank() }?.let { if (!line.tag.contains(it, ignoreCase = true)) return false }
-        f.tagExclude?.takeIf { it.isNotBlank() }?.let { if (line.tag.contains(it, ignoreCase = true)) return false }
         f.text?.takeIf { it.isNotBlank() }?.let { t ->
             val textOk = if (f.textIsRegex) {
                 val re = compiledRegexFor(t)
@@ -209,7 +296,6 @@ class LogcatController(
             }
             if (!textOk) return false
         }
-        f.pid?.let { if (line.pid != it) return false }
         return true
     }
 

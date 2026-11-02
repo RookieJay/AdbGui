@@ -3,6 +3,113 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-11-02 mDNS 零接触重连双根因修复（查询包编码 + 跨子网单播探测）
+
+分支：feat/wireless-reconnect-mdns（接 2026-10-30 节）。真机调试实况排查出两个叠加根因，修复后 OnePlus PJD110 跨子网零接触重连打通（日志证据：`unicast probe 10.0.5.221 -> adb-af199bb4-rY5hPZ 10.0.5.221:40635` → `adb connect connected` → `merged duplicate ... into deviceId=af199bb4`）。
+
+- **根因 1（查询包坏）**：`JvmMdnsSocket.queryPacket` 把 serviceType 明文 ASCII 写进 QNAME，没有 DNS label 长度前缀（RFC 1035 §4.1.2 要求 `\x10_adb-tls-connect\x04_tcp\x05local\x00`）。首字节 `_`（0x5F=95）被 responder 读成 95 字节 label 越界 → 整包判 malformed 丢弃 → 手机永不应答。诊断线索：日志里自查询回声 44/32 字节（恰好等于明文长度）且自家 parser 也判 unparseable。修复：构造移入 core `MdnsQueryPacket`（纯函数 + 单测含回归用例；`qid` 参数供 legacy unicast 用），`JvmMdnsSocket` 删除私有坏实现改调它。
+- **根因 2（组播跨子网不可达）**：修复编码后组播仍无应答。Python 原始 socket 探针对手机 IP 直发单播查询 → 手机秒回完整应答（PTR/SRV/TXT/A，当时端口 40635）→ 手机 responder 正常，是组播投递问题：PC 10.0.4.x 与手机 10.0.5.x **跨子网，组播 224.0.0.251 不过路由**（历史记忆「mDNS 广播 PC 收不到」的真正原因）。
+- **解法（双通道发现）**：`MdnsSocket` 新增 `probeUnicast(serviceType, host, timeout)` —— legacy unicast 查询（RFC 6762 §18.1/§6.7：临时源端口 + 非零 QID 直发 host:5353，responder 单播回包）。`MdnsScanner` 新增独立探测协程：每 10s 对 `knownHosts`（CompositionRoot 接历史记录全部无线 IP）逐个探测（单目标 600ms 超时，离线设备静默 DEBUG 日志），应答解析进同一 `services` StateFlow，下游 auto-connect 链路复用。`seen` 由单协程私有改为双协程共享，`Mutex` 保护（跨线程可变状态规范）。`FakeMdnsSocket` 脚本化单播应答；真实抓取的 189 字节应答存 fixture `mdns_response_unicast_pjd110.bin`（来源注释见同目录 .txt），parser 测试覆盖。
+- 同网段组播通道保留不变（单播是补充不是替代）；两通道共享 30s 过期与 10s 周期。测试：`MdnsQueryPacketTest`、`MdnsScannerTest` 新增单播两例（发现合并/超时无害）、`MdnsResponseParserTest` 新增真实单播应答 fixture 例；`:core:test` + `:desktop:test` 全绿。
+
+## v2 — 2026-10-30 无线设备自动回连 + mDNS 发现 + 设备去重
+
+分支：feat/wireless-reconnect-mdns。spec：docs/superpowers/specs/2026-10-23-wireless-reconnect-mdns-design.md。
+
+**背景动因**：Android 11+ 无线调试端口在「重开开关 / 手机重启 / 换 WiFi」时随机变化。历史 `devices.json` 只存了 `ip:port`，端口一换就重连失败，用户误以为要重新配对；同时同一 IP 在历史里越积越多条。spec §2 现场实证（OnePlus PJD110 / ColorOS + TCL TV）：(1) 端口变了**不需要重新配对**（配对密钥长期有效），`adb connect ip:新端口` 直连成功；(2) adb server 自带 `adb mdns services` 在本机收不到任何服务（TV 在广播但 adb 收不到），必须自建 mDNS 监听；(3) 手机 mDNS 广播是间歇性的，不能唯一依赖。设计含义：必须有多层兜底。
+
+**四层机制（spec §3）**：每层独立有效，层层兜底。
+
+- **Layer 1 — 保存端点自动重试（`WirelessReconnector`，core）**：对历史无线设备周期重试 `adb connect ip:port`。指数退避 5s→60s 封顶，成功即重置退避；只重试近 7 天用过（`lastUsedAt`）的条目、上限 10 条，避免历史堆积导致进程风暴。注入 scope 可取消。端口没变（最常见：手机唤醒/回网）时自动回连。
+- **Layer 2 — 自建 mDNS 探测（`MdnsScanner`，core）**：纯 JVM UDP 组播，不依赖 adb 的 mdns 后端。每 10s 向 `224.0.0.251:5353` 发 PTR 查询 `_adb-tls-connect._tcp.local`（Android 11+ 无线调试）与 `_adb._tcp.local`（老式 TCP adb，TCL TV 即此类）。`MdnsSocket` 接口抽象（`send`/`receive`），JVM `MulticastSocket` 实现 bind `0.0.0.0:5353`（SO_REUSEADDR，实测可与 adb server 共存）；bind 失败记 WARN 并禁用 mDNS 发现（应用继续运行，Layer 1 重连仍生效）。枚举 up + multicast 的 IPv4 `NetworkInterface` 逐个 join 组播组（多网卡必须）。`MdnsResponseParser` 纯函数解析 DNS-SD 报文（header / 压缩域名指针 / PTR/SRV/A/TXT 记录），malformed 报文跳过并保留原文到日志。输出 `StateFlow<List<MdnsService>>`（`serviceName` 形如 `adb-<serial>-XXXX` 时含真实 serial，可用于 Layer 4 身份匹配；`adb-unidentified` 按 IP 匹配）。已知设备（历史里 deviceId 匹配）→ 自动更新端口重连；未知设备 → 只进"发现的设备"列表不自动连（spec §4.5 后半为准）。
+- **Layer 3 — 端口失效内联更新（desktop）**：无线设备重连失败且 adb 报 `PORT_STALE` → 行内提示「端口已变，请查看手机无线调试页」，IP 预填只读 + 5 位端口输入框 + 重连按钮。无模态弹窗（遵循「错误本地化，不弹模态打断」约定）。
+- **Layer 4 — 真实 serial 去重（贯穿其余三层的设备身份）**：`connectWireless` 成功后 `runShellCmd(serial, "getprop ro.serialno")` 拿真实 serial（如 `af199bb4`）写入历史并触发合并；查询失败（unauthorized 等）不阻塞连接成功路径，deviceId 留空下次再学。对 adb server 自行连上的未知 `ip:port` 设备（tracker 观察到 online 且不在历史）：复用既有 autoName 的 getprop 懒加载路径顺带学习 deviceId（不额外加命令调用）。
+
+**数据模型与合并规则（`DeviceHistoryStore`）**：schema 加 `deviceId: String?` 字段（`ignoreUnknownKeys` + 默认值天然向后兼容，零迁移成本——旧 `devices.json` 直接加载，deviceId 懒学习逐步填充）。原子 `mergeOnConnect(learnedDeviceId, serial, ip, port)` 一次完成：同 `deviceId` 多条 → 保留一条（吸收 alias/tag、更新 serial/ip/port/时间戳，其余删除）；serial == deviceId 的 USB 条目与无线条目 → 同一设备合并（插线与无线不再占两条）；同 IP 无 deviceId 的旧无线条目 → 视为残留删除（旧条目带不同非空 alias 则保留不动交用户手动删）。`DeviceRepository` 视图合并：`recompute` 分组键从 serial 改为 `deviceId ?: serial`，同组多条历史（迁移期过渡态）折叠为一条显示（取最新），存储层合并完成后自然消解。端口漂移的旧条目因此自动被合并，列表不再出现同 IP 多条。
+
+**desktop UI**：(1) `ConnectDialog` 输入框支持整串粘贴 `10.0.5.221:37751` 自动拆分 ip:port；新增「发现的设备」区渲染 mDNS StateFlow：显示 `ip:port`（+ 已知设备的别名），一键连接/配对跳转。(2) 设置页 `autoReconnect: Boolean`（默认开）控制 Layer 1 重试循环，`SettingsStore` 照常持久化。(3) CompositionRoot 把 `MdnsScanner` + `WirelessReconnector` 接入应用生命周期（autoReconnect 关时不启动 L1；mDNS 长生命周期 scope 同 DeviceTracker）。
+
+**测试（TDD）**：`:core` 新增 `MdnsResponseParserTest`（fixture 注释标明来源：手机 `_adb-tls-connect` 真实报文录制；TCL TV `_adb._tcp` 老式报文 fixture 待真实录制——现有 TV fixture 为手机 `_adb-tls-connect` 报文 shape，覆盖压缩域名指针与 TXT 解析，但 TV 默认 `ls` 同类的布局变体尚未真机录制，作遗留待办）、`MdnsScannerTest`（periodic 发射/expiry）、`DeviceHistoryStoreTest`（deviceId 字段、mergeOnConnect 合并/去重、并发 mutate 不丢写）、`DeviceMergeTest`（视图折叠）、`WirelessReconnectorTest`（退避/上限/scope 取消）、`DeviceRepositoryTest`（connectWireless 后学 deviceId + 合并；mDNS 已知设备自动触发 connect、未知设备只进 discovered）；`:desktop` 新增 `DeviceListViewModelTest` 端口失效行内更新的 ViewModel 状态机测试（`PortStaleFixture`）。
+
+**实证结论引用**：spec §2 的现场实验数据（配对密钥长期有效 / adb mdns services 收不到 TV 广播 / 自建 mDNS 原始 socket 能收到 TV 广播 / 端口变化规律 / AS 自动回连间歇成功原因分析）全部落在本实现的四层兜底设计里——不依赖 adb mdns、不依赖手机 mDNS 持续广播、不依赖 IP/机型作设备身份。
+
+### 待办（需真机录制）
+- **TCL TV `_adb._tcp` 老式报文 fixture 真实化**（CLAUDE.md §4 要求 fixture 必须真实录制，不许手写）：当前 TV-shape fixture 实为手机 `_adb-tls-connect` 报文结构，需在 TCL 电视（Android 6.0.1，`_adb._tcp` 老式广播，无 serial）上录制真实 UDP 组播原始字节存 `core/src/test/resources/fixtures/mdns_tv_*.bin`（首行注释标设备+版本+日期+抓包命令），测试改读 fixture。若真实报文暴露 parser 漏匹配的变体（TXT 字段为空、serviceName 格式差异等），按 TDD 红→绿补修。
+
+## v2 — 2026-10-18 应用页两处布局修复（busy 圆圈错位 / 小窗按钮被裁）
+
+用户反馈两件事：① busy 小圆圈位置"奇怪"；② 小窗模式下右侧刷新/安装按钮完全看不到。
+
+- **busy 圆圈错位**：Material `CircularProgressIndicator` 内部链是 `modifier.progressSemantics().size(40.dp)`（内部默认 40dp 挂在用户 modifier 内层）。原代码 `heightIn(max = 18.dp)` 只压了高度 → 实际占位 **40×18**，可见的 14dp 圆圈画在 40dp 盒子正中、左右各 ~11dp 隐形空白，视觉上向左漂且离刷新按钮间距异常；busy 切换时整行还额外多/少 40dp 宽度造成按钮跳动。改为 `size(18.dp)`（与本文件下方及 FileExplorerScreen 的兄弟写法一致）。依据为 material-desktop 1.7.3 jar 反汇编确认的 `CircularIndicatorDiameter = 40.dp`，非猜测。
+- **小窗按钮被裁**：根因有两层——主窗口无最小尺寸约束（`Main.kt` 裸 `Window`）；应用页工具栏是单个 `Row`，标题 + 固定 220dp 搜索框 + 系统应用开关 + 两个按钮 ≈ 700dp 固定最小宽度，而可用宽度 = 窗口 − 280dp 固定侧栏 − 32dp 内边距，Compose Row 不换行不滚动，溢出子元素直接被裁。修复沿用项目已有 idiom：工具栏套 `BoxWithConstraints`（同 `DeviceOverviewScreen`）——≥800dp 维持原单行布局不变，窄窗拆两行（上行标题 + `weight` 可伸缩搜索框，下行系统应用开关 + 右对齐刷新/安装，按钮恒可见）；刷新/安装按钮体提取为局部 `@Composable` 复用，两个分支共享一份实现。安装 flags 行改 `FlowRow`（同 `RemoteScreen`，需 `@OptIn(ExperimentalLayoutApi)`）：宽窗仍一行，窄窗自动换行，每个 checkbox+文字用内嵌 Row 绑定防拆对。
+- 纯布局修复，无 VM/`:core` 变化，无新增单测（项目约定 Compose 快照测试按需）；`:desktop:compileKotlin` 通过 + 真机窗口拖窄人工验证。
+- 已知边界：280dp 侧栏固定宽，窗口 < ~680px 时内容区仍然很挤（侧栏收窄/可折叠属另一话题，未在本次处理）。
+
+## v2 — 2026-10-16 清除按钮真正清设备 logd 缓冲区（logcat -c）
+
+用户反馈：日志页点「清除」多次后开始手动录制，行数仍瞬间飞涨到 1M+。根因：`LogcatController.clear()` 只清了 App 内存里的 ring/filtered 视图，从未执行 `adb logcat -c`——设备 logd 环形缓冲区纹丝不动；而手动录制（`LogcatRecorder`）与实时流走的是裸 `logcat`（不带 `-d` 会先把设备缓冲区全部积压行吐出再跟流），于是 1M+ 积压一口气灌进录制文件。确认弹框文案「将清空当前缓冲区」也名不副实。
+
+- **`CommandRunner.clearLogcat(serial)`**：`adb -s <serial> logcat -c`，非零退出抛 `AdbCommandException`。
+- **`LogcatController.clear()`**：清内存视图之外，对当前 serial 尽力执行设备端 `logcat -c`（无设备时不发命令）；失败不回滚已清的视图，走既有 `error` StateFlow 内联展示 + WARN 日志，不打断用户。
+- **弹框文案修正**：中英文均改为明确说明「清空设备日志缓冲区及当前视图」。
+- 录制侧不自动 `-c`：录制定位是"行车记录仪"，积压历史正是价值；想要从零录，先点一次「清除」（现在真清设备）再开始录制。
+
+**测试**（TDD）：`CommandRunnerTest` +2（argv 含 `-s serial logcat -c`；失败抛 AdbCommandException）；`LogcatControllerTest` +3（clear 同时清设备缓冲、设备失败时视图仍清空且 error 非空、无设备不发命令）。
+
+## v2 — 2026-10-15 Logcat 高级过滤（AS 式）
+
+分支：feat/logcat-advanced-filters。
+
+### Logcat 过滤增强（AS 式）
+- **包名/应用过滤**：下拉搜索选择（三方/系统可切），`pidof` 解析进程并每 5s 重解析（app 重启后旧进程日志保留）
+- **Tag 下拉**：从当前缓冲按频次列出，单选过滤 + 逐项排除（可多排除）
+- **日志行右键**：只看/排除此 tag、只看此 PID、清除 PID/应用过滤
+- **过滤条件持久化**：重启恢复上次条件（pids 不存，恢复时重新解析）
+- **全量导出同样过滤**：`logcat -d` 导出同样应用包名/tag/pid 过滤
+
+## v2 — 2026-10-13 修复剪贴板被占用时复制闪退（SafeClipboard + CrashGuard）
+
+真机反馈（2026-10-13）：系统信息页点「当前焦点窗口」后，选中右侧输出文字复制，弹框报 `cannot open system clipboard`，点确定后应用闪退。根因两层：① Windows 剪贴板被其他进程短暂持锁（剪贴板管理器/截图工具/输入法等）时 AWT 抛 `IllegalStateException("cannot open system clipboard")`，属环境竞争无法杜绝；② 该异常从 UI 事件逃逸后无任何兜底——app 没装全局未捕获异常 handler，JVM 直接退出，日志里连崩溃记录都没有。
+
+- **`SafeClipboard`（`desktop/platform`）**：所有剪贴板写入的统一入口。`copyText()` 对 `IllegalStateException` 做 3 次尝试 × 50ms 重试（竞争通常是瞬时的），耗尽后返回 false 而非抛出；其他异常照常传播（真 bug 归 CrashGuard 记录）。`SafeClipboardManager` 包装 Compose `ClipboardManager`，覆盖 `SelectionContainer`/`SelectableText` 选中后 Ctrl+C 这条绕过应用代码的内部路径（读写均兜底，读失败回退 null/false）。主窗口与截图窗口均经 `LocalClipboardManager provides` 注入。
+- **替换全部裸调用**：AppConsole（包名/代码路径/APK 路径复制）、CdpDebug（控制台导出、消息详情复制）、DeviceInfo（属性值复制，`copied` 现反映真实结果）、FileExplorer（路径复制）、Logcat（导出复制）、SystemInfo（原 `runCatching` 换 helper，保留 copied/copy_failed 内联反馈）共 6 屏 8 处；各屏 `Toolkit`/`StringSelection` import 一并清除。`ImageClipboard` 已有 `runCatching` 防护，不动。
+- **`CrashGuard`（`desktop/platform`）**：进程级兜底。`Thread.setDefaultUncaughtExceptionHandler` + `sun.awt.exception.handler`（AWT 事件分发线程的反射契约，handler 类须 public 无参构造）双路把未捕获异常写入应用日志（自身失败退 stderr）。定位为诊断安全网而非恢复机制——这次崩溃在日志里零痕迹，排障全靠猜。
+- 依据既有约定「错误本地化，不弹模态打断」：复制失败不再有系统弹框，最多静默失败（或既有内联 copy_failed 提示）。
+
+**测试**（TDD）：`SafeClipboardTest` +9（成功直写、瞬时锁重试、持续锁 3 次后放弃、非竞争异常传播、manager 的 set/get/hasText 各路径）；`CrashGuardTest` +3（线程名与异常落日志、AWT handler 记录、注册 handler 类名）。
+
+## v2 — 2026-10-13 录制文件命名兜底链（重试 + 历史别名）
+
+真机排查（2026-10-12）：同一台 Hisense TV 一天内出现 `hisense_VIDAA_TV_Android9_*.log` 与 `192.168.88.240_5555_*.log` 两套命名。根因是 `deviceLabel()` 的回退太急——应用冷启动/断流重连的瞬间 getprop 常失败，直接落到 serial（IP）命名。
+
+- **getprop 重试**：起录取 label 失败/unknown 时重试（3 次尝试 × 1s 间隔），覆盖 adb connect 未就绪的冷启动竞态。
+- **历史别名兜底**：重试耗尽后回退 `devices.json` 里 auto-name 持久化的设备别名（如 `hisense VIDAA_TV`，fileSafe 化），连别名都没有（全新设备）才回退 serial 命名；别名兜底命中记 INFO 便于排查。`LogcatRecordingManager` 注入 `DeviceHistoryStore`（与 `DeviceRepository` 共享同一实例）。
+- **修复既有隐患**：轮转续开路径先自取消 collector 再跑挂起代码——旧代码无挂起点侥幸成立，`deviceLabel` 引入 delay 后当场 `CancellationException` 使续开夭折。自取消挪到续开之后，语义不变（老 recorder 后续状态照旧进不了 UI）。
+- **测试**（TDD）：`LogcatRecordingManagerTest` +3（getprop 两败一成重试后取 label、getprop 恒败回退历史别名、props unknown 回退别名）；构造签名加 `history` 参数，既有用例与 desktop 两处构造点同步更新。
+
+## v2 — 2026-10-10 设置页日志分区：应用日志 vs 设备日志（Logcat）
+
+用户反馈：设置页里「日志级别」（本应用日志的级别）紧挨着 logcat 三块设置（缓冲行数 / 自动录制 / 录制存储），而「日志」（打开/导出应用日志）又孤悬在这三块之后——两类"日志"交错，扫一眼分不清哪块管哪边。
+
+- **「应用日志」组**（合并原「日志级别」+「日志」两节）：组标题 + 一行说明（"本应用自身的运行日志，用于排查应用问题（位于用户配置目录 logs/）"）；组内 = 日志级别选择器 + 打开日志文件夹 / 导出日志按钮（原在最底部，上移合并）。
+- **「设备日志（Logcat）」组**：缓冲行数 / 自动录制 / 录制存储 三块收进同一组标题 + 一行说明（"查看与录制设备 logcat 的相关设置"）之下；原三块各自的节标题（subtitle1 + Divider）降为组内小标题（subtitle2），组内不再插 Divider。
+- i18n：新增 `logs_app_section` / `logs_app_hint` / `logcat_section` / `logcat_section_hint`（zh/en）；删除仅此一处使用的旧 key `logs`。
+- 纯布局/文案重排，无 VM / `:core` 变化，无新增单测；`:desktop:test` 通过 + 运行应用查看实际效果。
+
+## v2 — 2026-10-10 Logcat 录制配置（目录可改 + 总量上限 + 按日合并）
+
+分支：feat/logcat-recording-config。spec：docs/superpowers/specs/2026-10-10-logcat-recording-config-design.md（修订 2026-09-30 录制子系统）
+
+- **录制目录可配置**：设置页「录制存储」节可更改目录（`FileDialogs.pickDirectory`），热切换自动迁移已有文件（旧目录 `auto/`、`manual/` 及根目录残留 `.log` 逐个移动到新目录对应位置，单文件失败跳过 + WARN）、正在录的 auto 自动重启、manual 以 `recording_dir_changed` 收尾（已写内容不丢）；「打开」按钮直达当前目录；「重置为默认」回到 `configDir/logcat-recordings`。
+- **auto 录制总占用上限**：默认 500 MB，可设 50–100000；超出删 `auto/` 下最旧文件（`lastModified` 排序），正在写的文件与 `manual/` 不受影响；与既有 7 天保留双约束，谁先触发谁删。触发时机：启动清理、每次开新 auto 文件（含轮转续开）、设置里改上限后。
+- **auto 文件按日合并**：同设备同天追加续写（当天文件存在则 append 模式，写 `--------- adbgui session start <ts> serial=<serial>` 标记行区分会话），重连不再碎片化；跨午夜靠重连/轮转自然分界。轮转文件命名改 `<label>_<yyyyMMdd>_<n>.log`（目录内最小未用 n），100 MB/文件封顶不变。
+- **auto/manual 子目录布局**：`<录制目录>/auto/` 与 `<录制目录>/manual/`，文件名不再带 `auto_` 前缀；清理只扫 `auto/`，`latestRecordingFile()` 扫两个子目录取最新。首次启动旧文件自动归位：根目录 `auto_*.log` 挪进 `auto/`（保留前缀，7 天内自然清掉），其余 `.log` 挪进 `manual/`；挪不动的 WARN 跳过下次再试。
+- **设置页录制管理 UI**：「录制存储」节显示当前有效路径（`SelectableText`）+ 更改/打开/重置默认按钮；总上限数字输入 + 应用（校验范围）；已用空间展示（经 `totalRecordingBytes()` 扫描两个子目录求和，目录/上限变化后自动刷新）。`SettingsViewModel` 注入 `LogcatRecordingManager` 转发，不越层。i18n 新增 zh/en 双语键（目录标签/更改/打开/重置默认、上限标签/校验错误、占用展示、迁移失败状态）。
+- **清理增强**：`cleanupOnStartup()`（原 `cleanupOldAutoFiles`）依次做归位 → 7 天清理 → 0 字节清理（`auto/` 下 0 字节且 `lastModified` 超 1 天，正在录的新鲜 0 字节不删）→ `enforceSizeCap()`；全 `runCatching`，失败 WARN 不阻塞启动。
+- **修复**：desktop `LogcatViewModelTest` 断言随新目录布局更新（文件路径从根目录改 `auto/` 子目录）。
+
+**测试**（TDD）：`LogcatRecorderTest` +2（append 模式保留已有内容 + `bytesWritten` 起始 = 现有大小、append 起录制 session start 标记行）；`LogcatRecordingManagerTest` +8（按日命名追加、轮转续开 `_n` 最小未用、`enforceSizeCap` 删最旧跳过活动文件与 manual、目录热切换迁移序列、迁移单文件失败跳过、启动归位 `auto_*.log`/手动文件分别归位、0 字节超 1 天删除而新鲜不删、既有命名断言更新）；`SettingsStoreTest` +2（两新字段序列化默认值）；`SettingsViewModelTest` +2（目录/上限转发、占用加载）。
+
 ## v2 — 2026-10-10 纯图标按钮悬停提示（tooltip）
 
 纯图标按钮（复制、删除、暂停/继续、导出等）此前只有无障碍 `contentDescription`，鼠标用户悬停无任何提示。本次统一补齐 hover tooltip。

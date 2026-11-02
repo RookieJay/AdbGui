@@ -34,6 +34,18 @@ data class UpdateSettings(
     val customManifestUrl: String = "",
 )
 
+/** Logcat 页过滤条件持久化（spec 2026-10-14 D4）。pids 是会话态**不存**——恢复时 controller
+ *  重新 pidof 解析。levelSet 存 LogcatLevel 名称，未知名称在恢复侧被忽略。 */
+@Serializable
+data class SavedLogcatFilters(
+    val levelSet: List<String> = listOf("V", "D", "I", "W", "E", "F"),
+    val tagInclude: String? = null,
+    val tagExcludes: List<String> = emptyList(),
+    val text: String? = null,
+    val textIsRegex: Boolean = false,
+    val packageName: String? = null,
+)
+
 @Serializable
 data class Settings(
     val adbPathOverride: String? = null,
@@ -53,6 +65,14 @@ data class Settings(
     /** 设备上线时自动后台录制其 logcat 到 logcat-recordings/（"行车记录仪"，spec §3.3）。
      *  仅应用运行期间有效；auto 文件保留 7 天、单文件 100 MB 轮转。 */
     val logcatAutoRecord: Boolean = true,
+    /** 录制文件存放目录（null = 默认 <配置目录>/logcat-recordings；spec 2026-10-10 D2）。 */
+    val logcatRecordingsDir: String? = null,
+    /** auto 录制总占用上限（MB）。超出删最旧 auto 文件；manual 永不自动删（spec 2026-10-10 D4）。 */
+    val logcatRecordingMaxTotalMb: Int = 500,
+    /** 无线设备自动重连（应用启动时对保存的无线端点做指数退避重连）。 */
+    val autoReconnect: Boolean = true,
+    /** Logcat 过滤条件（上一次会话的），spec 2026-10-14 D4。 */
+    val logcatFilters: SavedLogcatFilters = SavedLogcatFilters(),
     val remoteButtons: List<RemoteButton> = listOf(
         RemoteButton("vol_up", "音量+", 24),
         RemoteButton("vol_down", "音量−", 25),

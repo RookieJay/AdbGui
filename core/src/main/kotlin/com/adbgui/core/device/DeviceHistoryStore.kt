@@ -3,6 +3,8 @@ package com.adbgui.core.device
 import com.adbgui.core.domain.DeviceType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -21,6 +23,8 @@ data class DeviceHistoryEntry(
     val lastConnectedAt: Long? = null,
     val lastUsedAt: Long? = null,
     val tag: String? = null,
+    /** 设备真实 serial（getprop ro.serialno），跨端口/USB/无线的稳定身份。spec 2026-10-23 §4.4。 */
+    val deviceId: String? = null,
 )
 
 class DeviceHistoryStore(
@@ -30,6 +34,9 @@ class DeviceHistoryStore(
 ) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true; encodeDefaults = true }
     private val file get() = configDir.resolve("devices.json")
+    // Serializes all read-modify-writes on devices.json. WirelessReconnector / mDNS auto-connect /
+    // manual connect / autoName can all race; without the mutex a lost update drops an alias.
+    private val writeMutex = Mutex()
 
     suspend fun load(): List<DeviceHistoryEntry> = withContext(io) {
         if (!Files.exists(file)) emptyList()
@@ -95,13 +102,62 @@ class DeviceHistoryStore(
 
     suspend fun remove(serial: String) = mutate { entries -> entries.filterNot { it.serial == serial } }
 
+    /** spec §4.4 合并规则：deviceId 相同 / serial==deviceId / 同 IP 无 deviceId 残留 → 并为一条。
+     *  返回被移除的旧条目（调用方 INFO 记账）。带非空且不同 alias 的同 IP 条目保留不动。 */
+    suspend fun mergeOnConnect(
+        deviceId: String,
+        serial: String,
+        type: DeviceType,
+        wirelessIp: String?,
+        wirelessPort: Int?,
+    ): List<DeviceHistoryEntry> {
+        var removed: List<DeviceHistoryEntry> = emptyList()
+        mutate { entries ->
+            val group = entries.filter { it.deviceId == deviceId || it.serial == serial || it.serial == deviceId }
+            // 该设备已知的 alias（spec §4.4 规则 3 的"不同"比对基准）：以 serial 匹配条目优先，组内任一次之
+            val anchorAlias = group.firstOrNull { it.serial == serial }?.alias ?: group.firstNotNullOfOrNull { it.alias }
+            // 同 IP 残留：无 deviceId、形如 "ip:port"、alias 为空或与该设备已知 alias 相同（autoName 打的同名）
+            // 的旧无线条目。带"不同"非空 alias 的保留不动，交给用户手动删（宁可多显示也不静默错并）。
+            val staleSameIp = wirelessIp?.let { ip ->
+                entries.filter { it !in group && it.deviceId == null && it.serial != serial && it.serial.startsWith("$ip:") && (it.alias == null || it.alias == anchorAlias) }
+            } ?: emptyList()
+            removed = group.filter { it.serial != serial } + staleSameIp
+            val kept = entries.filterNot { it in group || it in staleSameIp }
+            if (group.isEmpty() && staleSameIp.isEmpty()) {
+                kept + DeviceHistoryEntry(
+                    serial = serial, type = type, wirelessIp = wirelessIp, wirelessPort = wirelessPort,
+                    deviceId = deviceId, lastConnectedAt = clock(), lastUsedAt = clock(),
+                )
+            } else {
+                val current = group.firstOrNull { it.serial == serial } ?: staleSameIp.firstOrNull()
+                val alias = current?.alias ?: group.firstNotNullOfOrNull { it.alias } ?: staleSameIp.firstNotNullOfOrNull { it.alias }
+                val tag = current?.tag ?: group.firstNotNullOfOrNull { it.tag } ?: staleSameIp.firstNotNullOfOrNull { it.tag }
+                val anyWireless = (group + staleSameIp).any { it.type == DeviceType.WIRELESS } || type == DeviceType.WIRELESS
+                kept + DeviceHistoryEntry(
+                    serial = serial,
+                    alias = alias,
+                    type = if (anyWireless) DeviceType.WIRELESS else type,
+                    wirelessIp = wirelessIp,
+                    wirelessPort = wirelessPort,
+                    lastConnectedAt = clock(),
+                    lastUsedAt = clock(),
+                    tag = tag,
+                    deviceId = deviceId,
+                )
+            }
+        }
+        return removed
+    }
+
     private suspend fun mutate(transform: (List<DeviceHistoryEntry>) -> List<DeviceHistoryEntry>) =
-        withContext(io) {
-            Files.createDirectories(configDir)
-            val current = if (Files.exists(file)) runCatching { json.decodeFromString(ListSerializer(DeviceHistoryEntry.serializer()), Files.readString(file)) }.getOrDefault(emptyList()) else emptyList()
-            val next = transform(current)
-            val tmp = file.resolveSibling("devices.json.tmp")
-            Files.writeString(tmp, json.encodeToString(ListSerializer(DeviceHistoryEntry.serializer()), next))
-            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        writeMutex.withLock {
+            withContext(io) {
+                Files.createDirectories(configDir)
+                val current = if (Files.exists(file)) runCatching { json.decodeFromString(ListSerializer(DeviceHistoryEntry.serializer()), Files.readString(file)) }.getOrDefault(emptyList()) else emptyList()
+                val next = transform(current)
+                val tmp = file.resolveSibling("devices.json.tmp")
+                Files.writeString(tmp, json.encodeToString(ListSerializer(DeviceHistoryEntry.serializer()), next))
+                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            }
         }
 }

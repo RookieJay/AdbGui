@@ -66,8 +66,7 @@ import com.adbgui.core.domain.CdpTarget
 import com.adbgui.desktop.ui.i18n.Strings
 import com.adbgui.desktop.ui.theme.AppColors
 import kotlinx.coroutines.launch
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
+import com.adbgui.desktop.platform.SafeClipboard
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -194,8 +193,7 @@ fun CdpDebugScreen(
                         }
                         TooltipIconButton(
                             onClick = {
-                                val sel = StringSelection(filteredConsole.joinToString("\n") { it.text })
-                                Toolkit.getDefaultToolkit().systemClipboard.setContents(sel, null)
+                                SafeClipboard.copyText(filteredConsole.joinToString("\n") { it.text })
                             },
                             tooltip = { Strings.t("copy") },
                         ) { Icon(Icons.Filled.ContentCopy, contentDescription = Strings.t("copy")) }
@@ -412,7 +410,7 @@ fun CdpDebugScreen(
                         val info = req?.let { "${it.timestamp} ${it.method} ${it.url}\n${it.status ?: "—"} ${it.mime ?: "—"}" } ?: ""
                         val bodyText = (responseBody as? CdpResponseBody.Body)?.text
                             ?: (responseBody as? CdpResponseBody.Error)?.message ?: ""
-                        Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection("$info\n---\n$bodyText"), null)
+                        SafeClipboard.copyText("$info\n---\n$bodyText")
                     }) { Text(Strings.t("copy")) }
                     TextButton(onClick = { responseModalFor = null }) { Text(Strings.t("ok")) }
                 }

@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -24,9 +25,11 @@ class LogcatRecorderTest {
     private fun recorder(
         runner: FakeAdbProcessRunner, scope: CoroutineScope, file: Path,
         rotationBytes: Long = LogcatRecorder.ROTATION_BYTES,
+        append: Boolean = false,
     ): LogcatRecorder {
         val cmd = CommandRunner({ adb }, runner, NoopLogger, scope, CommandRunner.AdbServerStarter {})
-        return LogcatRecorder(cmd, NoopLogger, scope, io = Dispatchers.Unconfined, file = file, rotationBytes = rotationBytes)
+        return LogcatRecorder(cmd, NoopLogger, scope, io = Dispatchers.Unconfined, file = file,
+            rotationBytes = rotationBytes, append = append)
     }
 
     private val line1 = "08-17 10:23:45.100  100  200 I Tag1: hello"
@@ -111,5 +114,39 @@ class LogcatRecorderTest {
         r.stop("device_disconnected")
         assertEquals("device_disconnected", r.state.value.stopReason)
         assertEquals(RecordStatus.STOPPED, r.state.value.status)
+    }
+
+    @Test fun append_mode_preserves_content_and_writes_session_start_marker() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(line1))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val f = dir.resolve("r.log")
+        f.writeText("old line\n")
+        val r = recorder(runner, this, f, append = true)
+        r.start("abc")
+        advanceUntilIdle()
+        r.stop(null)
+        val text = Files.readString(f)
+        assertTrue(text.startsWith("old line\n"), "append 模式必须保留已有内容，got: ${text.take(20)}")
+        assertTrue(text.contains("--------- adbgui session start"))
+        assertTrue(text.contains("serial=abc"))
+        assertTrue(text.endsWith(line1 + "\n"))
+    }
+
+    @Test fun append_mode_rotation_threshold_counts_existing_file_size() = runTest {
+        val runner = FakeAdbProcessRunner()
+        runner.setStreamLines(listOf(line1))
+        val dir = Files.createTempDirectory("adbgui-rec")
+        val f = dir.resolve("r.log")
+        f.writeText("x")   // 存量 1 字节
+        // 阈值 = 存量(1) + 单行字节数：只有把存量计入 bytesWritten 才会触发轮转
+        val lineBytes = line1.toByteArray(Charsets.UTF_8).size + 1L
+        val r = recorder(runner, this, f, rotationBytes = 1L + lineBytes, append = true)
+        r.start("abc")
+        advanceUntilIdle()
+        assertTrue(r.state.value.rotated, "存量 + 新行应达到轮转阈值（按文件总大小轮转）")
+        val text = Files.readString(f)
+        assertTrue(text.startsWith("x"))
+        assertTrue(text.contains(line1))
     }
 }
