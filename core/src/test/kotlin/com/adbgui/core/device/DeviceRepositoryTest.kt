@@ -399,7 +399,7 @@ class DeviceRepositoryTest {
 
     /** Drive a real [MdnsScanner] on a [FakeMdnsSocket] — zero new fakes (brief's decision). */
     private fun TestScope.startScannerOn(socket: FakeMdnsSocket): MdnsScanner {
-        val scanner = MdnsScanner(socket, NoopLogger, backgroundScope, Dispatchers.Unconfined) { testScheduler.currentTime }
+        val scanner = MdnsScanner(socket, NoopLogger, backgroundScope, Dispatchers.Unconfined, clock = { testScheduler.currentTime })
         scanner.start()
         // First loop iteration: send queries + block on receive. The scanner is now live.
         advanceTimeBy(1_000)

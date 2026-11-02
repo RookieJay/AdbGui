@@ -52,7 +52,10 @@ class CompositionRoot {
     private val mdnsSocket: MdnsSocket? = runCatching { JvmMdnsSocket() }
         .onFailure { logger.warn("mdns: socket bind failed, wireless discovery disabled: ${it.message}") }
         .getOrNull()
-    private val mdnsScanner: MdnsScanner? = mdnsSocket?.let { MdnsScanner(it, logger, scope) }
+    // unicast 探测目标 = 历史记录里的无线设备 IP（跨子网组播不过路由，2026-11-02 实测）
+    private val mdnsScanner: MdnsScanner? = mdnsSocket?.let {
+        MdnsScanner(it, logger, scope, knownHosts = { history.load().mapNotNull { h -> h.wirelessIp }.toSet() })
+    }
     val repository = DeviceRepository(tracker, history, commands, logger, scope, mdnsScanner)
     val reconnector = WirelessReconnector(repository, history, logger, scope, autoReconnectEnabled = { settings.state.value.autoReconnect })
     // scrcpy wiring (Task 5)

@@ -1,0 +1,7 @@
+来源：OnePlus PJD110（Android 13, api=36），无线调试 IP 10.0.5.221，deviceId af199bb4
+      实例名 adb-af199bb4-rY5hPZ，SRV target Android-40.local，connect 端口 40635 (0x9ebb)
+采集：2026-11-02 16:50，PC（10.0.4.136，与手机跨子网 10.0.4.x/10.0.5.x，组播 224.0.0.251 不过路由）
+方法：legacy unicast 查询 —— 临时源端口发 _adb-tls-connect._tcp.local PTR 查询
+      （QID 非零）直发 10.0.5.221:5353，手机单播回 189 字节 RESPONSE（qid 回显、AN=1、AR=4）。
+      上下文：组播查询（45/33 字节正确编码）10s 周期持续无应答；本包证明 responder 正常、
+      仅组播投递跨子网不可达。捕获工具：tmp_mdns_unicast.py（Python 原始 socket）。

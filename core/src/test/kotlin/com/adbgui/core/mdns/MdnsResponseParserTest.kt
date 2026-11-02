@@ -119,6 +119,22 @@ class MdnsResponseParserTest {
     }
 
     @Test
+    fun real_unicast_response_fixture_parses() {
+        // 2026-11-02 实录：legacy unicast 查询 10.0.5.221:5353 的 189 字节 RESPONSE
+        // （qid 回显 + AN=1 + AR=4，含 AAAA 记录）。验证 parser 对真实单播应答解码正确。
+        val bytes = java.nio.file.Files.readAllBytes(
+            java.nio.file.Path.of("src/test/resources/fixtures/mdns/mdns_response_unicast_pjd110.bin"))
+        val services = MdnsResponseParser.parse(bytes)
+        assertEquals(1, services.size)
+        val s = services[0]
+        assertEquals("adb-af199bb4-rY5hPZ", s.instanceName)
+        assertEquals("_adb-tls-connect._tcp", s.serviceType)
+        assertEquals("10.0.5.221", s.host)
+        assertEquals(40635, s.port)
+        assertEquals(mapOf("api" to "36", "name" to "PJD110", "v" to "1"), s.txt)
+    }
+
+    @Test
     fun real_fixture_parses_structurally() {
         val bytes = java.nio.file.Files.readAllBytes(
             java.nio.file.Path.of("src/test/resources/fixtures/mdns/mdns_adb_unidentified.bin"))
