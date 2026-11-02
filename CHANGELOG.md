@@ -3,6 +3,15 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-11-02 mDNS 零接触重连双根因修复（查询包编码 + 跨子网单播探测）
+
+分支：feat/wireless-reconnect-mdns（接 2026-10-30 节）。真机调试实况排查出两个叠加根因，修复后 OnePlus PJD110 跨子网零接触重连打通（日志证据：`unicast probe 10.0.5.221 -> adb-af199bb4-rY5hPZ 10.0.5.221:40635` → `adb connect connected` → `merged duplicate ... into deviceId=af199bb4`）。
+
+- **根因 1（查询包坏）**：`JvmMdnsSocket.queryPacket` 把 serviceType 明文 ASCII 写进 QNAME，没有 DNS label 长度前缀（RFC 1035 §4.1.2 要求 `\x10_adb-tls-connect\x04_tcp\x05local\x00`）。首字节 `_`（0x5F=95）被 responder 读成 95 字节 label 越界 → 整包判 malformed 丢弃 → 手机永不应答。诊断线索：日志里自查询回声 44/32 字节（恰好等于明文长度）且自家 parser 也判 unparseable。修复：构造移入 core `MdnsQueryPacket`（纯函数 + 单测含回归用例；`qid` 参数供 legacy unicast 用），`JvmMdnsSocket` 删除私有坏实现改调它。
+- **根因 2（组播跨子网不可达）**：修复编码后组播仍无应答。Python 原始 socket 探针对手机 IP 直发单播查询 → 手机秒回完整应答（PTR/SRV/TXT/A，当时端口 40635）→ 手机 responder 正常，是组播投递问题：PC 10.0.4.x 与手机 10.0.5.x **跨子网，组播 224.0.0.251 不过路由**（历史记忆「mDNS 广播 PC 收不到」的真正原因）。
+- **解法（双通道发现）**：`MdnsSocket` 新增 `probeUnicast(serviceType, host, timeout)` —— legacy unicast 查询（RFC 6762 §18.1/§6.7：临时源端口 + 非零 QID 直发 host:5353，responder 单播回包）。`MdnsScanner` 新增独立探测协程：每 10s 对 `knownHosts`（CompositionRoot 接历史记录全部无线 IP）逐个探测（单目标 600ms 超时，离线设备静默 DEBUG 日志），应答解析进同一 `services` StateFlow，下游 auto-connect 链路复用。`seen` 由单协程私有改为双协程共享，`Mutex` 保护（跨线程可变状态规范）。`FakeMdnsSocket` 脚本化单播应答；真实抓取的 189 字节应答存 fixture `mdns_response_unicast_pjd110.bin`（来源注释见同目录 .txt），parser 测试覆盖。
+- 同网段组播通道保留不变（单播是补充不是替代）；两通道共享 30s 过期与 10s 周期。测试：`MdnsQueryPacketTest`、`MdnsScannerTest` 新增单播两例（发现合并/超时无害）、`MdnsResponseParserTest` 新增真实单播应答 fixture 例；`:core:test` + `:desktop:test` 全绿。
+
 ## v2 — 2026-10-30 无线设备自动回连 + mDNS 发现 + 设备去重
 
 分支：feat/wireless-reconnect-mdns。spec：docs/superpowers/specs/2026-10-23-wireless-reconnect-mdns-design.md。
