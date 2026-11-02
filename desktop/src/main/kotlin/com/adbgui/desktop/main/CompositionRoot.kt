@@ -34,6 +34,13 @@ class CompositionRoot {
     val configDir = WindowsConfigDirProvider().configDir()
     val logger: Logger = FileLogger(configDir.resolve("logs"), clock = { System.currentTimeMillis() })
     val settings = SettingsStore(configDir)
+    // Log level follows settings (spec: user switches to DEBUG when troubleshooting). Without
+    // this the FileLogger stays at its INFO default and the settings toggle is a dead switch.
+    // SettingsStore loads asynchronously — collect covers both the default and the loaded value.
+    init {
+        logger.level = settings.state.value.logLevel
+        scope.launch { settings.state.collect { logger.level = it.logLevel } }
+    }
     private val runner = JvmAdbProcessRunner()
     val locator = AdbLocator(settings, ResourceBundledAdbProvider(), SystemPathProbe())
     val server = AdbServerController({ locator.locate() }, runner, logger)
