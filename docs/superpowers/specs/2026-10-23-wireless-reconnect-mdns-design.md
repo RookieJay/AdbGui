@@ -17,13 +17,17 @@
 | 无配对直连 `adb connect ip:新端口` | ✅ 成功——配对密钥长期有效，端口变了**不需要重新配对** |
 | `adb connect` 后 `getprop ro.serialno` | ✅ 得到真实 serial（`af199bb4`），可作设备唯一 ID |
 | 手机 mDNS 广播（开关瞬间 / 页面停留 / 活动连接 / 开关重开全程 110s 监听） | ⚠️ 间歇性：实测多个窗口 0 包，但用户曾在 AS 设备列表见到 `_adb-tls-connect._tcp` 服务名（含序列号）——该机型偶发广播，稳定不可依赖 |
-| 手机 5353 单播查询（直发 UDP） | ❌ 无响应——手机上无 mDNS 响应者 |
-| 网络 mDNS 组播本身 | ✅ 正常（收到 TCL TV `adb-unidentified._adb._tcp` 持续广播） |
+| 手机 5353 单播查询（直发 UDP） | ⚠️ 10-23 实验❌无响应——**当时结论"手机无 mDNS 响应者"已被 2026-11-02 推翻**：用正确格式（临时源端口 + 非零 QID，RFC 6762 §18.1 legacy unicast）直发 `手机IP:5353`，手机**秒回**完整应答（PTR/SRV/TXT/A/AAAA，含新端口与 `name=PJD110`）。10-23 的无响应应为查询格式/时机问题，非手机侧缺失 |
+| 网络 mDNS 组播本身 | ✅ 正常（收到 TCL TV `adb-unidentified._adb._tcp` 持续广播）——**但仅限同网段**；见 11-02 跨子网结论 |
 | `adb mdns services`（adb 自带发现） | ❌ **空**——TV 在广播却收不到，adb 自身 mDNS 接收在本机是坏的 |
 | 端口变化规律 | 开关重开必换端口（38897 → 37751）；开关保持打开端口不变 |
 | 用户观察 AS"自动回连" | 间歇性成功——AS 的 DDMLib 自带 mDNS 监听（不经过 adb server），手机偶发广播时被它接住；曾出现"正常设备名 + mDNS 服务名"两条并存，即同一设备被发现层重复呈现（Layer 4 去重的目标场景） |
 
-**设计含义**：(a) 不能依赖 adb 的 `mdns services`；(b) 自建 mDNS 探测可行且更可靠（原始 socket 实测能收到广播）；(c) 必须有不依赖 mDNS 的回连层；(d) 去重必须靠真实 serial，不能靠 IP 或机型。
+**2026-11-02 补充实证（真机调试 mDNS 自动回连时挖出的两个叠加根因）**：
+1. **跨子网组播不可达**：PC（10.0.4.x）与手机（10.0.5.x）跨子网，组播 `224.0.0.251` 不跨路由转发 → 组播查询手机收不到、手机广播 PC 也收不到（10-23 观察到的"手机广播间歇性/0 包"部分源于此；ping RTT 41–130ms 亦为路由量级，非 ARP 直连）。手机 responder 本身正常（见上单播行）。
+2. **查询包编码 bug**：v1 实现把 serviceType 明文 ASCII 写入 QNAME，无 DNS label 长度前缀（首字节 `_`＝95 被当 label 长度）→ 任何合规 responder 判 malformed 丢弃。诊断线索：自查询回声 44/32 字节且自家 parser 也判 unparseable。已修（`MdnsQueryPacket`，core 纯函数 + 单测）。
+
+**设计含义**：(a) 不能依赖 adb 的 `mdns services`；(b) 自建 mDNS 探测可行且更可靠（原始 socket 实测能收到广播）；(c) 必须有不依赖 mDNS 的回连层；(d) 去重必须靠真实 serial，不能靠 IP 或机型；(e) **（11-02 新增）发现层必须双通道：组播（同网段）+ 对已知设备 IP 的 legacy unicast 探测（跨子网）**——单播通道只覆盖历史已知 IP，全新设备跨子网仍需同网段或路由器 mDNS 反射。
 
 ## 3. 设计总览：四层回连机制
 
@@ -40,13 +44,14 @@ Layer 4  真实 serial 去重      —— 所有层共用的设备身份与历�
 
 ### 4.1 `MdnsScanner`（新，包 `com.adbgui.core.mdns`）
 
-纯 JVM UDP 组播探测，**不依赖 adb 的 mdns 后端**。
+纯 JVM UDP 探测，**不依赖 adb 的 mdns 后端**。**双通道发现（2026-11-02 实现）**：组播（同网段）+ legacy unicast 探测（跨子网，见 §2 11-02 补充实证）。
 
-- **查询**：每 10s 向 `224.0.0.251:5353` 发 PTR 查询 `_adb-tls-connect._tcp.local` 与 `_adb._tcp.local`（前者 Android 11+ 无线调试，后者老式 TCP adb——TCL TV 即此类）。
-- **监听**：绑定 `0.0.0.0:5353`（SO_REUSEADDR，已实证可与 adb server 共存）持续收组播；绑定失败则退化为临时端口 + 单播 legacy 查询（应答方会单答回源端口）。
+- **组播查询**：每 10s 向 `224.0.0.251:5353` 发 PTR 查询 `_adb-tls-connect._tcp.local` 与 `_adb._tcp.local`（前者 Android 11+ 无线调试，后者老式 TCP adb——TCL TV 即此类）。QNAME 按 RFC 1035 label 编码（`MdnsQueryPacket` 纯函数，含单测——v1 明文编码 bug 的回归防线）。
+- **单播探测（`probeUnicast` + `probeLoop`）**：独立协程每 10s 对 `knownHosts`（注入，CompositionRoot 取历史记录全部无线 IP）逐个发 legacy unicast 查询（RFC 6762 §18.1/§6.7：临时源端口 + 非零 QID 直发 `host:5353`，responder 单播回包），单目标 600ms 超时，离线设备超时静默（DEBUG 级日志）。应答与组播共进同一 `services` StateFlow 与 30s 过期。
+- **监听**：绑定 `0.0.0.0:5353`（SO_REUSEADDR，已实证可与 adb server 共存）持续收组播。（原设计"绑定失败退化临时端口+单播"未按该形态实现——单播通道现为常设通道而非降级路径，bind 失败仍降级为禁扫描。）
 - **接口枚举**：`NetworkInterface` 枚举 up + multicast 的 IPv4 接口，逐个 join 组播组（多网卡环境必须，用户机器就有 3 个物理/虚拟网卡）。
 - **输出**：`StateFlow<List<MdnsService>>`，`MdnsService(serviceName, type, host, port, txt: Map<String,String>)`。`serviceName` 形如 `adb-<serial>-XXXX`（标准手机含真实 serial，可用于 Layer 4 身份匹配）或 `adb-unidentified`（老式，无 serial，按 IP 匹配）。
-- **可测性**：socket 交互藏 `MdnsSocket` 接口后（`send`/`receive`），测试注入 Fake 喂录制报文；报文解析是纯函数（见 4.2）。
+- **可测性**：socket 交互藏 `MdnsSocket` 接口后（`sendQuery`/`receive`/`probeUnicast`），测试注入 Fake 喂录制报文与脚本化单播应答；报文解析是纯函数（见 4.2）；真实单播应答 fixture `mdns_response_unicast_pjd110.bin`（2026-11-02 录自 OnePlus PJD110）。`seen` 由接收/探测双协程共享，`Mutex` 保护（规范 §技术债 3）。
 - 协程：注入 scope（长生命周期，同 `DeviceTracker`）+ 注入 `io: CoroutineDispatcher`（规范 §技术债 1）。
 
 ### 4.2 `MdnsResponseParser`（新，纯函数 object）
