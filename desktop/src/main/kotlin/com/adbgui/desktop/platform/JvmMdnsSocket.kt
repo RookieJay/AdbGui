@@ -1,10 +1,12 @@
 package com.adbgui.desktop.platform
 
+import com.adbgui.core.mdns.MdnsQueryPacket
 import com.adbgui.core.mdns.MdnsSocket
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -37,7 +39,8 @@ class JvmMdnsSocket : MdnsSocket {
     }
 
     override suspend fun sendQuery(serviceType: String) = withContext(Dispatchers.IO) {
-        val q = queryPacket(serviceType)
+        // QNAME label 编码在 core（MdnsQueryPacket，有单测）；这里只管按接口发送
+        val q = MdnsQueryPacket.build(serviceType)
         interfaces.forEach { nif ->
             runCatching {
                 socket.networkInterface = nif
@@ -61,19 +64,26 @@ class JvmMdnsSocket : MdnsSocket {
         }
     }
 
-    override fun close() { socket.close() }
+    /** legacy unicast 查询（RFC 6762 §18.1/§6.7）：临时源端口 + 非零 QID 直发 host:5353，
+     *  responder 单播应答回该端口。跨子网组播不可达时的发现通道（2026-11-02 实测）。 */
+    override suspend fun probeUnicast(serviceType: String, host: String, timeoutMs: Int): ByteArray? =
+        withContext(Dispatchers.IO) {
+            runInterruptible {
+                DatagramSocket().use { probe ->
+                    probe.soTimeout = timeoutMs
+                    val q = MdnsQueryPacket.build(serviceType, qid = 0x5ADB)
+                    probe.send(DatagramPacket(q, q.size, InetAddress.getByName(host), 5353))
+                    val buf = ByteArray(9216)
+                    val p = DatagramPacket(buf, buf.size)
+                    try {
+                        probe.receive(p)
+                        buf.copyOf(p.length)
+                    } catch (_: SocketTimeoutException) {
+                        null
+                    }
+                }
+            }
+        }
 
-    private fun queryPacket(serviceType: String): ByteArray {
-        val q = mutableListOf<Byte>()
-        // DNS header: ID=0, flags=0 (standard query), QDCOUNT=1, ANCOUNT=0, NSCOUNT=0, ARCOUNT=0
-        q += listOf(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0).map { it.toByte() }
-        // QNAME: <serviceType>.<0>local<0>
-        serviceType.toByteArray(Charsets.US_ASCII).forEach { q += it }
-        q += 0.toByte()
-        "local".toByteArray(Charsets.US_ASCII).forEach { q += it }
-        q += 0.toByte()
-        // QTYPE=PTR (12), QCLASS=IN (1)
-        q += listOf(0, 12, 0, 1).map { it.toByte() }
-        return q.toByteArray()
-    }
+    override fun close() { socket.close() }
 }
