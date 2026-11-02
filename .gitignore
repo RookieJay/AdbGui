@@ -12,3 +12,4 @@ desktop/*.rc
 desktop/files/
 desktop/default.prop
 local.properties
+hs_err_pid*.log
