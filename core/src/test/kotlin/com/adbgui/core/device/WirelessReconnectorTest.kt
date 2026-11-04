@@ -155,6 +155,87 @@ class WirelessReconnectorTest {
     }
 
     @Test
+    fun user_disconnected_endpoint_is_not_retried() = runTest {
+        // The reported bug: user clicks 断开 → adb disconnect succeeds → within 5s the
+        // reconnector revived the device. A manual disconnect is an intent, not an
+        // outage — the reconnector must skip that endpoint until a manual reconnect.
+        val trackerFlow = MutableStateFlow(emptyList<DeviceSnapshot>())
+        val tracker = object : IDeviceTracker {
+            override val devices: StateFlow<List<DeviceSnapshot>> = trackerFlow
+        }
+        val history = DeviceHistoryStore(
+            Files.createTempDirectory("reconn5"),
+            clock = { testScheduler.currentTime },
+            io = Dispatchers.Unconfined,
+        )
+        history.upsert("10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+        history.touchLastUsed("10.0.5.221:37751")
+
+        val runner = newRunner()
+        runner.whenArgsContains(
+            listOf("disconnect", "10.0.5.221:37751"),
+            AdbProcessResult(0, "disconnected 10.0.5.221:37751", ""),
+        )
+        val cmd = newCmd(runner, this)
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        assertTrue(repo.disconnect("10.0.5.221:37751"), "fixture: adb disconnect succeeds")
+
+        val log = InMemoryLogger(LogLevel.DEBUG, clock = { testScheduler.currentTime })
+        val reconnector = WirelessReconnector(repo, history, log, this, clock = { testScheduler.currentTime })
+        reconnector.start()
+        advanceTimeBy(60_000)
+        assertEquals(0, connectAttempts(runner), "user-disconnected endpoint must not be auto-reconnected")
+
+        reconnector.stop()
+        repo.stop()
+    }
+
+    @Test
+    fun manual_reconnect_attempt_clears_suppression() = runTest {
+        // After a manual disconnect the endpoint is suppressed. When the user later
+        // clicks 连接 (connectWireless), that reasserts intent — auto-reconnect must
+        // resume for the endpoint, even if the manual connect itself fails.
+        val trackerFlow = MutableStateFlow(emptyList<DeviceSnapshot>())
+        val tracker = object : IDeviceTracker {
+            override val devices: StateFlow<List<DeviceSnapshot>> = trackerFlow
+        }
+        val history = DeviceHistoryStore(
+            Files.createTempDirectory("reconn6"),
+            clock = { testScheduler.currentTime },
+            io = Dispatchers.Unconfined,
+        )
+        history.upsert("10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+        history.touchLastUsed("10.0.5.221:37751")
+
+        val runner = newRunner()
+        runner.whenArgsContains(
+            listOf("disconnect", "10.0.5.221:37751"),
+            AdbProcessResult(0, "disconnected 10.0.5.221:37751", ""),
+        )
+        // connect stays unscripted → fails (device is off), as in the backoff test.
+        val cmd = newCmd(runner, this)
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this)
+        assertTrue(repo.disconnect("10.0.5.221:37751"), "fixture: adb disconnect succeeds")
+
+        val log = InMemoryLogger(LogLevel.DEBUG, clock = { testScheduler.currentTime })
+        val reconnector = WirelessReconnector(repo, history, log, this, clock = { testScheduler.currentTime })
+        reconnector.start()
+        advanceTimeBy(15_000)
+        assertEquals(0, connectAttempts(runner), "fixture: suppression active after disconnect")
+        reconnector.stop()
+
+        // User clicks 连接 — fails (device off), but the intent cleared the suppression.
+        repo.connectWireless("10.0.5.221", 37751)
+
+        reconnector.start()
+        advanceTimeBy(15_000)
+        assertTrue(connectAttempts(runner) > 0, "manual reconnect must re-enable auto-reconnect")
+
+        reconnector.stop()
+        repo.stop()
+    }
+
+    @Test
     fun entries_older_than_seven_days_are_skipped() = runTest {
         // Seed two entries with carefully controlled lastUsedAt values so we can verify the
         // 7-day staleness filter. We use a shared mutable clock for the history store writes

@@ -61,6 +61,9 @@ class WirelessReconnector(
                 }
                 // Not yet time for this serial's next attempt → skip.
                 if ((nextAttemptAt[c.serial] ?: 0L) > now) continue
+                // User explicitly disconnected this endpoint — a manual disconnect is an
+                // intent, not an outage (repo clears the flag on manual reconnect).
+                if (repo.isUserDisconnected("${c.wirelessIp}:${c.wirelessPort}")) continue
                 val ok = try {
                     repo.connectWireless(c.wirelessIp!!, c.wirelessPort!!).success
                 } catch (e: kotlinx.coroutines.CancellationException) {

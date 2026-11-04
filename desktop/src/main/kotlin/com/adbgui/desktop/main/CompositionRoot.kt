@@ -56,7 +56,10 @@ class CompositionRoot {
     private val mdnsScanner: MdnsScanner? = mdnsSocket?.let {
         MdnsScanner(it, logger, scope, knownHosts = { history.load().mapNotNull { h -> h.wirelessIp }.toSet() })
     }
-    val repository = DeviceRepository(tracker, history, commands, logger, scope, mdnsScanner)
+    val repository = DeviceRepository(
+        tracker, history, commands, logger, scope, mdnsScanner,
+        autoConnectEnabled = { settings.state.value.autoReconnect },
+    )
     val reconnector = WirelessReconnector(repository, history, logger, scope, autoReconnectEnabled = { settings.state.value.autoReconnect })
     // scrcpy wiring (Task 5)
     val scrcpyInstaller = com.adbgui.desktop.platform.ScrcpyInstaller(configDir)

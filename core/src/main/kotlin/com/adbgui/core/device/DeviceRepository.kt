@@ -37,6 +37,9 @@ class DeviceRepository(
     private val logger: Logger,
     private val scope: CoroutineScope,
     private val mdns: MdnsScanner? = null,
+    // Gate for the mDNS auto-connect path — wired to the "无线设备自动重连" setting in
+    // CompositionRoot (discovery itself is NOT gated, only auto-connecting).
+    private val autoConnectEnabled: () -> Boolean = { true },
 ) {
     private val _devices = MutableStateFlow<List<DeviceView>>(emptyList())
     val devices: StateFlow<List<DeviceView>> = _devices.asStateFlow()
@@ -71,6 +74,18 @@ class DeviceRepository(
     // [namingMutex] which guards auto-name bookkeeping above).
     private val mdnsMutex = Mutex()
     private val mdnsInFlight = mutableSetOf<String>()
+
+    // Wireless endpoints ("ip:port") the user explicitly disconnected from the UI.
+    // A manual disconnect is an intent, not an outage: auto-connect paths
+    // ([WirelessReconnector], mDNS auto-connect) must skip these endpoints until the
+    // user manually reconnects ([connectWireless]) or the app restarts (in-memory only).
+    // @Volatile per the cross-thread mutable-state rule — written from UI coroutines,
+    // read from the reconnector loop and scanner collector coroutines.
+    @Volatile private var userDisconnectedEndpoints = emptySet<String>()
+
+    /** True when the user disconnected [endpoint] ("ip:port") and hasn't manually
+     *  reconnected since — auto-connect paths must skip it. */
+    fun isUserDisconnected(endpoint: String): Boolean = endpoint in userDisconnectedEndpoints
 
     init {
         runBlocking { recompute(tracker.devices.value) }
@@ -127,6 +142,7 @@ class DeviceRepository(
      */
     private suspend fun handleMdnsServices(services: List<MdnsService>) {
         _discovered.value = services
+        if (!autoConnectEnabled()) return
         val hist = history.load()
         val knownDeviceIds = hist.mapNotNull { it.deviceId }.toSet()
         val knownIps = hist.mapNotNull { it.wirelessIp }.toSet()
@@ -135,6 +151,9 @@ class DeviceRepository(
             val key = "${svc.host}:${svc.port}"
             val known = (svc.deviceSerial?.let { it in knownDeviceIds } == true) || svc.host in knownIps
             if (!known) continue
+            // User manually disconnected this endpoint — respect that intent; discovery
+            // (published to [discovered] above) is unaffected, only auto-connect skips.
+            if (isUserDisconnected(key)) continue
             val inFlight = mdnsMutex.withLock {
                 if (key in mdnsInFlight) true else { mdnsInFlight += key; false }
             }
@@ -240,6 +259,9 @@ class DeviceRepository(
     }
 
     suspend fun connectWireless(ip: String, port: Int): ConnectResult {
+        // A manual connect (re)asserts user intent — drop any disconnect suppression for
+        // this endpoint so auto-reconnect resumes if the device drops again later.
+        userDisconnectedEndpoints = userDisconnectedEndpoints - "$ip:$port"
         val r = commands.connect(ip, port)
         if (r.success) {
             val serial = "$ip:$port"
@@ -278,7 +300,17 @@ class DeviceRepository(
         return commands.pair(ip, port, code)
     }
 
-    suspend fun disconnect(target: String): Boolean = commands.disconnect(target)
+    suspend fun disconnect(target: String): Boolean {
+        val ok = commands.disconnect(target)
+        // Wireless target ("ip:port") disconnected on purpose → suppress auto-reconnect
+        // for that endpoint until the user manually reconnects. USB serials (no ':')
+        // carry no wireless endpoint and can't be auto-connected anyway.
+        if (ok && target.contains(':')) {
+            userDisconnectedEndpoints = userDisconnectedEndpoints + target
+            logger.info("user disconnected $target — auto-reconnect suppressed until manual reconnect")
+        }
+        return ok
+    }
     suspend fun adbVersion(): String = commands.adbVersion()
     suspend fun runShellCmd(serial: String, cmd: String): String = commands.runShellCmd(serial, cmd)
     suspend fun listPackages(serial: String): List<PackageInfo> = commands.listPackages(serial)

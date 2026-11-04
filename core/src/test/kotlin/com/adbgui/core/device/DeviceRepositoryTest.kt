@@ -446,6 +446,70 @@ class DeviceRepositoryTest {
     }
 
     @Test
+    fun mdns_auto_connect_skips_user_disconnected_endpoint() = runTest {
+        // The reported bug: user disconnects a wireless device, the phone keeps
+        // broadcasting mDNS, and the scanner's unicast probe revives it within 10s.
+        // A manual disconnect is an intent — the mDNS auto-connect path must skip
+        // that endpoint (it still shows up in [discovered]).
+        val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
+        val history = DeviceHistoryStore(Files.createTempDirectory("mdns-disc"), clock = { 0L }, io = Dispatchers.Unconfined)
+        history.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(
+            listOf("disconnect", "10.0.5.221:37751"),
+            AdbProcessResult(0, "disconnected 10.0.5.221:37751", ""),
+        )
+        runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 10.0.5.221:37751", ""))
+        runner.whenArgsContains(listOf("getprop", "ro.serialno"), AdbProcessResult(0, "af199bb4\r\n", ""))
+        runner.whenArgsContains(listOf("getprop"), getpropResult("OnePlus", "PJZ110"))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+
+        val socket = FakeMdnsSocket()
+        val scanner = startScannerOn(socket)
+        val repo = DeviceRepository(tracker, history, cmd, NoopLogger, this, mdns = scanner)
+        assertTrue(repo.disconnect("10.0.5.221:37751"), "fixture: adb disconnect succeeds")
+
+        publishPacket(socket, tlsServicePacket("adb-af199bb4-Q9dhj", 37751, "10.0.5.221"))
+        advanceUntilIdle()
+
+        assertTrue(runner.runs.none { args -> args.any { it == "connect" } },
+            "mDNS must NOT auto-connect a user-disconnected endpoint")
+        // Still discovered — suppression affects connecting, not discovery.
+        assertEquals(1, repo.discovered.value.size)
+        repo.stop(); scanner.stop()
+    }
+
+    @Test
+    fun mdns_auto_connect_respects_auto_connect_disabled() = runTest {
+        // The "无线设备自动重连" setting must gate the mDNS auto-connect path too, not
+        // just WirelessReconnector (mDNS was wired without any settings access — a dead
+        // switch for this path). Discovery still publishes to [discovered].
+        val tracker = object : IDeviceTracker { override val devices = MutableStateFlow(emptyList<DeviceSnapshot>()) }
+        val history = DeviceHistoryStore(Files.createTempDirectory("mdns-off"), clock = { 0L }, io = Dispatchers.Unconfined)
+        history.mergeOnConnect("af199bb4", "10.0.5.221:37751", DeviceType.WIRELESS, "10.0.5.221", 37751)
+
+        val runner = FakeAdbProcessRunner()
+        runner.whenArgsContains(listOf("connect"), AdbProcessResult(0, "connected to 10.0.5.221:37751", ""))
+        val cmd = CommandRunner({ AdbBinary("adb", AdbSource.PATH) }, runner, NoopLogger, this, CommandRunner.AdbServerStarter{})
+
+        val socket = FakeMdnsSocket()
+        val scanner = startScannerOn(socket)
+        val repo = DeviceRepository(
+            tracker, history, cmd, NoopLogger, this,
+            mdns = scanner, autoConnectEnabled = { false },
+        )
+
+        publishPacket(socket, tlsServicePacket("adb-af199bb4-Q9dhj", 37751, "10.0.5.221"))
+        advanceUntilIdle()
+
+        assertTrue(runner.runs.none { args -> args.any { it == "connect" } },
+            "auto-connect disabled must suppress mDNS auto-connect")
+        assertEquals(1, repo.discovered.value.size, "discovery still works when auto-connect is off")
+        repo.stop(); scanner.stop()
+    }
+
+    @Test
     fun mdns_service_unknown_goes_to_discovered_only() = runTest {
         // No history — mDNS finds a service that matches nothing. It must show up in
         // [discovered] but NOT trigger any adb connect.
