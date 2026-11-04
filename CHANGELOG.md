@@ -3,6 +3,15 @@
 记录 v1 的功能、真机测试发现并修复的问题、以及后续增强。便于排查与维护。
 设计依据：`docs/superpowers/specs/2026-08-14-adb-gui-design.md`。
 
+## v2 — 2026-11-04 手动断开的设备被自动回连复活（用户意图抑制）
+
+用户点「断开」后设备 5 秒内被 `WirelessReconnector` 自动连回（更早还叠加 mDNS 路径 10 秒内复活）。根因：`DeviceRepository.disconnect` 只透传 `adb disconnect`，不留任何状态；两条自动连接路径都只看「设备不在线 + 在历史里」，无法区分「掉线待救」与「用户主动断开」——而手机无线调试端口始终在监听，谁 connect 都成功。
+
+- **修复**：`DeviceRepository` 新增 `@Volatile userDisconnectedEndpoints`（`ip:port` 内存集合）：`disconnect()` 成功记入；`WirelessReconnector` 与 mDNS 自动连接路径（`handleMdnsServices`）跳过命中的端点；`connectWireless()`（UI 手动点「连接」）清除该端点抑制——手动重连即重新表达意图，之后掉线恢复自动重连；应用重启自然复位（仅内存态，不落盘）。发现列表（`discovered`）不受影响，只是不自动连。日志可查证：`user disconnected <ip:port> — auto-reconnect suppressed until manual reconnect`。
+- **连带修复（死开关）**：mDNS 自动连接路径原本完全不受设置页「无线设备自动重连」控制（`DeviceRepository` 构造时没接 settings，`autoReconnect` 开关只管 Layer 1）。现在 `DeviceRepository` 新增 `autoConnectEnabled` 回调（CompositionRoot 接 settings），mDNS 自动连接同样受开关控制；发现本身不被开关限制。
+- **已知边界**：断开后若手机重启无线调试换新端口，新端点不在抑制名单里，mDNS 视为新发现自动连（spec 设计的端口漂移恢复路径）。若需按 deviceId 抑制整个设备（而非端点），待用户反馈再升级。
+- **测试（TDD 红→绿）**：`WirelessReconnectorTest` 两例（断开后不重试 / 手动重连失败后恢复重试）、`DeviceRepositoryTest` 两例（mDNS 跳过已断开端点但 discovered 照常 / `autoConnectEnabled=false` 抑制 mDNS 自动连接）；`:core:test` + `:desktop:test` 全绿。
+
 ## v2 — 2026-11-02 mDNS 零接触重连双根因修复（查询包编码 + 跨子网单播探测）
 
 分支：feat/wireless-reconnect-mdns（接 2026-10-30 节）。真机调试实况排查出两个叠加根因，修复后 OnePlus PJD110 跨子网零接触重连打通（日志证据：`unicast probe 10.0.5.221 -> adb-af199bb4-rY5hPZ 10.0.5.221:40635` → `adb connect connected` → `merged duplicate ... into deviceId=af199bb4`）。
