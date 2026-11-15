@@ -10,7 +10,7 @@
 
 | 依赖 | 用途 | 说明 |
 |---|---|---|
-| **完整 JDK 21（含 jpackage + jmods）** | 打包 | Temurin 21：`D:\software\jdk-21.0.12.1+1`。Android Studio 的 JBR **没有 jpackage**，不能用。 |
+| **完整 JDK 21（含 jpackage + jmods）** | 打包 | Temurin 21：`E:\software\jdk-21`。Android Studio 的 JBR **没有 jpackage**，不能用；release 脚本在 JAVA_HOME 缺 jpackage 时会自动回退到该路径。 |
 | **Gradle wrapper** | 构建 | 仓库自带 `./gradlew`，不要用系统 gradle。 |
 | **WiX Toolset 3.11** | 仅 MSI 需要 | https://wixtoolset.org。Compose 插件会自动从 GitHub 下 WiX，国内网络可能被墙 → 手动装。**只发便携版不需要。** |
 | git remote `origin` → `github.com/RookieJay/AdbGui` | 发布脚本推导 asset URL | `git remote get-url origin` 确认。 |
@@ -36,7 +36,7 @@
 
 ```bash
 # 1. 用 Temurin 的 jpackage 打 AppImage
-export JAVA_HOME="D:/software/jdk-21.0.12.1+1"
+export JAVA_HOME="E:/software/jdk-21"
 ./gradlew :desktop:packageAppImage
 # 产物：desktop/build/compose/binaries/main/app/AdbGui/
 #   含 AdbGui.exe + runtime/ + app/resources/adb/win/（内置 adb）
@@ -170,7 +170,7 @@ python -m http.server 8000
 
 | 现象 | 原因 | 解决 |
 |---|---|---|
-| `Failed to check JDK distribution: 'jpackage.exe' is missing` | JAVA_HOME 指到 JBR 了 | `export JAVA_HOME="D:/software/jdk-21.0.12.1+1"` |
+| `Failed to check JDK distribution: 'jpackage.exe' is missing` | JAVA_HOME 指到 JBR 了 | `export JAVA_HOME="E:/software/jdk-21"` |
 | 打 MSI 卡在下载 WiX | 国内网络挡 GitHub | 手动装 WiX 3.11 并加 PATH；或只发便携版（路径 A） |
 | 老版本提示"已是最新"但实际有新版 | latest.json 没上传 / Release 还是 Draft / 版本号没改 | 见上文三步 |
 | `update: available 1.2.0` 但点更新失败 | asset 文件名和 latest.json 里的不一致 | 重命名 asset 或改 latest.json 重新上传 |

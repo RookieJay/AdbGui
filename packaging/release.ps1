@@ -11,8 +11,10 @@
 # Compatible with both Windows PowerShell 5.1 (powershell.exe) and PowerShell 7 (pwsh).
 #
 # Prerequisites:
-#   - Full JDK 21 with jpackage on JAVA_HOME (Temurin at D:\software\jdk-21.0.12.1+1 by default;
+#   - Full JDK 21 with jpackage on JAVA_HOME (Temurin at E:\software\jdk-21 by default;
 #     override via $env:JAVA_HOME). The Android Studio JBR lacks jpackage.
+#     If JAVA_HOME is set but lacks jpackage (e.g. Java 8 or the JBR), the script
+#     falls back to known Temurin locations instead of failing.
 #   - WiX on PATH for MSI (the Compose plugin auto-downloads it; install manually if blocked).
 #   - git remote origin points to the GitHub repo (used to derive release asset URLs).
 param(
@@ -22,13 +24,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-if (-not $env:JAVA_HOME) { $env:JAVA_HOME = 'D:\software\jdk-21.0.12.1+1' }
+# Use a full JDK 21 with jpackage. JAVA_HOME wins if it has jpackage; otherwise
+# fall back to known Temurin locations (JAVA_HOME may point to Java 8 or the JBR).
+$temurinDefaults = @('E:\software\jdk-21', 'D:\software\jdk-21.0.12.1+1')
 if (-not (Test-Path "$env:JAVA_HOME\bin\jpackage.exe")) {
-    $temurin = 'D:\software\jdk-21.0.12.1+1'
-    if (Test-Path "$temurin\bin\jpackage.exe") {
+    $temurin = $temurinDefaults | Where-Object { Test-Path "$_\bin\jpackage.exe" } | Select-Object -First 1
+    if ($temurin) {
         $env:JAVA_HOME = $temurin
     } else {
-        Write-Error "jpackage not found at JAVA_HOME=$env:JAVA_HOME (and Temurin default $temurin missing). Set JAVA_HOME to a full JDK 21 with jpackage."; exit 2
+        Write-Error "jpackage not found at JAVA_HOME=$env:JAVA_HOME (and no Temurin found at $($temurinDefaults -join ' or ')). Set JAVA_HOME to a full JDK 21 with jpackage."; exit 2
     }
 }
 

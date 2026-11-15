@@ -8,8 +8,10 @@
 #        ./packaging/release.sh 1.2.0      (optional: must match gradle.properties)
 #
 # Prerequisites:
-#   - Full JDK 21 with jpackage on JAVA_HOME (Temurin at D:\software\jdk-21.0.12.1+1 by default;
+#   - Full JDK 21 with jpackage on JAVA_HOME (Temurin at E:/software/jdk-21 by default;
 #     override via JAVA_HOME env). The Android Studio JBR lacks jpackage.
+#     If JAVA_HOME is set but lacks jpackage (e.g. Java 8 or the JBR), the script
+#     falls back to known Temurin locations instead of failing.
 #   - WiX on PATH (only for MSI; the Compose plugin auto-downloads it, may fail on restricted
 #     networks — install manually from https://wixtoolset.org if so).
 #   - git remote origin points to the GitHub repo (used to derive the release asset URLs).
@@ -32,14 +34,17 @@ echo "==> Releasing version $VERSION (from gradle.properties)"
 [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.\-]+)?$ ]] || {
   echo "invalid version: $VERSION (expected X.Y.Z)" >&2; exit 2; }
 
-# Use Temurin 21 by default (jpackage present); fall back to it if JAVA_HOME lacks jpackage.
-export JAVA_HOME="${JAVA_HOME:-D:/software/jdk-21.0.12.1+1}"
-if [[ ! -x "$JAVA_HOME/bin/jpackage.exe" ]]; then
-  TEMURIN="D:/software/jdk-21.0.12.1+1"
-  if [[ -x "$TEMURIN/bin/jpackage.exe" ]]; then
+# Use a full JDK 21 with jpackage. JAVA_HOME wins if it has jpackage; otherwise
+# fall back to known Temurin locations (JAVA_HOME may point to Java 8 or the JBR).
+if [[ ! -x "${JAVA_HOME:-}/bin/jpackage.exe" ]]; then
+  TEMURIN=""
+  for t in "E:/software/jdk-21" "D:/software/jdk-21.0.12.1+1"; do
+    [[ -x "$t/bin/jpackage.exe" ]] && TEMURIN="$t" && break
+  done
+  if [[ -n "$TEMURIN" ]]; then
     export JAVA_HOME="$TEMURIN"
   else
-    echo "jpackage not found at $JAVA_HOME (and Temurin default $TEMURIN missing). Set JAVA_HOME to a full JDK 21 with jpackage." >&2; exit 2
+    echo "jpackage not found at JAVA_HOME=${JAVA_HOME:-<unset>} (and no Temurin found at E:/software/jdk-21 or D:/software/jdk-21.0.12.1+1). Set JAVA_HOME to a full JDK 21 with jpackage." >&2; exit 2
   fi
 fi
 
